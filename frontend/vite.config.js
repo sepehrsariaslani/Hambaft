@@ -39,11 +39,8 @@ export default defineConfig(async ({ mode }) => {
       outDir: path.resolve(__dirname, '../public/frontend'),
       emptyOutDir: true,
       sourcemap: true,
-      inlineDynamicImports: false,
-      modulePreload: {
-        polyfill: false,
-      },
       rollupOptions: {
+        external: [/^~icons\//],
         output: {
           entryFileNames: 'assets/[name]-[hash].js',
           chunkFileNames: 'assets/[name]-[hash].js',
