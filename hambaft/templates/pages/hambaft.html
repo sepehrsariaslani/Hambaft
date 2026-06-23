@@ -1,0 +1,16 @@
+{% extends "templates/web.html" %}
+
+{% block page_content %}
+<div id="app" class="h-full"></div>
+{% endblock %}
+
+{% block script %}
+<script type="module" src="/assets/hambaft/frontend/src/main.js"></script>
+{% endblock %}
+
+{% block style %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css">
+<style>
+    body, html { direction: rtl; font-family: 'Vazirmatn', system-ui, sans-serif; }
+</style>
+{% endblock %}
