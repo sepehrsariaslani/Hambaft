@@ -1,52 +1,34 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
-import path from 'path'
+import tailwindcss from '@tailwindcss/vite'
+import { resolve } from 'path'
 
-export default defineConfig(async ({ mode }) => {
-  const isDev = mode === 'development'
-
-  return {
-    base: isDev ? '/' : '/assets/hambaft/frontend/',
-    plugins: [
-      vue(),
-    ],
-    server: {
-      host: '0.0.0.0',
-      port: 5173,
-      allowedHosts: true,
-      fs: {
-        allow: ['..', 'node_modules'],
-      },
-      proxy: {
-        '^/(api|assets|files)': {
-          target: 'http://localhost:8000',
-          changeOrigin: true,
-        },
+export default defineConfig({
+  cacheDir: '/tmp/.vite-cache',
+  base: '/assets/hambaft/frontend/',
+  plugins: [vue(), tailwindcss()],
+  resolve: {
+    alias: {
+      '@': resolve(__dirname, 'src'),
+    },
+  },
+  build: {
+    outDir: resolve(__dirname, '../public/frontend'),
+    emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        entryFileNames: 'assets/[name].js',
+        chunkFileNames: 'assets/[name].js',
+        assetFileNames: 'assets/[name].[ext]',
       },
     },
-    resolve: {
-      alias: {
-        '@': path.resolve(__dirname, 'src'),
+  },
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8090',
+        changeOrigin: true,
       },
     },
-    optimizeDeps: {
-      include: [
-        'frappe-ui',
-        'feather-icons',
-      ],
-    },
-    build: {
-      outDir: path.resolve(__dirname, '../public/frontend'),
-      emptyOutDir: true,
-      sourcemap: true,
-      rollupOptions: {
-        external: [/^~icons\//],
-        output: {
-          entryFileNames: 'assets/[name]-[hash].js',
-          chunkFileNames: 'assets/[name]-[hash].js',
-          assetFileNames: 'assets/[name]-[hash].[ext]',
-        },
-      },
-    },
-  }
+  },
 })

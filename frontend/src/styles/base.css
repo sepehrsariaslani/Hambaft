@@ -1,0 +1,399 @@
+/* ============================================
+   Hambaft Base — Reset & Utility Classes
+   Mobile-first, RTL-aware
+   ============================================ */
+
+/* ============================================
+   1. LAYOUT UTILITIES
+   ============================================ */
+
+/* Safe area padding for notched devices */
+.safe-top {
+  padding-top: env(safe-area-inset-top);
+}
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.safe-inline {
+  padding-inline: env(safe-area-inset-inline);
+}
+
+/* Page container — standard page wrapper with bottom nav clearance */
+.page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  padding-bottom: calc(var(--bottom-nav-height) + var(--space-4) + env(safe-area-inset-bottom));
+}
+
+.page-content {
+  flex: 1;
+  padding: var(--space-4);
+  padding-bottom: calc(var(--bottom-nav-height) + var(--space-8) + env(safe-area-inset-bottom));
+}
+
+/* Mobile-first content widths */
+.container {
+  width: 100%;
+  margin-inline: auto;
+  padding-inline: var(--space-4);
+}
+
+@media (min-width: 768px) {
+  .container {
+    max-width: 640px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .container {
+    max-width: 768px;
+  }
+}
+
+/* Full-bleed section (edge-to-edge) */
+.full-bleed {
+  margin-inline: calc(-1 * var(--space-4));
+}
+
+/* ============================================
+   2. FLEXBOX UTILITIES (RTL-safe)
+   ============================================ */
+
+/* Use logical properties for all flex layouts */
+.flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.flex-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.flex-col-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.flex-row {
+  display: flex;
+  flex-direction: row;
+}
+
+.flex-col {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Gap utilities using design tokens */
+.gap-xs { gap: var(--space-1); }
+.gap-sm { gap: var(--space-2); }
+.gap-md { gap: var(--space-3); }
+.gap-lg { gap: var(--space-4); }
+.gap-xl { gap: var(--space-6); }
+
+/* ============================================
+   3. SPACING UTILITIES
+   ============================================ */
+
+/* Margin utilities (logical properties) */
+.mi-auto { margin-inline: auto; }
+.mis-auto { margin-inline-start: auto; }
+.mie-auto { margin-inline-end: auto; }
+
+.p-page { padding: var(--space-4); }
+.px-page { padding-inline: var(--space-4); }
+.py-page { padding-block: var(--space-4); }
+
+/* Bottom nav clearance — use on any fixed bottom element */
+.pb-nav {
+  padding-bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom));
+}
+
+/* ============================================
+   4. TYPOGRAPHY UTILITIES
+   ============================================ */
+
+/* Font families */
+.font-primary {
+  font-family: var(--font-family-primary);
+}
+
+.font-numeric {
+  font-family: var(--font-family-numeric);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Font sizes using design token scale */
+.text-xs { font-size: var(--text-xs); line-height: var(--leading-xs); }
+.text-sm { font-size: var(--text-sm); line-height: var(--leading-sm); }
+.text-base { font-size: var(--text-base); line-height: var(--leading-base); }
+.text-md { font-size: var(--text-md); line-height: var(--leading-md); }
+.text-lg { font-size: var(--text-lg); line-height: var(--leading-lg); }
+.text-xl { font-size: var(--text-xl); line-height: var(--leading-xl); }
+.text-2xl { font-size: var(--text-2xl); line-height: var(--leading-2xl); }
+.text-3xl { font-size: var(--text-3xl); line-height: var(--leading-3xl); }
+.text-4xl { font-size: var(--text-4xl); line-height: var(--leading-4xl); }
+
+/* Font weights */
+.font-light { font-weight: 300; }
+.font-regular { font-weight: 400; }
+.font-medium { font-weight: 500; }
+.font-bold { font-weight: 700; }
+.font-extrabold { font-weight: 800; }
+
+/* Text alignment (logical) */
+.text-start { text-align: start; }
+.text-end { text-align: end; }
+.text-center { text-align: center; }
+
+/* Text truncation */
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.line-clamp-1 {
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ============================================
+   5. VISUAL UTILITIES
+   ============================================ */
+
+/* Background colors */
+.bg-cream { background-color: var(--color-cream); }
+.bg-surface { background-color: var(--color-surface); }
+.bg-black { background-color: var(--color-black); }
+.bg-pink { background-color: var(--color-pink); }
+.bg-yellow { background-color: var(--color-yellow); }
+.bg-olive { background-color: var(--color-olive); }
+.bg-ice-blue { background-color: var(--color-ice-blue); }
+.bg-purple { background-color: var(--color-purple); }
+
+/* Text colors */
+.text-primary { color: var(--color-text-primary); }
+.text-secondary { color: var(--color-text-secondary); }
+.text-placeholder { color: var(--color-text-placeholder); }
+.text-on-dark { color: var(--color-text-on-dark); }
+.text-error { color: var(--color-error); }
+.text-success { color: var(--color-success); }
+.text-muted { color: var(--color-text-muted); }
+
+/* Border radius */
+.rounded-xs { border-radius: var(--radius-xs); }
+.rounded-sm { border-radius: var(--radius-sm); }
+.rounded-md { border-radius: var(--radius-md); }
+.rounded-lg { border-radius: var(--radius-lg); }
+.rounded-xl { border-radius: var(--radius-xl); }
+.rounded-2xl { border-radius: var(--radius-2xl); }
+.rounded-full { border-radius: var(--radius-full); }
+
+/* Shadows */
+.shadow-xs { box-shadow: var(--shadow-xs); }
+.shadow-sm { box-shadow: var(--shadow-sm); }
+.shadow-md { box-shadow: var(--shadow-md); }
+.shadow-lg { box-shadow: var(--shadow-lg); }
+.shadow-xl { box-shadow: var(--shadow-xl); }
+
+/* ============================================
+   6. INTERACTION UTILITIES
+   ============================================ */
+
+/* Touch target minimum — ensures 44px touch target */
+.touch-target {
+  min-height: var(--tap-target);
+  min-width: var(--tap-target);
+}
+
+/* Pressable — generic press feedback */
+.pressable {
+  cursor: pointer;
+  transition: transform var(--duration-fast) var(--easing-default),
+              opacity var(--duration-fast) var(--easing-default);
+  -webkit-user-select: none;
+  user-select: none;
+}
+.pressable:active {
+  transform: scale(0.97);
+}
+
+/* Disabled state */
+.disabled,
+[disabled] {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+/* Hide on mobile / show on desktop */
+@media (max-width: 767px) {
+  .hide-mobile {
+    display: none !important;
+  }
+}
+
+@media (min-width: 768px) {
+  .hide-desktop {
+    display: none !important;
+  }
+}
+
+/* ============================================
+   6. TYPOGRAPHY UTILITIES
+   ============================================ */
+
+/* Font families */
+.font-display {
+  font-family: var(--font-family-primary);
+  font-weight: 800;
+  letter-spacing: var(--tracking-tight);
+}
+
+.font-heading {
+  font-family: var(--font-family-primary);
+  font-weight: 700;
+  letter-spacing: var(--tracking-tight);
+}
+
+/* Heading sizes */
+.text-h1 {
+  font-size: var(--text-2xl);
+  line-height: var(--leading-2xl);
+  font-weight: 800;
+  letter-spacing: var(--tracking-tight);
+}
+
+.text-h2 {
+  font-size: var(--text-xl);
+  line-height: var(--leading-xl);
+  font-weight: 700;
+  letter-spacing: var(--tracking-tight);
+}
+
+.text-h3 {
+  font-size: var(--text-lg);
+  line-height: var(--leading-lg);
+  font-weight: 700;
+}
+
+.text-display {
+  font-size: var(--text-4xl);
+  line-height: var(--leading-4xl);
+  font-weight: 800;
+  letter-spacing: var(--tracking-tight);
+}
+
+/* Body text */
+.text-body {
+  font-size: var(--text-base);
+  line-height: var(--leading-base);
+  font-weight: 400;
+}
+
+/* ============================================
+   7. ANIMATION UTILITIES
+   ============================================ */
+
+/* Fade */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity var(--duration-fast) var(--easing-default);
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
+/* Slide up (for modals/bottom sheets) */
+.slide-up-enter-active,
+.slide-up-leave-active {
+  transition: transform var(--duration-normal) var(--easing-enter);
+}
+.slide-up-enter-from,
+.slide-up-leave-to {
+  transform: translateY(100%);
+}
+
+/* Scale */
+.scale-enter-active,
+.scale-leave-active {
+  transition: transform var(--duration-fast) var(--easing-default),
+              opacity var(--duration-fast) var(--easing-default);
+}
+.scale-enter-from,
+.scale-leave-to {
+  transform: scale(0.95);
+  opacity: 0;
+}
+
+/* ============================================
+   8. ACCESSIBILITY
+   ============================================ */
+
+/* Screen reader only */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* Skip link */
+.skip-link {
+  position: absolute;
+  top: -100%;
+  inset-inline-start: 50%;
+  transform: translateX(-50%);
+  z-index: var(--z-toast);
+  padding: var(--space-2) var(--space-4);
+  background: var(--color-black);
+  color: var(--color-text-on-dark);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+}
+.skip-link:focus {
+  top: var(--space-4);
+}
+
+/* ============================================
+   9. RTL-SPECIFIC UTILITIES
+   ============================================ */
+
+/* Force LTR for specific content (phone numbers, emails, codes) */
+.ltr {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+/* Flip icon horizontally for RTL context */
+.flip-rtl {
+  transform: scaleX(-1);
+}
+
+/* Numeric content */
+.numeric {
+  font-family: var(--font-family-numeric);
+  font-variant-numeric: tabular-nums;
+  direction: ltr;
+  unicode-bidi: embed;
+}

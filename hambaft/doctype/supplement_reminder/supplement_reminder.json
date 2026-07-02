@@ -1,0 +1,83 @@
+{
+ "name": "Supplement Reminder",
+ "creation": "2026-01-01 00:00:00",
+ "modified": "2026-01-01 00:00:00",
+ "modified_by": "Administrator",
+ "owner": "Administrator",
+ "docstatus": 0,
+ "module": "Hambaft",
+ "autoname": "field:name",
+ "fields": [
+  {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "label": "کاربر",
+   "options": "User",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "name",
+   "fieldtype": "Data",
+   "label": "نام",
+   "reqd": 1
+  },
+  {
+   "fieldname": "dosage",
+   "fieldtype": "Data",
+   "label": "دوز"
+  },
+  {
+   "fieldname": "frequency",
+   "fieldtype": "Select",
+   "label": "تکرار",
+   "options": "روزانه\nهفتگی\nدر_صورت_نیاز",
+   "default": "روزانه"
+  },
+  {
+   "fieldname": "times",
+   "fieldtype": "Data",
+   "label": "زمان‌ها"
+  },
+  {
+   "fieldname": "is_active",
+   "fieldtype": "Check",
+   "label": "فعال",
+   "default": 1
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Text",
+   "label": "یادداشت"
+  },
+  {
+   "fieldname": "category",
+   "fieldtype": "Select",
+   "label": "دسته‌بندی",
+   "options": "ویتامین\nمواد_معدنی\nدارو\nگیاهی\nسایر",
+   "default": "ویتامین"
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1
+  },
+  {
+   "role": "Hambaft User",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "if_owner": 1
+  }
+ ],
+ "doctype": "DocType",
+ "custom": 1,
+ "istable": 1,
+ "issingle": 0
+}

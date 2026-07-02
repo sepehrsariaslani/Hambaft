@@ -1,0 +1,144 @@
+{
+ "name": "Hambaft Calendar Event",
+ "doctype": "DocType",
+ "module": "Hambaft",
+ "custom": 1,
+ "autoname": "format:EVT-{#####}",
+ "label": "رویداد تقویم",
+ "track_changes": 1,
+ "fields": [
+  {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "label": "کاربر",
+   "options": "User",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "label": "عنوان",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "event_type",
+   "fieldtype": "Select",
+   "label": "نوع رویداد",
+   "options": "رویداد\nتایم‌بلوک\nتمرکز\nروتین\nعادت\nقبض\nمهلت هدف\nشخصی",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "start_datetime",
+   "fieldtype": "Datetime",
+   "label": "شروع",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "end_datetime",
+   "fieldtype": "Datetime",
+   "label": "پایان",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "all_day",
+   "fieldtype": "Check",
+   "label": "تمام‌روز",
+   "default": 0
+  },
+  {
+   "fieldname": "area",
+   "fieldtype": "Link",
+   "label": "حوزه",
+   "options": "Hambaft Area",
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "project",
+   "fieldtype": "Link",
+   "label": "پروژه",
+   "options": "Hambaft Project",
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "goal",
+   "fieldtype": "Link",
+   "label": "هدف",
+   "options": "Hambaft Goal",
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "task",
+   "fieldtype": "Link",
+   "label": "کار",
+   "options": "Hambaft Task",
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "location",
+   "fieldtype": "Data",
+   "label": "مکان"
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Text Editor",
+   "label": "توضیحات"
+  },
+  {
+   "fieldname": "color",
+   "fieldtype": "Color",
+   "label": "رنگ"
+  },
+  {
+   "fieldname": "reminder",
+   "fieldtype": "Link",
+   "label": "یادآوری",
+   "options": "Hambaft Reminder"
+  },
+  {
+   "fieldname": "is_recurring",
+   "fieldtype": "Check",
+   "label": "تکرارشونده",
+   "default": 0
+  },
+  {
+   "fieldname": "recurrence_rule",
+   "fieldtype": "Link",
+   "label": "قانون تکرار",
+   "options": "Hambaft Recurrence Rule"
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1
+  },
+  {
+   "role": "Hambaft User",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "if_owner": 1
+  },
+  {
+   "role": "All",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "if_owner": 1
+  }
+ ],
+ "sort_field": "start_datetime",
+ "sort_order": "ASC",
+ "istable": 0,
+ "issingle": 0
+}

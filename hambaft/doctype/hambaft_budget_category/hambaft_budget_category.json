@@ -1,0 +1,21 @@
+{
+  "name": "Hambaft Budget Category",
+  "doctype": "DocType",
+  "module": "Hambaft Finance",
+  "custom": 1,
+  "autoname": "hash",
+  "istable": 1,
+  "issingle": 0,
+  "fields": [
+    {"fieldname": "category", "fieldtype": "Link", "label": "\u062f\u0633\u062a\u0647\u200c\u0628\u0646\u062f\u06cc", "options": "Hambaft Finance Category", "reqd": 1, "in_list_view": 1},
+    {"fieldname": "planned_amount", "fieldtype": "Currency", "label": "\u0645\u0628\u0644\u063a \u0628\u0631\u0646\u0627\u0645\u0647\u200c\u0627\u06cc", "reqd": 1, "default": 0, "in_list_view": 1},
+    {"fieldname": "actual_amount", "fieldtype": "Currency", "label": "\u0645\u0628\u0644\u063a \u0648\u0627\u0642\u0639\u06cc", "default": 0, "in_list_view": 1},
+    {"fieldname": "remaining_amount", "fieldtype": "Currency", "label": "\u0628\u0627\u0642\u06cc\u0645\u0627\u0646\u062f\u0647", "in_list_view": 1},
+    {"fieldname": "percentage_used", "fieldtype": "Percent", "label": "\u062f\u0631\u0635\u062f \u0627\u0633\u062a\u0641\u0627\u062f\u0647", "in_list_view": 1},
+    {"fieldname": "warning_threshold", "fieldtype": "Percent", "label": "\u0622\u0633\u062a\u0627\u0646\u0647 \u0647\u0634\u062f\u0627\u0631", "default": 80}
+  ],
+  "permissions": [
+    {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1},
+    {"role": "Hambaft User", "read": 1, "write": 1, "create": 1, "delete": 1, "if_owner": 1}
+  ]
+}

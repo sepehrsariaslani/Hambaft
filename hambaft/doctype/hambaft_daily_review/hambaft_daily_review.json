@@ -1,0 +1,188 @@
+{
+  "name": "Hambaft Daily Review",
+  "doctype": "DocType",
+  "module": "Hambaft",
+  "custom": 1,
+  "autoname": "hash",
+  "title_field": "review_date",
+  "track_changes": 1,
+  "istable": 0,
+  "issingle": 0,
+  "sort_field": "review_date",
+  "sort_order": "DESC",
+  "fields": [
+    {
+      "fieldname": "user",
+      "fieldtype": "Link",
+      "label": "کاربر",
+      "options": "User",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1,
+      "hidden": 1
+    },
+    {
+      "fieldname": "review_date",
+      "fieldtype": "Date",
+      "label": "تاریخ مرور",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1,
+      "description": "تاریخ روزی که مرور آن انجام می‌شود"
+    },
+    {
+      "fieldname": "jalali_date_display",
+      "fieldtype": "Data",
+      "label": "تاریخ شمسی",
+      "read_only": 1,
+      "in_list_view": 1,
+      "description": "نمایش تاریخ جلالی"
+    },
+    {
+      "fieldname": "scores_section",
+      "fieldtype": "Section Break",
+      "label": "امتیازها",
+      "collapsible": 1
+    },
+    {
+      "fieldname": "life_score",
+      "fieldtype": "Float",
+      "label": "امتیاز زندگی",
+      "min": 0,
+      "max": 10,
+      "description": "امتیاز زندگی از ۰ تا ۱۰"
+    },
+    {
+      "fieldname": "productivity_score",
+      "fieldtype": "Float",
+      "label": "امتیاز بهره‌وری",
+      "min": 0,
+      "max": 10,
+      "description": "امتیاز بهره‌وری از ۰ تا ۱۰"
+    },
+    {
+      "fieldname": "health_score",
+      "fieldtype": "Float",
+      "label": "امتیاز سلامت",
+      "min": 0,
+      "max": 10,
+      "description": "امتیاز سلامت از ۰ تا ۱۰"
+    },
+    {
+      "fieldname": "finance_score",
+      "fieldtype": "Float",
+      "label": "امتیاز مالی",
+      "min": 0,
+      "max": 10,
+      "description": "امتیاز مالی از ۰ تا ۱۰"
+    },
+    {
+      "fieldname": "mood_score",
+      "fieldtype": "Int",
+      "label": "حال روحی",
+      "min": 1,
+      "max": 10,
+      "description": "امتیاز حال روحی از ۱ تا ۱۰"
+    },
+    {
+      "fieldname": "energy_score",
+      "fieldtype": "Int",
+      "label": "انرژی",
+      "min": 1,
+      "max": 10,
+      "description": "امتیاز انرژی از ۱ تا ۱۰"
+    },
+    {
+      "fieldname": "task_habit_section",
+      "fieldtype": "Section Break",
+      "label": "کارها و عادت‌ها",
+      "collapsible": 1
+    },
+    {
+      "fieldname": "tasks_completed",
+      "fieldtype": "Int",
+      "label": "کارهای انجام‌شده",
+      "min": 0,
+      "default": 0,
+      "description": "تعداد کارهای انجام‌شده امروز"
+    },
+    {
+      "fieldname": "tasks_planned",
+      "fieldtype": "Int",
+      "label": "کارهای برنامه‌ریزی‌شده",
+      "min": 0,
+      "default": 0,
+      "description": "تعداد کارهای برنامه‌ریزی‌شده برای امروز"
+    },
+    {
+      "fieldname": "habits_completed",
+      "fieldtype": "Int",
+      "label": "عادت‌های انجام‌شده",
+      "min": 0,
+      "default": 0,
+      "description": "تعداد عادت‌های انجام‌شده امروز"
+    },
+    {
+      "fieldname": "habits_planned",
+      "fieldtype": "Int",
+      "label": "عادت‌های برنامه‌ریزی‌شده",
+      "min": 0,
+      "default": 0,
+      "description": "تعداد عادت‌های برنامه‌ریزی‌شده برای امروز"
+    },
+    {
+      "fieldname": "money_spent",
+      "fieldtype": "Currency",
+      "label": "هزینه امروز",
+      "min": 0,
+      "description": "مبلغ هزینه‌شده در روز (تومان)"
+    },
+    {
+      "fieldname": "reflection_section",
+      "fieldtype": "Section Break",
+      "label": "بازتاب",
+      "collapsible": 1
+    },
+    {
+      "fieldname": "wins",
+      "fieldtype": "Text Editor",
+      "label": "بردها",
+      "description": "بردهای امروز"
+    },
+    {
+      "fieldname": "problems",
+      "fieldtype": "Text Editor",
+      "label": "مشکلات",
+      "description": "مشکلات و چالش‌های امروز"
+    },
+    {
+      "fieldname": "lessons",
+      "fieldtype": "Text Editor",
+      "label": "درس‌ها",
+      "description": "درس‌ها و آموخته‌های امروز"
+    },
+    {
+      "fieldname": "tomorrow_top_3",
+      "fieldtype": "Text Editor",
+      "label": "سه اولویت فردا",
+      "description": "سه اولویت اصلی برای روز بعد"
+    }
+  ],
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1
+    },
+    {
+      "role": "Hambaft User",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "if_owner": 1
+    }
+  ]
+}

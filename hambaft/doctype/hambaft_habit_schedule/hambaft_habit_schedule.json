@@ -1,0 +1,60 @@
+{
+ "name": "Hambaft Habit Schedule",
+ "doctype": "DocType",
+ "module": "Hambaft",
+ "custom": 1,
+ "istable": 1,
+ "issingle": 0,
+ "fields": [
+  {
+   "fieldname": "day_of_week",
+   "fieldtype": "Select",
+   "label": "روز هفته",
+   "options": "دوشنبه\u000aسه‌شنبه\u000aچهارشنبه\u000aپنجشنبه\u000aجمعه\u000aشنبه\u000aیکشنبه",
+   "in_list_view": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "is_active",
+   "fieldtype": "Check",
+   "label": "فعال",
+   "default": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "target_value",
+   "fieldtype": "Float",
+   "label": "مقدار هدف",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "reminder_time",
+   "fieldtype": "Time",
+   "label": "زمان یادآوری",
+   "in_list_view": 1
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1
+  },
+  {
+   "role": "Hambaft User",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1
+  },
+  {
+   "role": "All",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1
+  }
+ ]
+}

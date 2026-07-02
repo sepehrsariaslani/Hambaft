@@ -1,0 +1,174 @@
+{
+ "name": "Hambaft Habit",
+ "doctype": "DocType",
+ "module": "Hambaft",
+ "custom": 1,
+ "autoname": "format:HABIT-{#####}",
+ "title_field": "habit_name",
+ "fields": [
+  {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "label": "کاربر",
+   "options": "User",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "habit_name",
+   "fieldtype": "Data",
+   "label": "نام عادت",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "area",
+   "fieldtype": "Link",
+   "label": "حوزه",
+   "options": "Hambaft Area",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "goal",
+   "fieldtype": "Link",
+   "label": "هدف مرتبط",
+   "options": "Hambaft Goal",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "habit_type",
+   "fieldtype": "Select",
+   "label": "نوع عادت",
+   "options": "بله/خیر\nعددی\nمدت‌زمان\nآب\nخواب\nمکمل\nپرهیز\nورزش\nمطالعه\nمالی\nسفارشی",
+   "default": "بله/خیر",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "category",
+   "fieldtype": "Select",
+   "label": "دسته‌بندی",
+   "options": "سلامت\nذهن\nکار\nمالی\nیادگیری\nشخصی",
+   "default": "سلامت",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "target_value",
+   "fieldtype": "Float",
+   "label": "مقدار هدف",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "unit",
+   "fieldtype": "Data",
+   "label": "واحد"
+  },
+  {
+   "fieldname": "schedule_section",
+   "fieldtype": "Section Break",
+   "label": "زمان‌بندی"
+  },
+  {
+   "fieldname": "schedule_type",
+   "fieldtype": "Select",
+   "label": "نوع برنامه",
+   "options": "هر روز\nروزهای مشخص\nچند بار در هفته\nسفارشی",
+   "default": "هر روز",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "schedule",
+   "fieldtype": "Table",
+   "label": "زمان‌بندی عادت",
+   "options": "Hambaft Habit Schedule"
+  },
+  {
+   "fieldname": "reminder_section",
+   "fieldtype": "Section Break",
+   "label": "یادآوری"
+  },
+  {
+   "fieldname": "reminder_enabled",
+   "fieldtype": "Check",
+   "label": "یادآوری فعال",
+   "default": 0
+  },
+  {
+   "fieldname": "reminder_time",
+   "fieldtype": "Time",
+   "label": "زمان یادآوری"
+  },
+  {
+   "fieldname": "detail_section",
+   "fieldtype": "Section Break",
+   "label": "جزئیات"
+  },
+  {
+   "fieldname": "color",
+   "fieldtype": "Color",
+   "label": "رنگ"
+  },
+  {
+   "fieldname": "icon",
+   "fieldtype": "Data",
+   "label": "آیکون"
+  },
+  {
+   "fieldname": "difficulty",
+   "fieldtype": "Select",
+   "label": "سختی",
+   "options": "آسان\nمتوسط\nسخت",
+   "default": "متوسط"
+  },
+  {
+   "fieldname": "motivation",
+   "fieldtype": "Text Editor",
+   "label": "انگیزه"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "وضعیت",
+   "options": "فعال\nمتوقف\nتکمیل‌شده\nآرشیوشده",
+   "default": "فعال",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1
+  },
+  {
+   "role": "Hambaft User",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "if_owner": 1
+  },
+  {
+   "role": "All",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "if_owner": 1
+  }
+ ],
+ "sort_field": "habit_name",
+ "sort_order": "ASC",
+ "istable": 0,
+ "issingle": 0,
+ "track_changes": 1
+}

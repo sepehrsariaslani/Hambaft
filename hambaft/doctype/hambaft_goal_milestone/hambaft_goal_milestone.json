@@ -1,0 +1,60 @@
+{
+ "name": "Hambaft Goal Milestone",
+ "doctype": "DocType",
+ "module": "Hambaft",
+ "custom": 1,
+ "istable": 1,
+ "issingle": 0,
+ "fields": [
+  {
+   "fieldname": "milestone_title",
+   "fieldtype": "Data",
+   "label": "عنوان مرحله",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "target_date",
+   "fieldtype": "Date",
+   "label": "تاریخ هدف",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "وضعیت",
+   "options": "پیش‌نویس\nفعال\nتکمیل‌شده\nمتوقف‌شده",
+   "default": "پیش‌نویس",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "progress",
+   "fieldtype": "Percent",
+   "label": "پیشرفت",
+   "default": 0,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "توضیحات"
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1
+  },
+  {
+   "role": "Hambaft User",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "if_owner": 1
+  }
+ ]
+}

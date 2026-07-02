@@ -1,0 +1,101 @@
+{
+ "name": "Hambaft Theme",
+ "creation": "2026-06-25 00:00:00",
+ "modified": "2026-06-25 00:00:00",
+ "modified_by": "Administrator",
+ "owner": "Administrator",
+ "docstatus": 0,
+ "module": "Hambaft",
+ "autoname": "field:theme_name",
+ "track_changes": 1,
+ "fields": [
+  {
+   "fieldname": "theme_name",
+   "fieldtype": "Data",
+   "label": "نام تم",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "background_color",
+   "fieldtype": "Color",
+   "label": "رنگ پس‌زمینه",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "card_color",
+   "fieldtype": "Color",
+   "label": "رنگ کارت",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "primary_color",
+   "fieldtype": "Color",
+   "label": "رنگ اصلی",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "accent_color",
+   "fieldtype": "Color",
+   "label": "رنگ تأکیدی",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "text_color",
+   "fieldtype": "Color",
+   "label": "رنگ متن",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "font_family",
+   "fieldtype": "Data",
+   "label": "فونت",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "border_radius",
+   "fieldtype": "Int",
+   "label": "شعاع گوشه",
+   "default": 8
+  },
+  {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "label": "کاربر",
+   "options": "User",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1
+  },
+  {
+   "role": "Hambaft User",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "if_owner": 1
+  },
+  {
+   "role": "All",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "if_owner": 1
+  }
+ ],
+ "doctype": "DocType",
+ "custom": 1,
+ "istable": 1,
+ "issingle": 0
+}

@@ -1,0 +1,118 @@
+{
+ "name": "Profile Settings",
+ "creation": "2026-01-01 00:00:00",
+ "modified": "2026-01-01 00:00:00",
+ "modified_by": "Administrator",
+ "owner": "Administrator",
+ "docstatus": 0,
+ "module": "Hambaft",
+ "autoname": "hash",
+ "is_single": 1,
+ "fields": [
+  {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "label": "کاربر",
+   "options": "User",
+   "reqd": 1,
+   "read_only": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "display_name",
+   "fieldtype": "Data",
+   "label": "نام نمایشی"
+  },
+  {
+   "fieldname": "language",
+   "fieldtype": "Select",
+   "label": "زبان",
+   "options": "fa\nen",
+   "default": "fa"
+  },
+  {
+   "fieldname": "timezone",
+   "fieldtype": "Data",
+   "label": "منطقه زمانی",
+   "default": "Asia/Tehran"
+  },
+  {
+   "fieldname": "currency",
+   "fieldtype": "Data",
+   "label": "ارز",
+   "default": "IRR"
+  },
+  {
+   "fieldname": "theme",
+   "fieldtype": "Select",
+   "label": "تم",
+   "options": "روشن\nتاریک\nخودکار",
+   "default": "روشن"
+  },
+  {
+   "fieldname": "week_starts_on",
+   "fieldtype": "Select",
+   "label": "شروع هفته",
+   "options": "شنبه\nیکشنبه\nدوشنبه",
+   "default": "شنبه"
+  },
+  {
+   "fieldname": "onboarding_completed",
+   "fieldtype": "Check",
+   "label": "آنبوردینگ شده",
+   "default": 0
+  },
+  {
+   "fieldname": "onboarding_step",
+   "fieldtype": "Int",
+   "label": "مرحله آنبوردینگ",
+   "default": 0
+  },
+  {
+   "fieldname": "default_view",
+   "fieldtype": "Select",
+   "label": "نمای پیش‌فرض",
+   "options": "داشبورد\nوظایف\nعادت‌ها\nتقویم",
+   "default": "داشبورد"
+  },
+  {
+   "fieldname": "reminder_notifications",
+   "fieldtype": "Check",
+   "label": "اعلان یادآوری",
+   "default": 1
+  },
+  {
+   "fieldname": "daily_reminder_time",
+   "fieldtype": "Time",
+   "label": "زمان یادآوری روزانه"
+  },
+  {
+   "fieldname": "life_score_target",
+   "fieldtype": "Int",
+   "label": "هدف امتیاز زندگی",
+   "default": 70
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1
+  },
+  {
+   "role": "Hambaft User",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "if_owner": 1
+  }
+ ],
+ "doctype": "DocType",
+ "custom": 1,
+ "istable": 1,
+ "issingle": 0
+}

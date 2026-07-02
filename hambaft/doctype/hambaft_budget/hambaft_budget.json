@@ -1,0 +1,32 @@
+{
+  "name": "Hambaft Budget",
+  "doctype": "DocType",
+  "module": "Hambaft Finance",
+  "custom": 1,
+  "autoname": "format:BUD-{#####}",
+  "istable": 0,
+  "issingle": 0,
+  "is_submittable": 0,
+  "track_changes": 1,
+  "fields": [
+    {"fieldname": "budget_title", "fieldtype": "Data", "label": "\u0639\u0646\u0648\u0627\u0646 \u0628\u0648\u062f\u062c\u0647", "reqd": 1, "in_list_view": 1, "in_standard_filter": 1},
+    {"fieldname": "user", "fieldtype": "Link", "label": "\u06a9\u0627\u0631\u0628\u0631", "options": "User", "reqd": 1, "in_list_view": 1, "in_standard_filter": 1},
+    {"fieldname": "jalali_month", "fieldtype": "Data", "label": "\u0645\u0627\u0647 (\u0634\u0645\u0633\u06cc)", "reqd": 1, "in_list_view": 1, "in_standard_filter": 1},
+    {"fieldname": "jalali_year", "fieldtype": "Int", "label": "\u0633\u0627\u0644 (\u0634\u0645\u0633\u06cc)", "reqd": 1, "in_list_view": 1, "in_standard_filter": 1},
+    {"fieldname": "start_date", "fieldtype": "Date", "label": "\u062a\u0627\u0631\u06cc\u062e \u0634\u0631\u0648\u0639", "reqd": 1},
+    {"fieldname": "end_date", "fieldtype": "Date", "label": "\u062a\u0627\u0631\u06cc\u062e \u067e\u0627\u06cc\u0627\u0646", "reqd": 1},
+    {"fieldname": "total_income_plan", "fieldtype": "Currency", "label": "\u0628\u0631\u0646\u0627\u0645\u0647 \u062f\u0631\u0622\u0645\u062f", "default": 0},
+    {"fieldname": "total_expense_plan", "fieldtype": "Currency", "label": "\u0628\u0631\u0646\u0627\u0645\u0647 \u0647\u0632\u06cc\u0646\u0647", "default": 0},
+    {"fieldname": "total_saving_plan", "fieldtype": "Currency", "label": "\u0628\u0631\u0646\u0627\u0645\u0647 \u067e\u0633\u200c\u0627\u0646\u062f\u0627\u0632", "default": 0},
+    {"fieldname": "status", "fieldtype": "Select", "label": "\u0648\u0636\u0639\u06cc\u062a", "options": "\u067e\u06cc\u0634\u200c\u0646\u0648\u06cc\u0633\n\u0641\u0639\u0627\u0644\n\u0628\u0633\u062a\u0647\u200c\u0634\u062f\u0647\n\u0622\u0631\u0634\u06cc\u0648\u0634\u062f\u0647", "default": "\u067e\u06cc\u0634\u200c\u0646\u0648\u06cc\u0633", "in_list_view": 1},
+    {"fieldname": "categories", "fieldtype": "Table", "label": "\u062f\u0633\u062a\u0647\u200c\u0628\u0646\u062f\u06cc\u200c\u0647\u0627", "options": "Hambaft Budget Category"},
+    {"fieldname": "notes", "fieldtype": "Text Editor", "label": "\u06cc\u0627\u062f\u062f\u0627\u0634\u062a\u200c\u0647\u0627"}
+  ],
+  "permissions": [
+    {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1},
+    {"role": "Hambaft User", "read": 1, "write": 1, "create": 1, "delete": 1, "if_owner": 1},
+    {"role": "All", "read": 1, "write": 1, "create": 1, "delete": 1, "if_owner": 1}
+  ],
+  "sort_field": "jalali_year",
+  "sort_order": "DESC"
+}

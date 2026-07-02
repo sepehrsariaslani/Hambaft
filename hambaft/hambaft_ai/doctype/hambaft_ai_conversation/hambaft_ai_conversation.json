@@ -1,0 +1,83 @@
+{
+ "name": "Hambaft AI Conversation",
+ "creation": "2026-01-01 00:00:00",
+ "modified": "2026-01-01 00:00:00",
+ "modified_by": "Administrator",
+ "owner": "Administrator",
+ "docstatus": 0,
+ "module": "Hambaft AI",
+ "autoname": "hash",
+ "track_changes": 1,
+ "fields": [
+  {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "label": "کاربر",
+   "options": "User",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "label": "عنوان",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "ai_type",
+   "fieldtype": "Select",
+   "label": "نوع هوش مصنوعی",
+   "options": "چت‌بات\nتحلیل‌گر\nبرنامه‌ریز\nکوچک_شخصی",
+   "default": "چت‌بات",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "وضعیت",
+   "options": "فعال\nآرشیو\nبسته",
+   "default": "فعال",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "started_at",
+   "fieldtype": "Datetime",
+   "label": "تاریخ شروع",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_message_at",
+   "fieldtype": "Datetime",
+   "label": "آخرین پیام",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "context_summary",
+   "fieldtype": "Text",
+   "label": "خلاصه زمینه"
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1
+  },
+  {
+   "role": "Hambaft User",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "if_owner": 1
+  }
+ ],
+ "doctype": "DocType",
+ "custom": 1
+}

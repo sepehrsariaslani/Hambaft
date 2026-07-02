@@ -1,0 +1,33 @@
+{
+  "name": "Hambaft Savings Goal",
+  "doctype": "DocType",
+  "module": "Hambaft Finance",
+  "custom": 1,
+  "autoname": "format:SAVE-{#####}",
+  "istable": 0,
+  "issingle": 0,
+  "is_submittable": 0,
+  "track_changes": 1,
+  "fields": [
+    {"fieldname": "goal_name", "fieldtype": "Data", "label": "\u0646\u0627\u0645 \u0647\u062f\u0641", "reqd": 1, "in_list_view": 1, "in_standard_filter": 1},
+    {"fieldname": "user", "fieldtype": "Link", "label": "\u06a9\u0627\u0631\u0628\u0631", "options": "User", "reqd": 1, "in_list_view": 1, "in_standard_filter": 1},
+    {"fieldname": "linked_life_goal", "fieldtype": "Link", "label": "\u0647\u062f\u0641 \u0645\u0631\u062a\u0628\u0637", "options": "Hambaft Goal"},
+    {"fieldname": "target_amount", "fieldtype": "Currency", "label": "\u0645\u0628\u0644\u063a \u0647\u062f\u0641", "reqd": 1, "in_list_view": 1},
+    {"fieldname": "current_amount", "fieldtype": "Currency", "label": "\u0645\u0628\u0644\u063a \u0641\u0639\u0644\u06cc", "default": 0, "in_list_view": 1},
+    {"fieldname": "target_date", "fieldtype": "Date", "label": "\u062a\u0627\u0631\u06cc\u062e \u0647\u062f\u0641"},
+    {"fieldname": "monthly_contribution", "fieldtype": "Currency", "label": "\u067e\u0631\u062f\u0627\u062e\u062a \u0645\u0627\u0647\u0627\u0646\u0647", "default": 0},
+    {"fieldname": "account", "fieldtype": "Link", "label": "\u062d\u0633\u0627\u0628 \u067e\u0633\u200c\u0627\u0646\u062f\u0627\u0632", "options": "Hambaft Finance Account"},
+    {"fieldname": "progress", "fieldtype": "Percent", "label": "\u067e\u06cc\u0634\u0631\u0641\u062a", "in_list_view": 1},
+    {"fieldname": "status", "fieldtype": "Select", "label": "\u0648\u0636\u0639\u06cc\u062a", "options": "\u0641\u0639\u0627\u0644\n\u0645\u062a\u0648\u0642\u0641\n\u062a\u06a9\u0645\u06cc\u0644\u200c\u0634\u062f\u0647\n\u0622\u0631\u0634\u06cc\u0648\u0634\u062f\u0647", "default": "\u0641\u0639\u0627\u0644", "in_list_view": 1},
+    {"fieldname": "description", "fieldtype": "Text Editor", "label": "\u062a\u0648\u0636\u06cc\u062d\u0627\u062a"},
+    {"fieldname": "icon", "fieldtype": "Data", "label": "\u0622\u06cc\u06a9\u0648\u0646"},
+    {"fieldname": "color", "fieldtype": "Color", "label": "\u0631\u0646\u06af"}
+  ],
+  "permissions": [
+    {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1},
+    {"role": "Hambaft User", "read": 1, "write": 1, "create": 1, "delete": 1, "if_owner": 1},
+    {"role": "All", "read": 1, "write": 1, "create": 1, "delete": 1, "if_owner": 1}
+  ],
+  "sort_field": "target_date",
+  "sort_order": "ASC"
+}

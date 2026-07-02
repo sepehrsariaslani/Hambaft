@@ -1,0 +1,114 @@
+{
+ "name": "Hambaft Time Block",
+ "doctype": "DocType",
+ "module": "Hambaft",
+ "custom": 1,
+ "autoname": "format:TBLK-{#####}",
+ "fields": [
+  {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "label": "کاربر",
+   "options": "User",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "block_date",
+   "fieldtype": "Date",
+   "label": "تاریخ",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "start_time",
+   "fieldtype": "Time",
+   "label": "زمان شروع",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "end_time",
+   "fieldtype": "Time",
+   "label": "زمان پایان",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "label": "عنوان",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "block_type",
+   "fieldtype": "Select",
+   "label": "نوع بلوک",
+   "options": "کار عمیق\nاداری\nسلامت\nمالی\nاستراحت\nیادگیری\nشخصی",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "task",
+   "fieldtype": "Link",
+   "label": "کار",
+   "options": "Hambaft Task",
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "goal",
+   "fieldtype": "Link",
+   "label": "هدف",
+   "options": "Hambaft Goal",
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "habit",
+   "fieldtype": "Link",
+   "label": "عادت",
+   "options": "Hambaft Habit",
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "وضعیت",
+   "options": "برنامه‌ریزی‌شده\nانجام‌شده\nردشده\nمنتقل‌شده",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1
+  },
+  {
+   "role": "Hambaft User",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "if_owner": 1
+  },
+  {
+   "role": "All",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "if_owner": 1
+  }
+ ],
+ "sort_field": "block_date",
+ "sort_order": "ASC",
+ "istable": 0,
+ "issingle": 0,
+ "track_changes": 1
+}

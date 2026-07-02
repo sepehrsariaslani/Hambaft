@@ -1,60 +1,19 @@
 import { createApp } from 'vue'
-import {
-  Button,
-  Input,
-  TextInput,
-  FormControl,
-  ErrorMessage,
-  setConfig,
-  frappeRequest,
-  resourcesPlugin,
-} from 'frappe-ui'
 import { createPinia } from 'pinia'
-import router from './router'
 import App from './App.vue'
-import './index.css'
-
-const globalComponents = {
-  Button,
-  TextInput,
-  Input,
-  FormControl,
-  ErrorMessage,
-}
+import router from './router/index.js'
+import { useAuthStore } from '@/stores/auth'
+import './styles/tokens.css'
+import './styles/base.css'
 
 const app = createApp(App)
+const pinia = createPinia()
 
-setConfig('resourceFetcher', frappeRequest)
-
-app.use(resourcesPlugin)
-app.use(createPinia())
+app.use(pinia)
 app.use(router)
 
-for (const key in globalComponents) {
-  app.component(key, globalComponents[key])
-}
-
-app.config.globalProperties.$frappeRequest = frappeRequest
-
-if (import.meta.env.DEV) {
-  window.user = 'Administrator'
-  window.user_full_name = 'مدیر'
-  window.user_role = 'مدیر سیستم'
-  window.user_roles = ['System Manager']
+// Initialize Frappe session on startup before mounting
+const auth = useAuthStore()
+auth.init().then(() => {
   app.mount('#app')
-
-  frappeRequest({ url: '/api/method/hambaft.www.hambaft.get_context_for_dev' })
-    .then((values) => {
-      for (const key in values) {
-        window[key] = values[key]
-      }
-    })
-    .catch(() => {})
-} else {
-  app.mount('#app')
-}
-
-if (import.meta.env.DEV) {
-  window.$router = router
-  window.$frappeRequest = frappeRequest
-}
+})

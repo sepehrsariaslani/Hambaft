@@ -1,0 +1,155 @@
+{
+  "name": "Hambaft Weekly Review",
+  "doctype": "DocType",
+  "module": "Hambaft",
+  "custom": 1,
+  "autoname": "format:WR-{#####}",
+  "title_field": "week_start",
+  "track_changes": 1,
+  "istable": 0,
+  "issingle": 0,
+  "sort_field": "week_start",
+  "sort_order": "DESC",
+  "fields": [
+    {
+      "fieldname": "user",
+      "fieldtype": "Link",
+      "label": "کاربر",
+      "options": "User",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1,
+      "hidden": 1
+    },
+    {
+      "fieldname": "week_start",
+      "fieldtype": "Date",
+      "label": "شروع هفته",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1,
+      "description": "تاریخ میلادی روز شنبه (شروع هفته)"
+    },
+    {
+      "fieldname": "week_end",
+      "fieldtype": "Date",
+      "label": "پایان هفته",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1,
+      "description": "تاریخ میلادی روز جمعه (پایان هفته)"
+    },
+    {
+      "fieldname": "jalali_week_display",
+      "fieldtype": "Data",
+      "label": "هفته شمسی",
+      "read_only": 1,
+      "in_list_view": 1,
+      "description": "نمایش هفته به تاریخ جلالی"
+    },
+    {
+      "fieldname": "scores_section",
+      "fieldtype": "Section Break",
+      "label": "امتیازها و آمار",
+      "collapsible": 1
+    },
+    {
+      "fieldname": "overall_score",
+      "fieldtype": "Float",
+      "label": "امتیاز کلی",
+      "in_list_view": 1,
+      "description": "امتیاز کلی از ۰ تا ۱۰"
+    },
+    {
+      "fieldname": "completed_tasks",
+      "fieldtype": "Int",
+      "label": "کارهای انجام‌شده",
+      "in_list_view": 1,
+      "default": 0,
+      "description": "تعداد کارهای انجام‌شده در این هفته"
+    },
+    {
+      "fieldname": "missed_tasks",
+      "fieldtype": "Int",
+      "label": "کارهای انجام‌نشده",
+      "in_list_view": 1,
+      "default": 0,
+      "description": "تعداد کارهای انجام‌نشده در این هفته"
+    },
+    {
+      "fieldname": "habit_success_rate",
+      "fieldtype": "Percent",
+      "label": "نرخ موفقیت عادت‌ها",
+      "description": "درصد موفقیت عادت‌ها در این هفته"
+    },
+    {
+      "fieldname": "budget_status",
+      "fieldtype": "Select",
+      "label": "وضعیت بودجه",
+      "options": "خوب\nهشدار\nبیش‌ازحد\nنامشخص",
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "reflection_section",
+      "fieldtype": "Section Break",
+      "label": "بازتاب و برنامه‌ریزی",
+      "collapsible": 1
+    },
+    {
+      "fieldname": "goal_progress_summary",
+      "fieldtype": "Text",
+      "label": "خلاصه پیشرفت هدف‌ها",
+      "description": "خلاصه وضعیت پیشرفت اهداف در این هفته"
+    },
+    {
+      "fieldname": "blocked_items",
+      "fieldtype": "Text",
+      "label": "موارد بلاک‌شده",
+      "description": "مواردی که در این هفته بلاک شده‌اند"
+    },
+    {
+      "fieldname": "wins",
+      "fieldtype": "Text",
+      "label": "بردها",
+      "description": "بردهای اصلی این هفته"
+    },
+    {
+      "fieldname": "problems",
+      "fieldtype": "Text",
+      "label": "مشکلات",
+      "description": "مشکلات و چالش‌های این هفته"
+    },
+    {
+      "fieldname": "next_week_focus",
+      "fieldtype": "Text",
+      "label": "تمرکز هفته بعد",
+      "description": "اولویت‌های اصلی برای هفته آینده"
+    }
+  ],
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1
+    },
+    {
+      "role": "Hambaft User",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "if_owner": 1
+    },
+    {
+      "role": "All",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "if_owner": 1
+    }
+  ]
+}

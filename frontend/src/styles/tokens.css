@@ -1,0 +1,367 @@
+@import "tailwindcss";
+
+/* ============================================
+   Hambaft Design Tokens — CSS Custom Properties
+   Version: 1.0.0
+   Direction: RTL
+   Language: Persian (فارسی)
+   ============================================ */
+
+:root,
+[data-theme='light'] {
+  /* ── Core Colors ── */
+  --color-cream: #F7F0E3;
+  --color-black: #111111;
+  --color-warning-red: #F26D65;
+
+  /* ── Pastels ── */
+  --color-pink: #F4A8D3;
+  --color-yellow: #F7D957;
+  --color-olive: #B8C97A;
+  --color-ice-blue: #AFC7EB;
+  --color-purple: #CDB8F0;
+
+  /* ── Text Colors ── */
+  --color-text-primary: #111111;
+  --color-text-secondary: #6B665D;
+  --color-text-placeholder: #9E988B;
+  --color-text-on-dark: #F7F0E3;
+
+  /* ── Semantic ── */
+  --color-bg: var(--color-cream);
+  --color-surface: #FFFFFF;
+  --color-surface-elevated: #FFFFFF;
+  --color-text: var(--color-text-primary);
+  --color-text-muted: var(--color-text-secondary);
+  --color-border: #E8E0D4;
+  --color-divider: #EDE6DB;
+  --color-error: var(--color-warning-red);
+  --color-success: var(--color-olive);
+  --color-info: var(--color-ice-blue);
+
+  /* ── Gradients ── */
+  --gradient-pink-yellow: linear-gradient(135deg, #F4A8D3 0%, #F7D957 100%);
+  --gradient-purple-blue: linear-gradient(135deg, #CDB8F0 0%, #AFC7EB 100%);
+  --gradient-olive-cream: linear-gradient(135deg, #B8C97A 0%, #F7F0E3 100%);
+
+  /* ── Typography ── */
+  --font-family-primary: 'Peyda', 'Estedad', 'Vazirmatn', 'Noto Sans Arabic', 'Tahoma', system-ui, sans-serif;
+  --font-family-numeric: 'Estedad', 'Vazirmatn', 'SF Mono', 'Roboto Mono', monospace;
+
+  --text-xs: 0.625rem;
+  --text-sm: 0.75rem;
+  --text-base: 0.875rem;
+  --text-md: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.25rem;
+  --text-2xl: 1.5rem;
+  --text-3xl: 1.875rem;
+  --text-4xl: 2.25rem;
+
+  --leading-xs: 1.5;
+  --leading-sm: 1.5;
+  --leading-base: 1.6;
+  --leading-md: 1.6;
+  --leading-lg: 1.5;
+  --leading-xl: 1.4;
+  --leading-2xl: 1.35;
+  --leading-3xl: 1.3;
+  --leading-4xl: 1.25;
+
+  --tracking-tight: -0.01em;
+  --tracking-normal: 0;
+  --tracking-wide: 0.05em;
+
+  /* ── Spacing (4px grid) ── */
+  --space-0: 0;
+  --space-0-5: 0.125rem;
+  --space-1: 0.25rem;
+  --space-1-5: 0.375rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+  --space-20: 5rem;
+
+  /* ── Border Radius ── */
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-2xl: 24px;
+  --radius-full: 9999px;
+
+  /* ── Shadows (warm, soft) ── */
+  --shadow-xs: 0 1px 2px rgba(17, 17, 17, 0.04);
+  --shadow-sm: 0 1px 3px rgba(17, 17, 17, 0.06), 0 1px 2px rgba(17, 17, 17, 0.04);
+  --shadow-md: 0 4px 8px rgba(17, 17, 17, 0.06), 0 2px 4px rgba(17, 17, 17, 0.04);
+  --shadow-lg: 0 8px 24px rgba(17, 17, 17, 0.08), 0 4px 8px rgba(17, 17, 17, 0.04);
+  --shadow-xl: 0 12px 40px rgba(17, 17, 17, 0.10), 0 6px 16px rgba(17, 17, 17, 0.06);
+  --shadow-inner: inset 0 2px 4px rgba(17, 17, 17, 0.04);
+
+  /* ── Z-Index ── */
+  --z-base: 0;
+  --z-fab: 150;
+  --z-dropdown: 100;
+  --z-sticky: 200;
+  --z-overlay: 300;
+  --z-modal: 400;
+  --z-toast: 500;
+
+  /* ── Transitions ── */
+  --duration-fast: 150ms;
+  --duration-normal: 250ms;
+  --duration-slow: 350ms;
+  --easing-default: cubic-bezier(0.4, 0, 0.2, 1);
+  --easing-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --easing-enter: cubic-bezier(0, 0, 0.2, 1);
+  --easing-exit: cubic-bezier(0.4, 0, 1, 1);
+
+  /* ── Component Tokens ── */
+  --tap-target: 44px;
+
+  /* ── Semantic Aliases ── */
+  --color-primary: var(--color-pink);
+  --color-accent: var(--color-pink);
+  --color-danger: var(--color-warning-red);
+  --color-warning: #D97706;
+  --color-success-light: rgba(184, 201, 122, 0.12);
+  --color-danger-light: rgba(242, 109, 101, 0.12);
+  --color-warning-light: rgba(217, 119, 6, 0.12);
+
+  /* ── Pastel Aliases ── */
+  --pastel-green: #B8C97A;
+  --pastel-amber: #F59E0B;
+  --pastel-blue: #AFC7EB;
+  --pastel-purple: #CDB8F0;
+  --pastel-rose: #F4A8D3;
+  --pastel-teal: #7BB8B0;
+
+  /* ── Surface Tiers ── */
+  --color-surface-secondary: #F5F0EA;
+  --color-surface-tertiary: #EDE6DB;
+
+  /* ── Text Tiers ── */
+  --color-text-tertiary: #9E988B;
+
+  /* ── Legacy / Utility ── */
+  --heading: var(--text-xl);
+  --text-h: var(--text-xl);
+  --shadow: var(--shadow-sm);
+  --border: var(--color-border);
+  --bg: var(--color-bg);
+  --text: var(--color-text);
+  --sans: var(--font-family-primary);
+  --mono: var(--font-family-numeric);
+  --code-bg: var(--color-surface-secondary);
+  --social-bg: var(--color-surface-secondary);
+  --accent: var(--color-pink);
+  --accent-bg: rgba(244, 168, 211, 0.12);
+  --accent-border: rgba(244, 168, 211, 0.3);
+
+  /* ── Bottom Navigation ── */
+  --bottom-nav-height: 64px;
+  --bottom-nav-bg: var(--color-black);
+  --bottom-nav-text: var(--color-text-on-dark);
+  --bottom-nav-text-active: var(--color-pink);
+  --bottom-nav-icon-size: 24px;
+
+  /* ── FAB ── */
+  --fab-size: 56px;
+  --fab-bg: var(--color-pink);
+  --fab-shadow: 0 4px 12px rgba(244, 168, 211, 0.4);
+  --fab-shadow-active: 0 2px 8px rgba(244, 168, 211, 0.3);
+
+  /* ── Card ── */
+  --card-radius: var(--radius-lg);
+  --card-padding: var(--space-4);
+  --card-bg: var(--color-surface);
+  --card-shadow: var(--shadow-sm);
+
+  /* ── Modal ── */
+  --modal-bg: rgba(17, 17, 17, 0.5);
+  --modal-surface-bg: #1C1C1C;
+  --modal-radius: var(--radius-xl);
+  --modal-padding: var(--space-6);
+
+  /* ── Button ── */
+  --button-height-sm: 36px;
+  --button-height-md: 44px;
+  --button-height-lg: 52px;
+  --button-radius: var(--radius-full);
+  --button-padding-x: var(--space-5);
+
+  /* ── Input ── */
+  --input-height: 48px;
+  --input-radius: var(--radius-md);
+  --input-padding-x: var(--space-4);
+  --input-border: var(--color-border);
+  --input-bg: var(--color-bg);
+  --input-focus-ring: rgba(107, 102, 93, 0.12);
+  --input-error-ring: rgba(242, 109, 101, 0.12);
+  --input-error-bg: rgba(242, 109, 101, 0.05);
+}
+
+/* ============================================
+   Breakpoints (for reference in media queries)
+   ============================================
+   --bp-xs: 320px   iPhone SE
+   --bp-sm: 375px   iPhone 14
+   --bp-md: 414px   iPhone 14 Plus
+   --bp-lg: 768px   iPad portrait
+   --bp-xl: 1024px  iPad landscape
+   ============================================ */
+
+/* ============================================
+   Font Faces — Persian Font Stack
+   ============================================ */
+@font-face {
+  font-family: 'Peyda';
+  src: url('../assets/fonts/Peyda-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Peyda';
+  src: url('../assets/fonts/Peyda-Medium.ttf') format('truetype');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Peyda';
+  src: url('../assets/fonts/Peyda-SemiBold.ttf') format('truetype');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Peyda';
+  src: url('../assets/fonts/Peyda-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Estedad';
+  src: local('Estedad'), local('Vazirmatn');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Estedad';
+  src: local('Estedad'), local('Vazirmatn');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Estedad';
+  src: local('Estedad'), local('Vazirmatn');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ============================================
+   Base Reset & RTL Rules
+   ============================================ */
+
+/* Document direction */
+html {
+  direction: rtl;
+}
+
+/* Logical properties enforcement:
+   All layout MUST use logical properties.
+   margin-left  → margin-inline-start
+   margin-right → margin-inline-end
+   padding-left  → padding-inline-start
+   padding-right → padding-inline-end
+   border-left   → border-inline-start
+   border-right  → border-inline-end
+   left          → inset-inline-start
+   right         → inset-inline-end
+   text-align: left  → text-align: start
+   text-align: right → text-align: end
+*/
+
+/* Box sizing */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 16px;
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-family-primary);
+  font-size: var(--text-base);
+  line-height: var(--leading-base);
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  min-height: 100dvh;
+  overflow-x: hidden;
+  text-align: start;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: var(--radius-full);
+}
+
+/* Selection */
+::selection {
+  background: var(--color-pink);
+  color: var(--color-text-primary);
+}
+
+/* Focus visible */
+:focus-visible {
+  outline: 2px solid var(--color-text-secondary);
+  outline-offset: 2px;
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

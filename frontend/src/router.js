@@ -1,8 +1,8 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { sessionUser } from '@/utils/frappe'
+import { checkFrappeSession } from '@/utils/frappe'
 
 const router = createRouter({
-  history: createWebHistory(import.meta.env.DEV ? '/' : '/hambaft/'),
+  history: createWebHistory(import.meta.env.DEV ? '/' : '/'),
   routes: [
     {
       path: '/',
@@ -27,7 +27,7 @@ router.beforeEach(async (to, from, next) => {
   }
 
   try {
-    const user = await sessionUser()
+    const user = await checkFrappeSession()
     if (user && user !== 'Guest') return next()
     return next()
   } catch {

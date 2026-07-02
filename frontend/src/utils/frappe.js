@@ -1,18 +1,20 @@
-import { frappeRequest } from 'frappe-ui'
+// Frappe API utility — uses Frappe session (cookie-based), no custom tokens
 
 export async function call(method, args = {}) {
-  return frappeRequest({
-    url: `/api/method/${method}`,
+  const res = await fetch(`/api/method/${method}`, {
     method: 'POST',
-    args,
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify(args),
   })
+  return res.json()
 }
 
 export async function getDoc(doctype, name) {
-  return frappeRequest({
-    url: `/api/resource/${encodeURIComponent(doctype)}/${encodeURIComponent(name)}`,
-    method: 'GET',
+  const res = await fetch(`/api/resource/${encodeURIComponent(doctype)}/${encodeURIComponent(name)}`, {
+    credentials: 'same-origin',
   })
+  return res.json()
 }
 
 export async function getList(doctype, options = {}) {
@@ -23,62 +25,71 @@ export async function getList(doctype, options = {}) {
   if (options.limit_start) params.set('limit_start', String(options.limit_start))
   if (options.order_by) params.set('order_by', options.order_by)
 
-  return frappeRequest({
-    url: `/api/resource/${encodeURIComponent(doctype)}?${params.toString()}`,
-    method: 'GET',
+  const res = await fetch(`/api/resource/${encodeURIComponent(doctype)}?${params.toString()}`, {
+    credentials: 'same-origin',
   })
+  return res.json()
 }
 
 export async function createDoc(doctype, data) {
-  return frappeRequest({
-    url: `/api/resource/${encodeURIComponent(doctype)}`,
+  const res = await fetch(`/api/resource/${encodeURIComponent(doctype)}`, {
     method: 'POST',
-    args: data,
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify(data),
   })
+  return res.json()
 }
 
 export async function updateDoc(doctype, name, data) {
-  return frappeRequest({
-    url: `/api/resource/${encodeURIComponent(doctype)}/${encodeURIComponent(name)}`,
+  const res = await fetch(`/api/resource/${encodeURIComponent(doctype)}/${encodeURIComponent(name)}`, {
     method: 'PUT',
-    args: data,
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify(data),
   })
+  return res.json()
 }
 
 export async function deleteDoc(doctype, name) {
-  return frappeRequest({
-    url: `/api/resource/${encodeURIComponent(doctype)}/${encodeURIComponent(name)}`,
+  const res = await fetch(`/api/resource/${encodeURIComponent(doctype)}/${encodeURIComponent(name)}`, {
     method: 'DELETE',
+    credentials: 'same-origin',
   })
+  return res.json()
 }
 
-export async function sessionUser() {
+/**
+ * Check if the user has an active Frappe session.
+ * Returns the username string (e.g. "user@example.com") or null.
+ * Uses the hambaft-specific check_session endpoint which is whitelisted for guests.
+ */
+export async function checkFrappeSession() {
   try {
-    if (window.user && window.user !== 'Guest') {
-      return {
-        name: window.user,
-        full_name: window.user_full_name || window.user,
-        email: window.user,
-      }
-    }
-
-    const response = await frappeRequest({
-      url: '/api/method/frappe.auth.get_logged_user',
-      method: 'GET',
+    const response = await fetch('/api/method/hambaft.hambaft.api.check_session', {
+      credentials: 'same-origin',
     })
-
-    const user = response.message
-
-    if (typeof user === 'string' && user !== 'Guest') {
-      try {
-        return await getDoc('User', user)
-      } catch {
-        return { name: user, full_name: user }
-      }
+    const data = await response.json()
+    const user = data.message?.user || data.user
+    if (typeof user === 'string' && user !== 'Guest' && user !== 'guest') {
+      return user
     }
-
     return null
   } catch {
     return null
   }
+}
+
+/**
+ * Get the current user's Hambaft profile.
+ */
+export async function getHambaftProfile() {
+  const res = await fetch('/api/method/hambaft.hambaft.api.get_profile', {
+    credentials: 'same-origin',
+  })
+  const data = await res.json()
+  if (data.message) {
+    return data.message
+  }
+  return data
 }

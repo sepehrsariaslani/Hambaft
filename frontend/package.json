@@ -1,26 +1,25 @@
 {
   "name": "hambaft",
-  "version": "1.0.0",
+  "private": true,
+  "version": "0.0.0",
   "type": "module",
-  "description": "Hambaft Vue 3 frontend",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "serve": "vite preview"
+    "preview": "vite preview"
   },
   "dependencies": {
-    "frappe-ui": "^0.1.278",
+    "@lucide/vue": "^1.21.0",
+    "jalaali-js": "^2.0.0",
     "lucide-vue-next": "^1.0.0",
-    "pinia": "^3.0.0",
-    "vue": "^3.5.13",
-    "vue-router": "^4.5.0"
+    "pinia": "^3.0.4",
+    "vue": "^3.5.38",
+    "vue-router": "^4.6.4"
   },
   "devDependencies": {
-    "@vitejs/plugin-vue": "^5.0.0",
-    "autoprefixer": "^10.4.2",
-    "postcss": "^8.4.5",
-    "tailwindcss": "^3.4.15",
-    "vite": "^5.0.0"
-  },
-  "packageManager": "yarn@1.22.22"
+    "@tailwindcss/vite": "^4.3.1",
+    "@vitejs/plugin-vue": "^5.2.4",
+    "tailwindcss": "^4.3.1",
+    "vite": "^6.4.3"
+  }
 }

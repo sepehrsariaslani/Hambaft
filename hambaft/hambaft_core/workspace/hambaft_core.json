@@ -1,0 +1,37 @@
+{
+    "name": "Hambaft Core",
+    "label": "همبافت هسته",
+    "category": "Modules",
+    "links": [
+        {
+            "type": "doctype",
+            "name": "Hambaft Task",
+            "label": "وظیفه"
+        },
+        {
+            "type": "doctype",
+            "name": "Hambaft Habit",
+            "label": "عادت"
+        },
+        {
+            "type": "doctype",
+            "name": "Hambaft Goal",
+            "label": "هدف"
+        },
+        {
+            "type": "doctype",
+            "name": "Hambaft Note",
+            "label": "یادداشت"
+        },
+        {
+            "type": "doctype",
+            "name": "Hambaft Finance Entry",
+            "label": "ثبت مالی"
+        },
+        {
+            "type": "report",
+            "name": "Hambaft Finance Report",
+            "label": "گزارش مالی"
+        }
+    ]
+}

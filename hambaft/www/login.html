@@ -1,0 +1,21 @@
+{% extends "templates/web.html" %}
+
+{% block page_content %}
+<div id="app" class="h-full"></div>
+{% endblock %}
+
+{% block style %}
+<style>
+    body, html { direction: rtl; font-family: 'Vazirmatn', system-ui, sans-serif; }
+</style>
+{% endblock %}
+
+{% block script %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css">
+{% if css_path %}
+<link rel="stylesheet" crossorigin href="{{ css_path }}">
+{% endif %}
+{% if js_path %}
+<script type="module" crossorigin src="{{ js_path }}"></script>
+{% endif %}
+{% endblock %}

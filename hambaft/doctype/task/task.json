@@ -1,0 +1,126 @@
+{
+ "name": "Task",
+ "creation": "2026-01-01 00:00:00",
+ "modified": "2026-01-01 00:00:00",
+ "modified_by": "Administrator",
+ "owner": "Administrator",
+ "docstatus": 0,
+ "module": "Hambaft",
+ "autoname": "hash",
+ "track_changes": 1,
+ "fields": [
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "label": "عنوان",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Text Editor",
+   "label": "توضیحات"
+  },
+  {
+   "fieldname": "goal",
+   "fieldtype": "Link",
+   "label": "هدف",
+   "options": "Goal"
+  },
+  {
+   "fieldname": "priority",
+   "fieldtype": "Select",
+   "label": "اولویت",
+   "options": "پایین\nمتوسط\nبالا\nفوری",
+   "default": "متوسط",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "وضعیت",
+   "options": "انجام‌نشده\nدر حال انجام\nانجام‌شده\nلغو‌شده",
+   "default": "انجام‌نشده",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "due_date",
+   "fieldtype": "Datetime",
+   "label": "مهلت",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "completed_on",
+   "fieldtype": "Datetime",
+   "label": "تاریخ انجام",
+   "read_only": 1
+  },
+  {
+   "fieldname": "estimated_minutes",
+   "fieldtype": "Int",
+   "label": "زمان تخمینی (دقیقه)"
+  },
+  {
+   "fieldname": "actual_minutes",
+   "fieldtype": "Int",
+   "label": "زمان واقعی (دقیقه)"
+  },
+  {
+   "fieldname": "is_recurring",
+   "fieldtype": "Check",
+   "label": "تکراری",
+   "default": 0
+  },
+  {
+   "fieldname": "recurrence_rule",
+   "fieldtype": "Data",
+   "label": "قاعده تکرار"
+  },
+  {
+   "fieldname": "category",
+   "fieldtype": "Select",
+   "label": "دسته‌بندی",
+   "options": "سلامت\nمالی\nشغلی\nشخصی\nآموزشی"
+  },
+  {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "label": "کاربر",
+   "options": "User",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1
+  },
+  {
+   "role": "Hambaft User",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "if_owner": 1
+  },
+  {
+   "role": "All",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "if_owner": 1
+  }
+ ],
+ "doctype": "DocType",
+ "custom": 1,
+ "istable": 1,
+ "issingle": 0
+}

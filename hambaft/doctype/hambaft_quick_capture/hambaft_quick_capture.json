@@ -1,0 +1,94 @@
+{
+ "name": "Hambaft Quick Capture",
+ "creation": "2026-01-01 00:00:00",
+ "modified": "2026-01-01 00:00:00",
+ "modified_by": "Administrator",
+ "owner": "Administrator",
+ "docstatus": 0,
+ "module": "Hambaft",
+ "autoname": "hash",
+ "label": "ثبت سریع",
+ "track_changes": 1,
+ "fields": [
+  {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "label": "کاربر",
+   "options": "User",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "raw_text",
+   "fieldtype": "Long Text",
+   "label": "متن خام",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "capture_type",
+   "fieldtype": "Select",
+   "label": "نوع ثبت",
+   "options": "نامشخص\nکار\nیادداشت\nهدف\nهزینه\nرویداد\nعادت",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "وضعیت",
+   "options": "ورودی\nپردازش‌شده\nآرشیوشده",
+   "default": "ورودی",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "converted_doctype",
+   "fieldtype": "Data",
+   "label": "نوع سند تبدیل‌شده",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "converted_name",
+   "fieldtype": "Dynamic Link",
+   "label": "سند تبدیل‌شده",
+   "options": "converted_doctype",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "created_on",
+   "fieldtype": "Datetime",
+   "label": "زمان ایجاد",
+   "reqd": 1,
+   "in_list_view": 1
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1
+  },
+  {
+   "role": "All",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "if_owner": 1
+  }
+ ],
+ "sort_field": "created_on",
+ "sort_order": "DESC",
+ "doctype": "DocType",
+ "custom": 1,
+ "istable": 0,
+ "issingle": 0
+}

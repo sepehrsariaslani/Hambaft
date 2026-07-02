@@ -1,0 +1,118 @@
+{
+ "name": "Hambaft Decision Log",
+ "creation": "2026-01-01 00:00:00",
+ "modified": "2026-01-01 00:00:00",
+ "modified_by": "Administrator",
+ "owner": "Administrator",
+ "docstatus": 0,
+ "module": "Hambaft",
+ "autoname": "hash",
+ "track_changes": 1,
+ "fields": [
+  {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "label": "کاربر",
+   "options": "User",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "decision_title",
+   "fieldtype": "Data",
+   "label": "عنوان تصمیم",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "area",
+   "fieldtype": "Link",
+   "label": "حوزه",
+   "options": "Hambaft Area",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "project",
+   "fieldtype": "Link",
+   "label": "پروژه",
+   "options": "Hambaft Project",
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "goal",
+   "fieldtype": "Link",
+   "label": "هدف",
+   "options": "Hambaft Goal",
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "decision_date",
+   "fieldtype": "Date",
+   "label": "تاریخ تصمیم",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "decision",
+   "fieldtype": "Text Editor",
+   "label": "تصمیم",
+   "description": "شرح تصمیم اتخاذشده"
+  },
+  {
+   "fieldname": "reason",
+   "fieldtype": "Text Editor",
+   "label": "دلیل",
+   "description": "دلیل و مستندات تصمیم"
+  },
+  {
+   "fieldname": "alternatives",
+   "fieldtype": "Text Editor",
+   "label": "گزینه‌های جایگزین",
+   "description": "گزینه‌های دیگری که مطرح بودند"
+  },
+  {
+   "fieldname": "expected_result",
+   "fieldtype": "Text Editor",
+   "label": "نتیجه مورد انتظار",
+   "description": "آنچه انتظار می‌رود از این تصمیم حاصل شود"
+  },
+  {
+   "fieldname": "review_date",
+   "fieldtype": "Date",
+   "label": "تاریخ بازبینی",
+   "in_standard_filter": 1
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1
+  },
+  {
+   "role": "Hambaft User",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "if_owner": 1
+  },
+  {
+   "role": "All",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "if_owner": 1
+  }
+ ],
+ "doctype": "DocType",
+ "custom": 1,
+ "istable": 0,
+ "issingle": 0
+}

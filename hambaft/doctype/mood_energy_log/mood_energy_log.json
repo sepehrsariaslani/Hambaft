@@ -1,0 +1,78 @@
+{
+ "name": "Mood Energy Log",
+ "creation": "2026-01-01 00:00:00",
+ "modified": "2026-01-01 00:00:00",
+ "modified_by": "Administrator",
+ "owner": "Administrator",
+ "docstatus": 0,
+ "module": "Hambaft",
+ "autoname": "hash",
+ "fields": [
+  {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "label": "کاربر",
+   "options": "User",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "date",
+   "fieldtype": "Date",
+   "label": "تاریخ",
+   "reqd": 1
+  },
+  {
+   "fieldname": "mood",
+   "fieldtype": "Int",
+   "label": "حال و هوا (۱-۱۰)"
+  },
+  {
+   "fieldname": "energy",
+   "fieldtype": "Int",
+   "label": "انرژی (۱-۱۰)"
+  },
+  {
+   "fieldname": "stress",
+   "fieldtype": "Int",
+   "label": "استرس (۱-۱۰)"
+  },
+  {
+   "fieldname": "sleep_hours",
+   "fieldtype": "Float",
+   "label": "ساعت خواب"
+  },
+  {
+   "fieldname": "note",
+   "fieldtype": "Text",
+   "label": "یادداشت"
+  },
+  {
+   "fieldname": "gratitude",
+   "fieldtype": "Text",
+   "label": "قدردانی"
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1
+  },
+  {
+   "role": "Hambaft User",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "if_owner": 1
+  }
+ ],
+ "doctype": "DocType",
+ "custom": 1,
+ "istable": 1,
+ "issingle": 0
+}
