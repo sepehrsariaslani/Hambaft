@@ -348,6 +348,100 @@ export default function App({
     });
   };
 
+  // ─── Auto-persist collections without dedicated DocTypes ────────────────
+  // Debounced JSON-blob sync for state that used to live only in memory.
+  const hasHydratedRef = useRef(false);
+  const persistTimerRef = useRef<any>(null);
+  const lastPersistedRef = useRef<string>('');
+
+  useEffect(() => {
+    // Skip the very first pass so we do not overwrite hydrated data with empty defaults.
+    if (!hasHydratedRef.current) {
+      hasHydratedRef.current = true;
+      return;
+    }
+
+    // Extract subcategory overrides map from categories.
+    const subcategoriesMap: Record<string, string[]> = {};
+    for (const cat of (lifeData.categories || [])) {
+      if (cat && Array.isArray(cat.subcategories)) {
+        subcategoriesMap[cat.id] = cat.subcategories;
+      }
+    }
+
+    // Extract task time + daily highlight maps across general tasks and project tasks.
+    const taskTimeMap: Record<string, number> = {};
+    const dailyHighlightsMap: Record<string, boolean> = {};
+    const collectTask = (task: any) => {
+      if (!task || !task.id) return;
+      if (typeof task.totalTimeSpent === 'number' && task.totalTimeSpent > 0) {
+        taskTimeMap[task.id] = task.totalTimeSpent;
+      }
+      if (task.isDailyHighlight) {
+        dailyHighlightsMap[task.id] = true;
+      }
+    };
+    (lifeData.tasks || []).forEach(collectTask);
+    (lifeData.goals || []).forEach((g: any) => {
+      (g.projects || []).forEach((p: any) => (p.tasks || []).forEach(collectTask));
+    });
+
+    // Extract goal-scoped habits map (habits attached to a Goal, not the global habits list).
+    const goalHabitsMap: Record<string, any[]> = {};
+    for (const goal of (lifeData.goals || [])) {
+      if (Array.isArray((goal as any).habits) && (goal as any).habits.length) {
+        goalHabitsMap[goal.id] = (goal as any).habits;
+      }
+    }
+
+    const snapshot = {
+      debts_json: JSON.stringify(lifeData.debts || []),
+      subscriptions_json: JSON.stringify(lifeData.subscriptions || []),
+      recurring_transactions_json: JSON.stringify(lifeData.recurringTransactions || []),
+      assets_json: JSON.stringify(lifeData.assets || []),
+      installments_json: JSON.stringify(lifeData.installments || []),
+      diet_setting_json: JSON.stringify(lifeData.dietSetting ? [lifeData.dietSetting] : []),
+      budget_settings_json: JSON.stringify(lifeData.budgetSettings ? [lifeData.budgetSettings] : []),
+      subcategories_json: JSON.stringify(subcategoriesMap),
+      task_time_json: JSON.stringify(taskTimeMap),
+      daily_highlights_json: JSON.stringify(dailyHighlightsMap),
+      goal_habits_json: JSON.stringify(goalHabitsMap),
+    };
+
+    const signature = JSON.stringify(snapshot);
+    if (signature === lastPersistedRef.current) {
+      return;
+    }
+
+    if (persistTimerRef.current) {
+      clearTimeout(persistTimerRef.current);
+    }
+    persistTimerRef.current = setTimeout(() => {
+      lastPersistedRef.current = signature;
+      runSync('persist blob state', async () => {
+        await updateSettingsRecord(snapshot);
+      });
+    }, 600);
+
+    return () => {
+      if (persistTimerRef.current) {
+        clearTimeout(persistTimerRef.current);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    lifeData.debts,
+    lifeData.subscriptions,
+    lifeData.recurringTransactions,
+    lifeData.assets,
+    lifeData.installments,
+    lifeData.dietSetting,
+    lifeData.budgetSettings,
+    lifeData.categories,
+    lifeData.tasks,
+    lifeData.goals,
+  ]);
+
   const notionPages = parseNotionPages(settingsState.notion_pages_json);
   const sleepPreferences = parseSleepPreferences(settingsState.sleep_preferences_json);
   const customExercises = parseCustomExercises(settingsState.custom_exercises_json);
