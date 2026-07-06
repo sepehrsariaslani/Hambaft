@@ -1698,6 +1698,7 @@ export default function App({
   };
 
   const handleToggleMilestone = (goalId: string, milestoneId: string) => {
+    let syncedGoal: Goal | null = null;
     setLifeData(prev => {
       const updatedGoals = prev.goals.map(g => {
         if (g.id === goalId) {
@@ -1709,19 +1710,27 @@ export default function App({
           });
           // Check if all milestones are completed
           const allDone = updatedMilestones.length > 0 && updatedMilestones.every(m => m.completed);
-          return {
+          const nextGoal = {
             ...g,
             milestones: updatedMilestones,
             completed: allDone ? true : g.completed
           };
+          syncedGoal = nextGoal;
+          return nextGoal;
         }
         return g;
       });
       return { ...prev, goals: updatedGoals };
     });
+    if (syncedGoal && !goalId.startsWith('g-')) {
+      runSync('toggle milestone', async () => {
+        await updateGoalRecord(syncedGoal as Goal);
+      });
+    }
   };
 
   const handleAddMilestone = (goalId: string, title: string) => {
+    let syncedGoal: Goal | null = null;
     setLifeData(prev => {
       const updatedGoals = prev.goals.map(g => {
         if (g.id === goalId) {
@@ -1730,16 +1739,23 @@ export default function App({
             title,
             completed: false
           };
-          return {
+          const nextGoal = {
             ...g,
             milestones: [...g.milestones, newM],
             completed: false // Adding milestone resets completion
           };
+          syncedGoal = nextGoal;
+          return nextGoal;
         }
         return g;
       });
       return { ...prev, goals: updatedGoals };
     });
+    if (syncedGoal && !goalId.startsWith('g-')) {
+      runSync('add milestone', async () => {
+        await updateGoalRecord(syncedGoal as Goal);
+      });
+    }
   };
 
   const handleUpdateGoal = (updatedGoal: Goal) => {
