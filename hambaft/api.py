@@ -43,6 +43,17 @@ SETTINGS_FIELDS = (
     "finance_quick_templates_json",
     "calendar_preferences_json",
     "custom_calendars_json",
+    "debts_json",
+    "subscriptions_json",
+    "recurring_transactions_json",
+    "assets_json",
+    "installments_json",
+    "diet_setting_json",
+    "budget_settings_json",
+    "subcategories_json",
+    "task_time_json",
+    "daily_highlights_json",
+    "goal_habits_json",
 )
 
 
