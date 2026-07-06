@@ -150,6 +150,61 @@
    "fieldname": "custom_calendars_json",
    "fieldtype": "Long Text",
    "label": "JSON تقویم‌های سفارشی"
+  },
+  {
+   "fieldname": "debts_json",
+   "fieldtype": "Long Text",
+   "label": "JSON بدهی‌ها و وام‌ها"
+  },
+  {
+   "fieldname": "subscriptions_json",
+   "fieldtype": "Long Text",
+   "label": "JSON اشتراک‌ها"
+  },
+  {
+   "fieldname": "recurring_transactions_json",
+   "fieldtype": "Long Text",
+   "label": "JSON تراکنش‌های تکرارشونده"
+  },
+  {
+   "fieldname": "assets_json",
+   "fieldtype": "Long Text",
+   "label": "JSON دارایی‌ها و سرمایه‌گذاری‌ها"
+  },
+  {
+   "fieldname": "installments_json",
+   "fieldtype": "Long Text",
+   "label": "JSON اقساط"
+  },
+  {
+   "fieldname": "diet_setting_json",
+   "fieldtype": "Long Text",
+   "label": "JSON تنظیم رژیم غذایی"
+  },
+  {
+   "fieldname": "budget_settings_json",
+   "fieldtype": "Long Text",
+   "label": "JSON تنظیمات بودجه"
+  },
+  {
+   "fieldname": "subcategories_json",
+   "fieldtype": "Long Text",
+   "label": "JSON زیرشاخه‌های سفارشی دسته‌ها"
+  },
+  {
+   "fieldname": "task_time_json",
+   "fieldtype": "Long Text",
+   "label": "JSON زمان‌های ردیابی‌شده تسک‌ها"
+  },
+  {
+   "fieldname": "daily_highlights_json",
+   "fieldtype": "Long Text",
+   "label": "JSON کارهای برجسته روز"
+  },
+  {
+   "fieldname": "goal_habits_json",
+   "fieldtype": "Long Text",
+   "label": "JSON عادت‌های اختصاصی اهداف"
   }
  ],
  "permissions": [
