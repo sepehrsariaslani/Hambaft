@@ -19,6 +19,31 @@ from .dashboard_home import (
 DONE_TASK_STATUSES = {"done", "انجام‌شده"}
 ACTIVE_GOAL_STATUSES = {"active", "فعال"}
 DONE_HABIT_STATUSES = {"done", "انجام‌شده"}
+SETTINGS_FIELDS = (
+    "display_name",
+    "motto",
+    "work_field",
+    "daily_water_goal",
+    "sleep_goal_hours",
+    "monthly_budget",
+    "language",
+    "timezone",
+    "currency",
+    "theme",
+    "week_starts_on",
+    "onboarding_completed",
+    "onboarding_step",
+    "default_view",
+    "reminder_notifications",
+    "daily_reminder_time",
+    "life_score_target",
+    "notion_pages_json",
+    "sleep_preferences_json",
+    "custom_exercises_json",
+    "finance_quick_templates_json",
+    "calendar_preferences_json",
+    "custom_calendars_json",
+)
 
 
 def _unwrap_response(value):
@@ -159,8 +184,12 @@ def _check_auth():
     if frappe.session.user == "Guest":
         frappe.throw("Authentication required", frappe.AuthenticationError)
 
-    settings = frappe.db.get_value("Profile Settings", {"user": frappe.session.user},
-                                   ["onboarding_completed", "onboarding_step"], as_dict=True)
+    settings = frappe.db.get_value(
+        "Profile Settings",
+        {"user": frappe.session.user},
+        ["onboarding_completed", "onboarding_step"],
+        as_dict=True,
+    )
     return settings
 
 
@@ -169,11 +198,10 @@ def _owner_filter():
 
 
 def _ensure_settings():
-    """Ensure ProfileSettings exists for current user."""
-    existing = frappe.db.get_value("Profile Settings", {"user": frappe.session.user}, "name")
-    if not existing:
-        doc = frappe.new_doc("Profile Settings")
-        doc.insert()
+    """Ensure Profile Settings exists for current user."""
+    doc = _get_or_create_settings_doc()
+    if doc.is_new():
+        doc.insert(ignore_permissions=True)
         frappe.db.commit()
 
 
@@ -184,6 +212,160 @@ def _api_response(data=None, status="success", message=None):
     if message:
         resp["message"] = message
     return resp
+
+
+def _loads_json(value, default):
+    if not value:
+        return default
+    if isinstance(value, (list, dict)):
+        return value
+    try:
+        return json.loads(value)
+    except Exception:
+        return default
+
+
+def _save_doc(doc):
+    if doc.is_new():
+        doc.insert(ignore_permissions=True)
+    else:
+        doc.save(ignore_permissions=True)
+    return doc
+
+
+def _default_settings(user):
+    user_doc = frappe.db.get_value("User", user, ["full_name", "first_name"], as_dict=True) or {}
+    display_name = user_doc.get("full_name") or user_doc.get("first_name") or user
+    return {
+        "user": user,
+        "display_name": display_name,
+        "motto": "",
+        "work_field": "",
+        "daily_water_goal": 8,
+        "sleep_goal_hours": 7.5,
+        "monthly_budget": 0,
+        "language": "fa",
+        "timezone": "Asia/Tehran",
+        "currency": "IRR",
+        "theme": "روشن",
+        "week_starts_on": "شنبه",
+        "onboarding_completed": 0,
+        "onboarding_step": 0,
+        "default_view": "داشبورد",
+        "reminder_notifications": 1,
+        "daily_reminder_time": None,
+        "life_score_target": 70,
+        "notion_pages_json": None,
+        "sleep_preferences_json": None,
+        "custom_exercises_json": None,
+        "finance_quick_templates_json": None,
+        "calendar_preferences_json": None,
+        "custom_calendars_json": None,
+    }
+
+
+def _get_settings_row(user=None):
+    user = user or frappe.session.user
+    return frappe.db.get_value("Profile Settings", {"user": user}, ["name", *SETTINGS_FIELDS], as_dict=True)
+
+
+def _get_settings_payload(user=None):
+    user = user or frappe.session.user
+    settings = _get_settings_row(user)
+    if not settings:
+        return _default_settings(user)
+    payload = _default_settings(user)
+    payload.update({fieldname: settings.get(fieldname) for fieldname in ["name", *SETTINGS_FIELDS] if fieldname in settings})
+    return payload
+
+
+def _get_or_create_settings_doc(user=None):
+    user = user or frappe.session.user
+    settings = _get_settings_row(user)
+    if settings and settings.get("name"):
+        return frappe.get_doc("Profile Settings", settings.name)
+
+    doc = frappe.new_doc("Profile Settings")
+    doc.user = user
+    defaults = _default_settings(user)
+    for fieldname in SETTINGS_FIELDS:
+        if hasattr(doc, fieldname) and defaults.get(fieldname) is not None:
+            setattr(doc, fieldname, defaults.get(fieldname))
+    return doc
+
+
+def _ensure_hambaft_user_role(user_name):
+    if not frappe.db.exists("Role", "Hambaft User"):
+        return
+
+    user_doc = frappe.get_doc("User", user_name)
+    existing_roles = {row.role for row in user_doc.get("roles") or []}
+    if "Hambaft User" not in existing_roles:
+        user_doc.append("roles", {"role": "Hambaft User"})
+        user_doc.save(ignore_permissions=True)
+
+
+def _project_to_frontend(doc):
+    task_rows = []
+    for row in doc.get("tasks") or []:
+        task_rows.append({
+            "id": row.name,
+            "title": row.title,
+            "completed": bool(row.completed or row.status == "انجام‌شده"),
+            "createdAt": str(getattr(row, "creation", None) or doc.creation or today())[:10],
+            "description": row.description or "",
+            "dueDate": str(row.due_date)[:10] if getattr(row, "due_date", None) else None,
+            "priority": row.priority,
+            "status": row.status,
+        })
+
+    return {
+        "name": doc.name,
+        "title": doc.title,
+        "description": doc.description or "",
+        "notes": doc.notes or "",
+        "goal": doc.goal,
+        "status": doc.status,
+        "priority": doc.priority,
+        "start_date": doc.start_date,
+        "target_date": doc.target_date,
+        "progress": doc.progress or 0,
+        "color": doc.color,
+        "icon": doc.icon,
+        "tasks": task_rows,
+        "creation": str(doc.creation) if getattr(doc, "creation", None) else None,
+    }
+
+
+def _measurement_entry(measurement_type, value, measured_on, unit=None, notes=None):
+    doc = frappe.new_doc("Hambaft Measurement")
+    doc.user = frappe.session.user
+    doc.measurement_type = measurement_type
+    doc.value = flt(value or 0)
+    doc.unit = unit
+    doc.measured_on = measured_on
+    doc.notes = notes
+    doc.insert(ignore_permissions=True)
+    return doc
+
+
+def _advance_date(base_date, billing_cycle):
+    current = getdate(base_date)
+    cycle = (billing_cycle or "").strip()
+    if cycle == "هفتگی":
+        return current + timedelta(days=7)
+    if cycle == "سالانه":
+        return date(current.year + 1, current.month, min(current.day, 28 if current.month == 2 else current.day))
+    if cycle == "سفارشی":
+        return current + timedelta(days=30)
+
+    month = current.month + 1
+    year = current.year
+    if month > 12:
+        month = 1
+        year += 1
+    day = min(current.day, [31, 29 if year % 4 == 0 and (year % 100 != 0 or year % 400 == 0) else 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1])
+    return date(year, month, day)
 
 
 # ─── Health / Ping ──────────────────────────────────────────────
@@ -245,6 +427,58 @@ def get_profile():
     }
 
 
+@frappe.whitelist()
+def update_profile(data):
+    """Update the authenticated user's profile and the user-facing settings fields."""
+    if frappe.session.user == "Guest":
+        frappe.throw(_("Authentication required"), frappe.AuthenticationError)
+
+    if isinstance(data, str):
+        data = json.loads(data)
+
+    data = data or {}
+    user = frappe.session.user
+    user_doc = frappe.get_doc("User", user)
+
+    full_name = (data.get("name") or data.get("full_name") or "").strip()
+    if full_name:
+        user_doc.full_name = full_name
+        parts = full_name.split(" ", 1)
+        user_doc.first_name = parts[0]
+        if len(parts) > 1:
+            user_doc.last_name = parts[1]
+        user_doc.save(ignore_permissions=True)
+
+    settings_doc = _get_or_create_settings_doc(user)
+
+    settings_updates = {}
+    for fieldname in ("motto", "work_field", "daily_water_goal", "sleep_goal_hours", "monthly_budget", "display_name"):
+        if fieldname in data:
+            settings_updates[fieldname] = data.get(fieldname)
+
+    if "name" in data and "display_name" not in settings_updates:
+        settings_updates["display_name"] = data.get("name")
+
+    if settings_updates:
+        settings_doc.update(settings_updates)
+        _save_doc(settings_doc)
+
+    frappe.db.commit()
+
+    refreshed_user = frappe.get_doc("User", user)
+    refreshed_settings = _get_settings_payload(user)
+
+    return _api_response({
+        "profile": {
+            "name": refreshed_user.name,
+            "full_name": refreshed_user.full_name,
+            "email": refreshed_user.email,
+            "signup_date": str(refreshed_user.creation) if getattr(refreshed_user, "creation", None) else None,
+        },
+        "settings": refreshed_settings,
+    })
+
+
 
 # ─── Password Change ────────────────────────────────────────────
 
@@ -278,8 +512,12 @@ def login(email, password):
         frappe.throw("Invalid email or password", frappe.AuthenticationError)
 
     user = frappe.get_doc("User", frappe.session.user)
-    settings = frappe.db.get_value("Profile Settings", {"user": user.name},
-                                   ["onboarding_completed", "onboarding_step"], as_dict=True)
+    _ensure_hambaft_user_role(user.name)
+    settings_doc = _get_or_create_settings_doc(user.name)
+    if settings_doc.is_new():
+        _save_doc(settings_doc)
+        frappe.db.commit()
+    settings = _get_settings_payload(user.name)
 
     return {
         "status": "success",
@@ -289,7 +527,7 @@ def login(email, password):
                 "email": user.email,
                 "display_name": user.full_name or user.first_name or user.name,
             },
-            "onboarding_completed": bool(settings.onboarding_completed) if settings else False,
+            "onboarding_completed": bool(settings.get("onboarding_completed")) if settings else False,
         }
     }
 
@@ -306,6 +544,12 @@ def signup(email, password, display_name=None):
     user.insert(ignore_permissions=True)
     user.new_password = password
     user.save(ignore_permissions=True)
+    _ensure_hambaft_user_role(user.name)
+
+    settings_doc = _get_or_create_settings_doc(user.name)
+    if display_name:
+        settings_doc.display_name = display_name
+    _save_doc(settings_doc)
     frappe.db.commit()
 
     from frappe.auth import LoginManager
@@ -1143,14 +1387,7 @@ def toggle_favorite(name):
 def get_settings():
     if frappe.session.user == "Guest":
         frappe.throw("Authentication required", frappe.AuthenticationError)
-    settings = frappe.db.get_value("Profile Settings", {"user": frappe.session.user},
-                                   "*", as_dict=True)
-    if not settings:
-        doc = frappe.new_doc("Profile Settings")
-        doc.insert()
-        frappe.db.commit()
-        settings = doc.as_dict()
-    return _api_response({"settings": settings})
+    return _api_response({"settings": _get_settings_payload()})
 
 
 @frappe.whitelist()
@@ -1159,15 +1396,9 @@ def update_settings(data):
         frappe.throw("Authentication required", frappe.AuthenticationError)
     if isinstance(data, str):
         data = json.loads(data)
-    settings = frappe.db.get_value("Profile Settings", {"user": frappe.session.user},
-                                   "*", as_dict=True)
-    if settings:
-        doc = frappe.get_doc("Profile Settings", settings.name)
-        doc.update(data)
-    else:
-        doc = frappe.new_doc("Profile Settings")
-        doc.update(data)
-    doc.save()
+    doc = _get_or_create_settings_doc()
+    doc.update(data)
+    _save_doc(doc)
     frappe.db.commit()
     return _api_response({"settings": doc.as_dict()})
 
@@ -1176,14 +1407,9 @@ def update_settings(data):
 def complete_onboarding_step(step):
     if frappe.session.user == "Guest":
         frappe.throw("Authentication required", frappe.AuthenticationError)
-    settings = frappe.db.get_value("Profile Settings", {"user": frappe.session.user},
-                                   "*", as_dict=True)
-    if settings:
-        doc = frappe.get_doc("Profile Settings", settings.name)
-    else:
-        doc = frappe.new_doc("Profile Settings")
+    doc = _get_or_create_settings_doc()
     doc.onboarding_step = cint(step)
-    doc.save()
+    _save_doc(doc)
     frappe.db.commit()
     return _api_response({"settings": doc.as_dict()})
 
@@ -1192,15 +1418,10 @@ def complete_onboarding_step(step):
 def finish_onboarding():
     if frappe.session.user == "Guest":
         frappe.throw("Authentication required", frappe.AuthenticationError)
-    settings = frappe.db.get_value("Profile Settings", {"user": frappe.session.user},
-                                   "*", as_dict=True)
-    if settings:
-        doc = frappe.get_doc("Profile Settings", settings.name)
-    else:
-        doc = frappe.new_doc("Profile Settings")
+    doc = _get_or_create_settings_doc()
     doc.onboarding_completed = 1
     doc.onboarding_step = 5
-    doc.save()
+    _save_doc(doc)
     frappe.db.commit()
     return _api_response({"settings": doc.as_dict()})
 
@@ -1211,13 +1432,12 @@ def finish_onboarding():
 def get_onboarding_status():
     if frappe.session.user == "Guest":
         frappe.throw("Authentication required", frappe.AuthenticationError)
-    settings = frappe.db.get_value("Profile Settings", {"user": frappe.session.user},
-                                   ["onboarding_completed", "onboarding_step"], as_dict=True)
+    settings = _get_settings_payload()
     if not settings:
         return _api_response({"completed": False, "current_step": 0, "total_steps": 5})
     return _api_response({
-        "completed": bool(settings.onboarding_completed),
-        "current_step": settings.onboarding_step or 0,
+        "completed": bool(settings.get("onboarding_completed")),
+        "current_step": settings.get("onboarding_step") or 0,
         "total_steps": 5
     })
 
@@ -1229,16 +1449,11 @@ def submit_onboarding_step(step, data=None):
     if isinstance(data, str):
         data = json.loads(data)
     step = cint(step)
-    settings = frappe.db.get_value("Profile Settings", {"user": frappe.session.user},
-                                   "*", as_dict=True)
-    if settings:
-        doc = frappe.get_doc("Profile Settings", settings.name)
-    else:
-        doc = frappe.new_doc("Profile Settings")
+    doc = _get_or_create_settings_doc()
     if data:
         doc.update(data)
     doc.onboarding_step = step
-    doc.save()
+    _save_doc(doc)
     frappe.db.commit()
     return _api_response({"ok": True, "next_step": step + 1})
 
@@ -1347,11 +1562,587 @@ def get_dashboard():
     })
 
 
+@frappe.whitelist()
+def get_balance_report(month=None):
+    _check_auth()
+    if not month:
+        month = today()[:7]
+
+    finance_summary = _unwrap_response(get_finance_summary(month))
+    life_score = _unwrap_response(get_life_score())
+    tasks_payload = _unwrap_response(get_tasks(limit=500))
+    habits_payload = _unwrap_response(get_habits(limit=500))
+    habit_logs_payload = _unwrap_response(get_habit_logs(limit=500))
+    sleep_payload = _unwrap_response(get_sleep_logs(limit=120))
+    mindfulness_payload = _unwrap_response(get_mindfulness_sessions(limit=120))
+    workout_payload = _unwrap_response(get_workout_logs(limit=120))
+
+    task_rows = tasks_payload.get("tasks", []) if isinstance(tasks_payload, dict) else []
+    habit_rows = habits_payload.get("habits", []) if isinstance(habits_payload, dict) else []
+    habit_logs = habit_logs_payload.get("logs", []) if isinstance(habit_logs_payload, dict) else []
+    sleep_logs = sleep_payload.get("sleep_logs", []) if isinstance(sleep_payload, dict) else []
+    mindfulness_sessions = mindfulness_payload.get("sessions", []) if isinstance(mindfulness_payload, dict) else []
+    workout_logs = workout_payload.get("workout_logs", []) if isinstance(workout_payload, dict) else []
+
+    completed_tasks = [row for row in task_rows if row.get("status") in DONE_TASK_STATUSES]
+    completed_habits = [row for row in habit_logs if row.get("status") in DONE_HABIT_STATUSES]
+
+    avg_sleep = 0
+    if sleep_logs:
+        avg_sleep = round(sum(flt(row.get("duration_hours") or 0) for row in sleep_logs) / len(sleep_logs), 1)
+
+    return _api_response({
+        "month": month,
+        "life_score": life_score,
+        "finance": finance_summary,
+        "productivity": {
+            "task_count": len(task_rows),
+            "completed_tasks": len(completed_tasks),
+            "habit_count": len(habit_rows),
+            "completed_habit_logs": len(completed_habits),
+        },
+        "health": {
+            "average_sleep_hours": avg_sleep,
+            "mindfulness_minutes": sum(cint(row.get("duration_minutes") or 0) for row in mindfulness_sessions),
+            "workout_minutes": sum(cint(row.get("duration_minutes") or 0) for row in workout_logs),
+        },
+    })
+
+
+# ─── Projects CRUD ─────────────────────────────────────────────
+
+@frappe.whitelist()
+def get_projects(limit=100, offset=0):
+    _check_auth()
+    rows = frappe.get_all(
+        "Hambaft Project",
+        filters=_owner_filter(),
+        fields=["name"],
+        limit_page_length=cint(limit),
+        start=cint(offset),
+        order_by="modified desc",
+    )
+    projects = [_project_to_frontend(frappe.get_doc("Hambaft Project", row.name)) for row in rows]
+    return _api_response({"projects": projects})
+
+
+@frappe.whitelist()
+def create_project(data):
+    _check_auth()
+    if isinstance(data, str):
+        data = json.loads(data)
+    data = data or {}
+    doc = frappe.new_doc("Hambaft Project")
+    doc.user = frappe.session.user
+    doc.title = data.get("title")
+    doc.description = data.get("description")
+    doc.notes = data.get("notes")
+    doc.goal = data.get("goal")
+    doc.status = data.get("status") or "برنامه‌ریزی"
+    doc.priority = data.get("priority") or "متوسط"
+    doc.start_date = data.get("start_date")
+    doc.target_date = data.get("target_date")
+    doc.progress = flt(data.get("progress") or 0)
+    doc.color = data.get("color")
+    doc.icon = data.get("icon")
+    for task in data.get("tasks") or []:
+        doc.append("tasks", {
+            "title": task.get("title"),
+            "description": task.get("description"),
+            "status": task.get("status") or ("انجام‌شده" if task.get("completed") else "انجام‌نشده"),
+            "priority": task.get("priority") or "متوسط",
+            "due_date": task.get("dueDate") or task.get("due_date"),
+            "user": frappe.session.user,
+            "completed": 1 if task.get("completed") else 0,
+        })
+    doc.insert(ignore_permissions=True)
+    frappe.db.commit()
+    return _api_response({"project": _project_to_frontend(doc)})
+
+
+@frappe.whitelist()
+def update_project(name, data):
+    _check_auth()
+    if isinstance(data, str):
+        data = json.loads(data)
+    data = data or {}
+    doc = frappe.get_doc("Hambaft Project", name)
+    doc.title = data.get("title", doc.title)
+    doc.description = data.get("description", doc.description)
+    doc.notes = data.get("notes", doc.notes)
+    doc.goal = data.get("goal", doc.goal)
+    doc.status = data.get("status", doc.status)
+    doc.priority = data.get("priority", doc.priority)
+    doc.start_date = data.get("start_date", doc.start_date)
+    doc.target_date = data.get("target_date", doc.target_date)
+    doc.progress = flt(data.get("progress", doc.progress or 0))
+    doc.color = data.get("color", doc.color)
+    doc.icon = data.get("icon", doc.icon)
+    if "tasks" in data:
+        doc.set("tasks", [])
+        for task in data.get("tasks") or []:
+            doc.append("tasks", {
+                "name": task.get("id") if task.get("id") and not str(task.get("id")).startswith(("pt-", "tk-p-", "tk-")) else None,
+                "title": task.get("title"),
+                "description": task.get("description"),
+                "status": task.get("status") or ("انجام‌شده" if task.get("completed") else "انجام‌نشده"),
+                "priority": task.get("priority") or "متوسط",
+                "due_date": task.get("dueDate") or task.get("due_date"),
+                "user": frappe.session.user,
+                "completed": 1 if task.get("completed") else 0,
+            })
+    doc.save(ignore_permissions=True)
+    frappe.db.commit()
+    return _api_response({"project": _project_to_frontend(doc)})
+
+
+@frappe.whitelist()
+def delete_project(name):
+    _check_auth()
+    frappe.delete_doc("Hambaft Project", name, ignore_permissions=True)
+    frappe.db.commit()
+    return _api_response({"ok": True})
+
+
+# ─── Phase 3 CRUD ──────────────────────────────────────────────
+
+@frappe.whitelist()
+def get_documents(limit=100, offset=0):
+    _check_auth()
+    documents = frappe.get_all("Hambaft Document", filters=_owner_filter(), fields="*", limit_page_length=cint(limit), start=cint(offset), order_by="modified desc")
+    for row in documents:
+      row["tags"] = _loads_json(row.get("tags_json"), [])
+    return _api_response({"documents": documents})
+
+
+@frappe.whitelist()
+def create_document(data):
+    _check_auth()
+    if isinstance(data, str):
+        data = json.loads(data)
+    data = data or {}
+    doc = frappe.new_doc("Hambaft Document")
+    doc.user = frappe.session.user
+    doc.title = data.get("title")
+    doc.document_type = data.get("document_type") or "other"
+    doc.description = data.get("description")
+    doc.issued_by = data.get("issued_by")
+    doc.issued_date = data.get("issued_date")
+    doc.expiry_date = data.get("expiry_date")
+    doc.tags_json = json.dumps(data.get("tags") or [], ensure_ascii=False)
+    doc.notes = data.get("notes")
+    doc.linked_bank_account_id = data.get("linked_bank_account_id")
+    doc.linked_asset_id = data.get("linked_asset_id")
+    doc.image_url = data.get("image_url")
+    doc.reminder_date = data.get("reminder_date")
+    doc.insert(ignore_permissions=True)
+    frappe.db.commit()
+    result = doc.as_dict()
+    result["tags"] = data.get("tags") or []
+    return _api_response({"document": result})
+
+
+@frappe.whitelist()
+def update_document(name, data):
+    _check_auth()
+    if isinstance(data, str):
+        data = json.loads(data)
+    doc = frappe.get_doc("Hambaft Document", name)
+    for fieldname in ("title", "document_type", "description", "issued_by", "issued_date", "expiry_date", "notes", "linked_bank_account_id", "linked_asset_id", "image_url", "reminder_date"):
+        if fieldname in data:
+            setattr(doc, fieldname, data.get(fieldname))
+    if "tags" in data:
+        doc.tags_json = json.dumps(data.get("tags") or [], ensure_ascii=False)
+    doc.save(ignore_permissions=True)
+    frappe.db.commit()
+    result = doc.as_dict()
+    result["tags"] = _loads_json(doc.tags_json, [])
+    return _api_response({"document": result})
+
+
+@frappe.whitelist()
+def delete_document(name):
+    _check_auth()
+    frappe.delete_doc("Hambaft Document", name, ignore_permissions=True)
+    frappe.db.commit()
+    return _api_response({"ok": True})
+
+
+@frappe.whitelist()
+def get_contacts(limit=200, offset=0):
+    _check_auth()
+    contacts = frappe.get_all("Hambaft Contact", filters=_owner_filter(), fields="*", limit_page_length=cint(limit), start=cint(offset), order_by="modified desc")
+    for row in contacts:
+        row["traits"] = _loads_json(row.get("traits_json"), [])
+        row["interaction_logs"] = _loads_json(row.get("interaction_logs_json"), [])
+    return _api_response({"contacts": contacts})
+
+
+@frappe.whitelist()
+def create_contact(data):
+    _check_auth()
+    if isinstance(data, str):
+        data = json.loads(data)
+    data = data or {}
+    doc = frappe.new_doc("Hambaft Contact")
+    doc.user = frappe.session.user
+    doc.full_name = data.get("full_name")
+    doc.contact_category = data.get("contact_category") or "other"
+    doc.birthday = data.get("birthday")
+    doc.phone = data.get("phone")
+    doc.email = data.get("email")
+    doc.traits_json = json.dumps(data.get("traits") or [], ensure_ascii=False)
+    doc.strengths = data.get("strengths")
+    doc.hobbies = data.get("hobbies")
+    doc.notes = data.get("notes")
+    doc.last_interaction_date = data.get("last_interaction_date")
+    doc.last_interaction_type = data.get("last_interaction_type")
+    doc.interaction_logs_json = json.dumps(data.get("interaction_logs") or [], ensure_ascii=False)
+    doc.relationship_score = cint(data.get("relationship_score") or 0)
+    doc.closeness_tier = data.get("closeness_tier") or "acquaintance"
+    doc.photo_url = data.get("photo_url")
+    doc.insert(ignore_permissions=True)
+    frappe.db.commit()
+    result = doc.as_dict()
+    result["traits"] = data.get("traits") or []
+    result["interaction_logs"] = data.get("interaction_logs") or []
+    return _api_response({"contact": result})
+
+
+@frappe.whitelist()
+def update_contact(name, data):
+    _check_auth()
+    if isinstance(data, str):
+        data = json.loads(data)
+    doc = frappe.get_doc("Hambaft Contact", name)
+    for fieldname in ("full_name", "contact_category", "birthday", "phone", "email", "strengths", "hobbies", "notes", "last_interaction_date", "last_interaction_type", "relationship_score", "closeness_tier", "photo_url"):
+        if fieldname in data:
+            setattr(doc, fieldname, data.get(fieldname))
+    if "traits" in data:
+        doc.traits_json = json.dumps(data.get("traits") or [], ensure_ascii=False)
+    if "interaction_logs" in data:
+        doc.interaction_logs_json = json.dumps(data.get("interaction_logs") or [], ensure_ascii=False)
+    doc.save(ignore_permissions=True)
+    frappe.db.commit()
+    result = doc.as_dict()
+    result["traits"] = _loads_json(doc.traits_json, [])
+    result["interaction_logs"] = _loads_json(doc.interaction_logs_json, [])
+    return _api_response({"contact": result})
+
+
+@frappe.whitelist()
+def delete_contact(name):
+    _check_auth()
+    frappe.delete_doc("Hambaft Contact", name, ignore_permissions=True)
+    frappe.db.commit()
+    return _api_response({"ok": True})
+
+
+@frappe.whitelist()
+def get_occasions(limit=200, offset=0):
+    _check_auth()
+    occasions = frappe.get_all("Hambaft Occasion", filters=_owner_filter(), fields="*", limit_page_length=cint(limit), start=cint(offset), order_by="occasion_date asc")
+    return _api_response({"occasions": occasions})
+
+
+@frappe.whitelist()
+def create_occasion(data):
+    _check_auth()
+    if isinstance(data, str):
+        data = json.loads(data)
+    doc = frappe.new_doc("Hambaft Occasion")
+    doc.user = frappe.session.user
+    doc.title = data.get("title")
+    doc.occasion_type = data.get("occasion_type") or "event"
+    doc.occasion_date = data.get("occasion_date")
+    doc.person = data.get("person")
+    doc.recurrence_type = data.get("recurrence_type") or "once"
+    doc.reminder_days_before = cint(data.get("reminder_days_before") or 0)
+    doc.notes = data.get("notes")
+    doc.color = data.get("color")
+    doc.estimated_budget = flt(data.get("estimated_budget") or 0)
+    doc.spent_amount = flt(data.get("spent_amount") or 0)
+    doc.insert(ignore_permissions=True)
+    frappe.db.commit()
+    return _api_response({"occasion": doc.as_dict()})
+
+
+@frappe.whitelist()
+def update_occasion(name, data):
+    _check_auth()
+    if isinstance(data, str):
+        data = json.loads(data)
+    doc = frappe.get_doc("Hambaft Occasion", name)
+    doc.update(data)
+    doc.save(ignore_permissions=True)
+    frappe.db.commit()
+    return _api_response({"occasion": doc.as_dict()})
+
+
+@frappe.whitelist()
+def delete_occasion(name):
+    _check_auth()
+    frappe.delete_doc("Hambaft Occasion", name, ignore_permissions=True)
+    frappe.db.commit()
+    return _api_response({"ok": True})
+
+
+@frappe.whitelist()
+def get_sleep_logs(limit=200, offset=0):
+    _check_auth()
+    rows = frappe.get_all("Hambaft Sleep Log", filters=_owner_filter(), fields="*", limit_page_length=cint(limit), start=cint(offset), order_by="log_date desc")
+    return _api_response({"sleep_logs": rows})
+
+
+@frappe.whitelist()
+def create_sleep_log(data):
+    _check_auth()
+    if isinstance(data, str):
+        data = json.loads(data)
+    doc = frappe.new_doc("Hambaft Sleep Log")
+    doc.user = frappe.session.user
+    doc.log_date = data.get("log_date")
+    doc.sleep_time = data.get("sleep_time")
+    doc.wake_time = data.get("wake_time")
+    doc.duration_hours = flt(data.get("duration_hours") or 0)
+    doc.quality = cint(data.get("quality") or 0)
+    doc.energy_level = cint(data.get("energy_level") or 0)
+    doc.notes = data.get("notes")
+    doc.insert(ignore_permissions=True)
+    _measurement_entry("ساعت خواب", doc.duration_hours, f"{doc.log_date} 00:00:00", "hour", doc.notes)
+    frappe.db.commit()
+    return _api_response({"sleep_log": doc.as_dict()})
+
+
+@frappe.whitelist()
+def update_sleep_log(name, data):
+    _check_auth()
+    if isinstance(data, str):
+        data = json.loads(data)
+    doc = frappe.get_doc("Hambaft Sleep Log", name)
+    doc.update(data)
+    doc.save(ignore_permissions=True)
+    frappe.db.commit()
+    return _api_response({"sleep_log": doc.as_dict()})
+
+
+@frappe.whitelist()
+def delete_sleep_log(name):
+    _check_auth()
+    frappe.delete_doc("Hambaft Sleep Log", name, ignore_permissions=True)
+    frappe.db.commit()
+    return _api_response({"ok": True})
+
+
+@frappe.whitelist()
+def get_mindfulness_sessions(limit=200, offset=0):
+    _check_auth()
+    rows = frappe.get_all("Hambaft Mindfulness Session", filters=_owner_filter(), fields="*", limit_page_length=cint(limit), start=cint(offset), order_by="session_date desc")
+    return _api_response({"sessions": rows})
+
+
+@frappe.whitelist()
+def create_mindfulness_session(data):
+    _check_auth()
+    if isinstance(data, str):
+        data = json.loads(data)
+    doc = frappe.new_doc("Hambaft Mindfulness Session")
+    doc.user = frappe.session.user
+    doc.session_date = data.get("session_date")
+    doc.session_type = data.get("session_type") or "meditation"
+    doc.duration_minutes = cint(data.get("duration_minutes") or 0)
+    doc.stress_before = cint(data.get("stress_before") or 0)
+    doc.stress_after = cint(data.get("stress_after") or 0)
+    doc.notes = data.get("notes")
+    doc.insert(ignore_permissions=True)
+    _measurement_entry("استرس", doc.stress_after, f"{doc.session_date} 00:00:00", "score", doc.notes)
+    frappe.db.commit()
+    return _api_response({"session": doc.as_dict()})
+
+
+@frappe.whitelist()
+def update_mindfulness_session(name, data):
+    _check_auth()
+    if isinstance(data, str):
+        data = json.loads(data)
+    doc = frappe.get_doc("Hambaft Mindfulness Session", name)
+    doc.update(data)
+    doc.save(ignore_permissions=True)
+    frappe.db.commit()
+    return _api_response({"session": doc.as_dict()})
+
+
+@frappe.whitelist()
+def delete_mindfulness_session(name):
+    _check_auth()
+    frappe.delete_doc("Hambaft Mindfulness Session", name, ignore_permissions=True)
+    frappe.db.commit()
+    return _api_response({"ok": True})
+
+
+@frappe.whitelist()
+def get_nutrition_logs(limit=200, offset=0):
+    _check_auth()
+    rows = frappe.get_all("Hambaft Nutrition Log", filters=_owner_filter(), fields="*", limit_page_length=cint(limit), start=cint(offset), order_by="log_date desc")
+    return _api_response({"nutrition_logs": rows})
+
+
+@frappe.whitelist()
+def create_nutrition_log(data):
+    _check_auth()
+    if isinstance(data, str):
+        data = json.loads(data)
+    doc = frappe.new_doc("Hambaft Nutrition Log")
+    doc.user = frappe.session.user
+    doc.log_date = data.get("log_date")
+    doc.log_time = data.get("log_time")
+    doc.meal_type = data.get("meal_type") or "breakfast"
+    doc.foods = data.get("foods")
+    doc.calories = cint(data.get("calories") or 0)
+    doc.protein = flt(data.get("protein") or 0)
+    doc.carbs = flt(data.get("carbs") or 0)
+    doc.fat = flt(data.get("fat") or 0)
+    doc.water_glasses = flt(data.get("water_glasses") or 0)
+    doc.notes = data.get("notes")
+    doc.insert(ignore_permissions=True)
+    frappe.db.commit()
+    return _api_response({"nutrition_log": doc.as_dict()})
+
+
+@frappe.whitelist()
+def update_nutrition_log(name, data):
+    _check_auth()
+    if isinstance(data, str):
+        data = json.loads(data)
+    doc = frappe.get_doc("Hambaft Nutrition Log", name)
+    doc.update(data)
+    doc.save(ignore_permissions=True)
+    frappe.db.commit()
+    return _api_response({"nutrition_log": doc.as_dict()})
+
+
+@frappe.whitelist()
+def delete_nutrition_log(name):
+    _check_auth()
+    frappe.delete_doc("Hambaft Nutrition Log", name, ignore_permissions=True)
+    frappe.db.commit()
+    return _api_response({"ok": True})
+
+
+@frappe.whitelist()
+def get_workout_logs(limit=200, offset=0):
+    _check_auth()
+    rows = frappe.get_all("Hambaft Workout Log", filters=_owner_filter(), fields="*", limit_page_length=cint(limit), start=cint(offset), order_by="workout_date desc")
+    for row in rows:
+        row["gym_sets"] = _loads_json(row.get("gym_sets_json"), [])
+    return _api_response({"workout_logs": rows})
+
+
+@frappe.whitelist()
+def create_workout_log(data):
+    _check_auth()
+    if isinstance(data, str):
+        data = json.loads(data)
+    doc = frappe.new_doc("Hambaft Workout Log")
+    doc.user = frappe.session.user
+    doc.workout_date = data.get("workout_date")
+    doc.workout_type = data.get("workout_type") or "other"
+    doc.cardio_type = data.get("cardio_type")
+    doc.distance_km = flt(data.get("distance_km") or 0)
+    doc.duration_minutes = cint(data.get("duration_minutes") or 0)
+    doc.calories_burned = cint(data.get("calories_burned") or 0)
+    doc.gym_sets_json = json.dumps(data.get("gym_sets") or [], ensure_ascii=False)
+    doc.notes = data.get("notes")
+    doc.insert(ignore_permissions=True)
+    frappe.db.commit()
+    result = doc.as_dict()
+    result["gym_sets"] = data.get("gym_sets") or []
+    return _api_response({"workout_log": result})
+
+
+@frappe.whitelist()
+def update_workout_log(name, data):
+    _check_auth()
+    if isinstance(data, str):
+        data = json.loads(data)
+    doc = frappe.get_doc("Hambaft Workout Log", name)
+    gym_sets = data.pop("gym_sets", None)
+    if gym_sets is not None:
+        data["gym_sets_json"] = json.dumps(gym_sets or [], ensure_ascii=False)
+    doc.update(data)
+    doc.save(ignore_permissions=True)
+    frappe.db.commit()
+    result = doc.as_dict()
+    result["gym_sets"] = _loads_json(doc.get("gym_sets_json"), [])
+    return _api_response({"workout_log": result})
+
+
+@frappe.whitelist()
+def delete_workout_log(name):
+    _check_auth()
+    frappe.delete_doc("Hambaft Workout Log", name, ignore_permissions=True)
+    frappe.db.commit()
+    return _api_response({"ok": True})
+
+
+# ─── AI Coach ──────────────────────────────────────────────────
+
+@frappe.whitelist()
+def ai_coach_chat(prompt, history=None, life_data=None, conversation_id=None):
+    _check_auth()
+    history = _loads_json(history, [])
+    life_data = _loads_json(life_data, {})
+    prompt = (prompt or "").strip()
+
+    if not prompt:
+        return _api_response({"text": "سوالی دریافت نشد.", "conversation_id": conversation_id})
+
+    if conversation_id:
+        conversation = frappe.get_doc("Hambaft AI Conversation", conversation_id)
+    else:
+        conversation = frappe.new_doc("Hambaft AI Conversation")
+        conversation.user = frappe.session.user
+        conversation.title = prompt[:120]
+        conversation.ai_type = "کوچک_شخصی"
+        conversation.status = "فعال"
+        conversation.started_at = now_datetime()
+
+    task_count = len(life_data.get("tasks") or [])
+    habit_count = len(life_data.get("habits") or [])
+    goal_count = len(life_data.get("goals") or [])
+    transaction_count = len(life_data.get("transactions") or [])
+
+    response_text = (
+        f"تحلیل هم‌بافت:\n\n"
+        f"- وظایف فعال/ثبت‌شده: {task_count}\n"
+        f"- عادت‌ها: {habit_count}\n"
+        f"- هدف‌ها: {goal_count}\n"
+        f"- تراکنش‌های مالی: {transaction_count}\n\n"
+        f"درخواست شما: {prompt}\n\n"
+        f"پیشنهاد عملی:\n"
+        f"1. اگر امروز کار نیمه‌تمام دارید، یک تسک با اولویت بالا را کامل کنید.\n"
+        f"2. اگر عادت‌های فعال کم شده‌اند، روی یک عادت روزانه ثابت تمرکز کنید.\n"
+        f"3. اگر هزینه‌ها زیاد شده‌اند، گزارش توازن و بخش مالی را مرور کنید."
+    )
+
+    conversation.last_message_at = now_datetime()
+    conversation.context_summary = f"tasks={task_count}, habits={habit_count}, goals={goal_count}, tx={transaction_count}, history={len(history)}"
+    if conversation.is_new():
+        conversation.insert(ignore_permissions=True)
+    else:
+        conversation.save(ignore_permissions=True)
+
+    frappe.db.commit()
+    return _api_response({"text": response_text, "conversation_id": conversation.name})
+
+
 # ─── Scheduled Tasks ────────────────────────────────────────────
 
 def daily_maintenance():
     """Daily maintenance: recreate recurring tasks, pre-compute scores."""
-    pass
+    check_overdue_bills()
+    advance_subscription_billing()
+    generate_recurring_transactions()
 
 
 def habit_streak_recalc():
@@ -1386,6 +2177,82 @@ def habit_streak_recalc():
         except Exception:
             frappe.log_error(f"Error recalculating streak for habit {h.name}")
     frappe.db.commit()
+
+
+def check_overdue_bills():
+    overdue = frappe.get_all(
+        "Hambaft Bill",
+        filters={"due_date": ["<", today()], "status": "پیش‌رو"},
+        fields=["name"],
+        limit_page_length=500,
+    )
+    for row in overdue:
+        frappe.db.set_value("Hambaft Bill", row.name, "status", "عقب‌افتاده")
+    if overdue:
+        frappe.db.commit()
+    return {"updated": len(overdue)}
+
+
+def advance_subscription_billing():
+    subscriptions = frappe.get_all(
+        "Hambaft Subscription",
+        filters={"status": "فعال", "next_billing_date": ["<=", today()]},
+        fields=["name", "subscription_name", "amount", "next_billing_date", "billing_cycle", "category", "account", "user"],
+        limit_page_length=500,
+    )
+    created = 0
+    for row in subscriptions:
+        title = f"تمدید خودکار: {row.subscription_name}"
+        exists = frappe.db.exists("Finance Entry", {"user": row.user, "title": title, "date": row.next_billing_date})
+        if not exists:
+            entry = frappe.new_doc("Finance Entry")
+            entry.user = row.user
+            entry.title = title
+            entry.description = title
+            entry.type = "هزینه"
+            entry.amount = flt(row.amount or 0)
+            entry.category = row.category or ""
+            entry.account = row.account or ""
+            entry.date = row.next_billing_date
+            entry.insert(ignore_permissions=True)
+            created += 1
+        frappe.db.set_value("Hambaft Subscription", row.name, "next_billing_date", _advance_date(row.next_billing_date, row.billing_cycle))
+    if subscriptions:
+        frappe.db.commit()
+    return {"subscriptions": len(subscriptions), "created_entries": created}
+
+
+def generate_recurring_transactions():
+    rows = frappe.get_all(
+        "Finance Entry",
+        filters={"is_recurring": 1, "date": ["<=", today()]},
+        fields=["name", "title", "description", "type", "amount", "category", "account", "date", "recurrence_rule", "user"],
+        limit_page_length=500,
+    )
+    generated = 0
+    for row in rows:
+        if not row.recurrence_rule:
+            continue
+        next_date = _advance_date(row.date, "ماهانه")
+        duplicate = frappe.db.exists("Finance Entry", {"user": row.user, "title": row.title, "date": next_date})
+        if duplicate:
+            continue
+        doc = frappe.new_doc("Finance Entry")
+        doc.user = row.user
+        doc.title = row.title
+        doc.description = row.description
+        doc.type = row.type
+        doc.amount = row.amount
+        doc.category = row.category
+        doc.account = row.account
+        doc.date = next_date
+        doc.is_recurring = 1
+        doc.recurrence_rule = row.recurrence_rule
+        doc.insert(ignore_permissions=True)
+        generated += 1
+    if generated:
+        frappe.db.commit()
+    return {"generated": generated}
 
 
 # ─── Review (Daily / Weekly / Monthly) ──────────────────────────────

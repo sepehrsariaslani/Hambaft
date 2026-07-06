@@ -1,16 +1,42 @@
 frappe.pages['hambaft'].on_page_load = function (wrapper) {
-    let page = frappe.ui.make_app_page({
+    frappe.ui.make_app_page({
         parent: wrapper,
         title: 'Hambaft',
         single_column: true,
     });
-    $(wrapper).find('.layout-main-section').html('<div id="app" class="h-full"></div>');
-    // Load Vue app
-    frappe.require('hambaft.bundle.js', () => {
-        // Vue app mounted by bundle
+
+    $(wrapper).find('.layout-main-section').html('<div id="root" class="h-full"></div>');
+
+    const ensureAsset = (tagName, attributes) => {
+        const selector = Object.entries(attributes)
+            .map(([key, value]) => `[${key}="${value}"]`)
+            .join('');
+
+        if (document.head.querySelector(`${tagName}${selector}`)) {
+            return;
+        }
+
+        const node = document.createElement(tagName);
+        Object.entries(attributes).forEach(([key, value]) => {
+            node.setAttribute(key, value);
+        });
+        document.head.appendChild(node);
+    };
+
+    ensureAsset('link', {
+        rel: 'stylesheet',
+        href: '/assets/hambaft/frontend/assets/index.css',
     });
+
+    if (!window.__hambaftDeskScriptLoaded) {
+        const script = document.createElement('script');
+        script.type = 'module';
+        script.src = '/assets/hambaft/frontend/assets/index.js';
+        document.body.appendChild(script);
+        window.__hambaftDeskScriptLoaded = true;
+    }
 };
 
 frappe.pages['hambaft'].on_page_show = function () {
-    // Re-mount if needed
+    // React root is reused by the frontend bundle.
 };

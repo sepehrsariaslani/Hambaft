@@ -1,12 +1,12 @@
 import { defineConfig } from 'vite'
-import vue from '@vitejs/plugin-vue'
+import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { resolve } from 'path'
 
 export default defineConfig({
   cacheDir: '/tmp/.vite-cache',
   base: '/assets/hambaft/frontend/',
-  plugins: [vue(), tailwindcss()],
+  plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src'),
@@ -30,5 +30,11 @@ export default defineConfig({
         changeOrigin: true,
       },
     },
+  },
+  test: {
+    environment: 'jsdom',
+    setupFiles: './src/__tests__/setup.ts',
+    globals: true,
+    include: ['src/__tests__/**/*.test.ts', 'src/__tests__/**/*.test.tsx'],
   },
 })

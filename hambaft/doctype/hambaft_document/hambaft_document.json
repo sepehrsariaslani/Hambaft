@@ -1,0 +1,30 @@
+{
+ "doctype": "DocType",
+ "name": "Hambaft Document",
+ "module": "Hambaft",
+ "custom": 1,
+ "autoname": "format:DOC-{#####}",
+ "track_changes": 1,
+ "fields": [
+  {"fieldname": "user", "fieldtype": "Link", "label": "کاربر", "options": "User", "reqd": 1, "in_list_view": 1, "in_standard_filter": 1},
+  {"fieldname": "title", "fieldtype": "Data", "label": "عنوان", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "document_type", "fieldtype": "Select", "label": "نوع", "options": "insurance\ncontract\ncertificate\nmedical\nfinancial\nlegal\nother", "default": "other", "in_list_view": 1},
+  {"fieldname": "description", "fieldtype": "Small Text", "label": "توضیحات"},
+  {"fieldname": "issued_by", "fieldtype": "Data", "label": "صادرکننده"},
+  {"fieldname": "issued_date", "fieldtype": "Date", "label": "تاریخ صدور"},
+  {"fieldname": "expiry_date", "fieldtype": "Date", "label": "تاریخ انقضا"},
+  {"fieldname": "tags_json", "fieldtype": "Long Text", "label": "برچسب‌ها"},
+  {"fieldname": "notes", "fieldtype": "Text Editor", "label": "یادداشت"},
+  {"fieldname": "linked_bank_account_id", "fieldtype": "Data", "label": "شناسه حساب"},
+  {"fieldname": "linked_asset_id", "fieldtype": "Data", "label": "شناسه دارایی"},
+  {"fieldname": "image_url", "fieldtype": "Attach Image", "label": "تصویر"},
+  {"fieldname": "reminder_date", "fieldtype": "Date", "label": "تاریخ یادآوری"}
+ ],
+ "permissions": [
+  {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1},
+  {"role": "Hambaft User", "read": 1, "write": 1, "create": 1, "delete": 1, "if_owner": 1},
+  {"role": "All", "read": 1, "write": 1, "create": 1, "delete": 1, "if_owner": 1}
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC"
+}

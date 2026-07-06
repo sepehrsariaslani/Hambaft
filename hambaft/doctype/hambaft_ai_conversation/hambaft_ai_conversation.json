@@ -80,6 +80,6 @@
  ],
  "doctype": "DocType",
  "custom": 1,
- "istable": 1,
+ "istable": 0,
  "issingle": 0
 }

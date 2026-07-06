@@ -7,6 +7,10 @@ from frappe.model.document import Document
 
 
 class HambaftFinanceCategory(Document):
+    def before_validate(self):
+        if not self.user:
+            self.user = frappe.session.user
+
     def before_save(self):
         if not self.user:
             self.user = frappe.session.user
@@ -21,3 +25,11 @@ class HambaftFinanceCategory(Document):
             frappe.throw(_("دسته والد نمی‌تواند خود دسته باشد"))
         if self.monthly_budget_default and self.monthly_budget_default < 0:
             frappe.throw(_("بودجه پیش‌فرض نمی‌تواند منفی باشد"))
+
+
+def validate(doc, method=None):
+    HambaftFinanceCategory.validate(doc)
+
+
+def before_save(doc, method=None):
+    HambaftFinanceCategory.before_save(doc)

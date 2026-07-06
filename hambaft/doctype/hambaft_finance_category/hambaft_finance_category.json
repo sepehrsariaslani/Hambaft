@@ -6,7 +6,7 @@
   "autoname": "format:CAT-{#####}",
   "istable": 0,
   "issingle": 0,
-  "is_tree": 1,
+  "is_tree": 0,
   "track_changes": 1,
   "fields": [
     {"fieldname": "category_name", "fieldtype": "Data", "label": "\u0646\u0627\u0645 \u062f\u0633\u062a\u0647", "reqd": 1, "in_list_view": 1, "in_standard_filter": 1},

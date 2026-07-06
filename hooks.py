@@ -8,6 +8,13 @@ app_description = "Hambaft — Personal Life Management OS"
 app_email = "sepehr.sariaslani@gmail.com"
 app_license = "mit"
 
+home_page = "hambaft"
+
+website_route_rules = [
+    {"from_route": "/hambaft", "to_route": "hambaft"},
+    {"from_route": "/hambaft/<path:app_path>", "to_route": "hambaft"},
+]
+
 doc_events = {
     "Goal": {
         "validate": "hambaft.hambaft.doctype.goal.goal.validate",

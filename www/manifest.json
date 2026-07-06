@@ -1,0 +1,61 @@
+{
+  "id": "/hambaft",
+  "name": "هم‌بافت",
+  "short_name": "هم‌بافت",
+  "description": "داشبورد شخصی مدیریت زندگی، اهداف، عادت‌ها، مالی، ژورنال و برنامه‌ریزی روزانه.",
+  "lang": "fa",
+  "dir": "rtl",
+  "start_url": "/hambaft",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui", "browser"],
+  "background_color": "#F7F0E3",
+  "theme_color": "#F7F0E3",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/hambaft-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/hambaft-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/hambaft-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "ورود",
+      "short_name": "ورود",
+      "url": "/hambaft/login",
+      "icons": [
+        {
+          "src": "/hambaft-icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "داشبورد",
+      "short_name": "داشبورد",
+      "url": "/hambaft",
+      "icons": [
+        {
+          "src": "/hambaft-icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    }
+  ]
+}

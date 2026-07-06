@@ -7,7 +7,6 @@
  "docstatus": 0,
  "module": "Hambaft",
  "autoname": "hash",
- "is_single": 1,
  "fields": [
   {
    "fieldname": "user",
@@ -16,6 +15,7 @@
    "options": "User",
    "reqd": 1,
    "read_only": 1,
+   "unique": 1,
    "in_list_view": 1,
    "in_standard_filter": 1
   },
@@ -23,6 +23,34 @@
    "fieldname": "display_name",
    "fieldtype": "Data",
    "label": "نام نمایشی"
+  },
+  {
+   "fieldname": "motto",
+   "fieldtype": "Small Text",
+   "label": "شعار"
+  },
+  {
+   "fieldname": "work_field",
+   "fieldtype": "Data",
+   "label": "زمینه فعالیت"
+  },
+  {
+   "fieldname": "daily_water_goal",
+   "fieldtype": "Int",
+   "label": "هدف آب روزانه",
+   "default": 8
+  },
+  {
+   "fieldname": "sleep_goal_hours",
+   "fieldtype": "Float",
+   "label": "هدف خواب",
+   "default": 7.5
+  },
+  {
+   "fieldname": "monthly_budget",
+   "fieldtype": "Currency",
+   "label": "بودجه ماهانه",
+   "default": 0
   },
   {
    "fieldname": "language",
@@ -92,6 +120,36 @@
    "fieldtype": "Int",
    "label": "هدف امتیاز زندگی",
    "default": 70
+  },
+  {
+   "fieldname": "notion_pages_json",
+   "fieldtype": "Long Text",
+   "label": "JSON یادداشت‌های بلوکی"
+  },
+  {
+   "fieldname": "sleep_preferences_json",
+   "fieldtype": "Long Text",
+   "label": "JSON تنظیمات خواب"
+  },
+  {
+   "fieldname": "custom_exercises_json",
+   "fieldtype": "Long Text",
+   "label": "JSON تمرین‌های سفارشی"
+  },
+  {
+   "fieldname": "finance_quick_templates_json",
+   "fieldtype": "Long Text",
+   "label": "JSON الگوهای سریع مالی"
+  },
+  {
+   "fieldname": "calendar_preferences_json",
+   "fieldtype": "Long Text",
+   "label": "JSON تنظیمات تقویم"
+  },
+  {
+   "fieldname": "custom_calendars_json",
+   "fieldtype": "Long Text",
+   "label": "JSON تقویم‌های سفارشی"
   }
  ],
  "permissions": [
@@ -113,6 +171,6 @@
  ],
  "doctype": "DocType",
  "custom": 1,
- "istable": 1,
+ "istable": 0,
  "issingle": 0
 }

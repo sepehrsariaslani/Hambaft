@@ -1,0 +1,28 @@
+{
+ "doctype": "DocType",
+ "name": "Hambaft Occasion",
+ "module": "Hambaft",
+ "custom": 1,
+ "autoname": "format:OCC-{#####}",
+ "track_changes": 1,
+ "fields": [
+  {"fieldname": "user", "fieldtype": "Link", "label": "کاربر", "options": "User", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "title", "fieldtype": "Data", "label": "عنوان", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "occasion_type", "fieldtype": "Select", "label": "نوع", "options": "birthday\nanniversary\nevent\ndeadline\nreminder", "default": "event", "in_list_view": 1},
+  {"fieldname": "occasion_date", "fieldtype": "Date", "label": "تاریخ", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "person", "fieldtype": "Data", "label": "شخص"},
+  {"fieldname": "recurrence_type", "fieldtype": "Select", "label": "تکرار", "options": "yearly\nmonthly\nonce", "default": "once"},
+  {"fieldname": "reminder_days_before", "fieldtype": "Int", "label": "روز قبل از یادآوری", "default": 0},
+  {"fieldname": "notes", "fieldtype": "Text", "label": "یادداشت"},
+  {"fieldname": "color", "fieldtype": "Color", "label": "رنگ"},
+  {"fieldname": "estimated_budget", "fieldtype": "Currency", "label": "بودجه تخمینی", "default": 0},
+  {"fieldname": "spent_amount", "fieldtype": "Currency", "label": "هزینه انجام‌شده", "default": 0}
+ ],
+ "permissions": [
+  {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1},
+  {"role": "Hambaft User", "read": 1, "write": 1, "create": 1, "delete": 1, "if_owner": 1},
+  {"role": "All", "read": 1, "write": 1, "create": 1, "delete": 1, "if_owner": 1}
+ ],
+ "sort_field": "occasion_date",
+ "sort_order": "ASC"
+}

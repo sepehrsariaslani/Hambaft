@@ -7,6 +7,12 @@ from frappe.model.document import Document
 
 
 class HambaftMeasurement(Document):
+    def before_validate(self):
+        if not self.user:
+            self.user = frappe.session.user
+        if not self.measured_on:
+            self.measured_on = frappe.utils.now_datetime()
+
     def before_save(self):
         if not self.user:
             self.user = frappe.session.user
