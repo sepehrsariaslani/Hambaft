@@ -1314,6 +1314,7 @@ export default function App({
   };
 
   const handlePayInstallment = (id: string, bankAccountId: string) => {
+    let installmentTx: Transaction | null = null;
     setLifeData(prev => {
       const installments = prev.installments || [];
       const instIndex = installments.findIndex(inst => inst.id === id);
@@ -1324,7 +1325,7 @@ export default function App({
 
       const nextPaidMonths = inst.paidMonths + 1;
       const isCompleted = nextPaidMonths >= inst.totalMonths;
-      
+
       const updatedInst = {
         ...inst,
         paidMonths: nextPaidMonths,
@@ -1344,6 +1345,7 @@ export default function App({
         description: `پرداخت قسط ${nextPaidMonths} از ${inst.totalMonths} بابت ${inst.title}`,
         bankAccountId
       };
+      installmentTx = transaction;
 
       // Update bank account balance or credit card debt
       const updatedAccounts = (prev.bankAccounts || []).map(b => {
@@ -1370,6 +1372,21 @@ export default function App({
         occasions: updatedOccasions
       };
     });
+
+    if (installmentTx) {
+      const txId = (installmentTx as Transaction).id;
+      runSync('create installment transaction', async () => {
+        const response: any = await createTransactionRecord(installmentTx as Transaction);
+        const saved = response?.data?.entry;
+        if (!saved?.name) return;
+        setLifeData(prev => ({
+          ...prev,
+          transactions: prev.transactions.map(item => (
+            item.id === txId ? { ...item, id: saved.name } : item
+          ))
+        }));
+      });
+    }
   };
 
   // ─── Mindfulness ──────────────────────────────────────────────────────────────
