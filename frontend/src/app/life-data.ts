@@ -482,18 +482,56 @@ export function useBootstrapLifeData() {
         const mappedOccasions = mergeContactBirthdayOccasions(mapOccasions(occasions), mappedContacts)
         const emptyData = createEmptyLifeData()
 
+        // Restore state stored as JSON blobs on Profile Settings
+        const debtsBlob = parseJsonArray<any>(settings.debts_json)
+        const subscriptionsBlob = parseJsonArray<any>(settings.subscriptions_json)
+        const recurringBlob = parseJsonArray<any>(settings.recurring_transactions_json)
+        const assetsBlob = parseJsonArray<any>(settings.assets_json)
+        const installmentsBlob = parseJsonArray<any>(settings.installments_json)
+        const dietBlob = parseJsonArray<any>(settings.diet_setting_json)
+        const dietSetting = dietBlob.length ? dietBlob[0] : undefined
+        const budgetBlob = parseJsonArray<any>(settings.budget_settings_json)
+        const budgetSettingsOverride = budgetBlob.length ? budgetBlob[0] : null
+        const subcategoriesMap = parseSubcategoriesMap(settings.subcategories_json)
+        const taskTimeMap = parseTaskTime(settings.task_time_json)
+        const dailyHighlightsMap = parseDailyHighlights(settings.daily_highlights_json)
+        const goalHabitsMap = parseSubcategoriesMap(settings.goal_habits_json) as unknown as Record<string, any[]>
+
+        const mappedCategories = mapCategories(categoryRows).map((cat) => (
+          subcategoriesMap[cat.id]?.length
+            ? { ...cat, subcategories: subcategoriesMap[cat.id] }
+            : cat
+        ))
+
+        const applyTaskEnhancements = (tasksList: any[]): any[] => tasksList.map((task) => ({
+          ...task,
+          totalTimeSpent: taskTimeMap[task.id] ?? task.totalTimeSpent ?? 0,
+          isDailyHighlight: dailyHighlightsMap[task.id] ?? task.isDailyHighlight ?? false,
+        }))
+
+        const enhancedGoals = mappedGoals.map((goal) => ({
+          ...goal,
+          habits: Array.isArray(goalHabitsMap[goal.id]) ? goalHabitsMap[goal.id] : goal.habits,
+          projects: (goal.projects || []).map((p: any) => ({
+            ...p,
+            tasks: applyTaskEnhancements(p.tasks || []),
+          })),
+        }))
+
         const data: LifeData = {
           ...emptyData,
-          tasks: mapTasks(tasks),
-          goals: mappedGoals,
+          tasks: applyTaskEnhancements(mapTasks(tasks)),
+          goals: enhancedGoals,
           habits: mapHabits(habits, habitLogs),
           transactions: mapTransactions(financeEntries),
           journalEntries: mapJournalEntries(notes, moodLogs as any[]),
-          categories: mapCategories(categoryRows),
+          categories: mappedCategories,
           bankAccounts: mapBankAccounts(accountRows),
           profile: mapProfile(profile, settings),
           sleepLogs: mapSleepLogs(sleepLogs),
-          budgetSettings: { monthlyTotal: Number(settings.monthly_budget || 0), categoryBudgets: {} },
+          budgetSettings: budgetSettingsOverride && typeof budgetSettingsOverride === 'object'
+            ? budgetSettingsOverride
+            : { monthlyTotal: Number(settings.monthly_budget || 0), categoryBudgets: {} },
           documents: mapDocuments(documents),
           occasions: mappedOccasions,
           mindfulnessSessions: mapMindfulnessSessions(mindfulnessSessions),
@@ -503,6 +541,12 @@ export function useBootstrapLifeData() {
           bodyMeasurementLogs: measurements.bodyMeasurementLogs,
           contacts: mappedContacts,
           moodLogs: moodLogs as any[],
+          debts: debtsBlob,
+          subscriptions: subscriptionsBlob,
+          recurringTransactions: recurringBlob,
+          assets: assetsBlob,
+          installments: installmentsBlob,
+          dietSetting: dietSetting || emptyData.dietSetting,
         }
 
         if (!cancelled) {
