@@ -1,6 +1,8 @@
+import { useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 
 import { useBootstrapLifeData } from '../life-data'
+import { subscribeNavigation } from '../navigation-bus'
 import LegacyApp from '../../legacy/App'
 import type { WorkspaceTab } from './workspace-routes'
 
@@ -12,6 +14,9 @@ export function HambaftWorkspace({ initialTab }: HambaftWorkspaceProps) {
   const navigate = useNavigate()
   const params = useParams()
   const { data, error, loading, scheduleItems, waterIntake, settings } = useBootstrapLifeData()
+
+  // Global nav-bus so command palette / keyboard shortcuts can jump routes.
+  useEffect(() => subscribeNavigation((path) => navigate(path)), [navigate])
 
   if (loading) {
     return (
