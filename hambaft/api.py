@@ -2154,6 +2154,7 @@ def daily_maintenance():
     check_overdue_bills()
     advance_subscription_billing()
     generate_recurring_transactions()
+    generate_recurring_tasks()
 
 
 def habit_streak_recalc():
@@ -2231,6 +2232,74 @@ def advance_subscription_billing():
     if subscriptions:
         frappe.db.commit()
     return {"subscriptions": len(subscriptions), "created_entries": created}
+
+
+def _advance_task_due(date_value, rule):
+    rule = (rule or "").strip().lower()
+    base = getdate(date_value)
+    if not rule or rule == "daily" or rule == "روزانه":
+        return base + timedelta(days=1)
+    if rule in {"weekly", "هفتگی"}:
+        return base + timedelta(days=7)
+    if rule in {"monthly", "ماهانه"}:
+        return _advance_date(base, "ماهانه")
+    if rule in {"yearly", "سالانه"}:
+        return _advance_date(base, "سالانه")
+    if rule.startswith("every_"):
+        try:
+            n = int(rule.split("_")[1])
+            return base + timedelta(days=max(n, 1))
+        except Exception:
+            return base + timedelta(days=1)
+    return base + timedelta(days=1)
+
+
+@frappe.whitelist()
+def generate_recurring_tasks():
+    """Instantiate the next occurrence of each recurring task whose due_date
+    has passed. Idempotent: skips when an instance already exists for the
+    next occurrence date and user.
+    """
+    rows = frappe.get_all(
+        "Task",
+        filters={"is_recurring": 1, "due_date": ["<=", now_datetime()]},
+        fields=[
+            "name", "title", "description", "goal", "priority", "due_date",
+            "estimated_minutes", "category", "recurrence_rule", "user",
+            "status",
+        ],
+        limit_page_length=1000,
+    )
+    generated = 0
+    for row in rows:
+        if not row.due_date:
+            continue
+        next_date = _advance_task_due(row.due_date, row.recurrence_rule)
+        next_dt = f"{next_date} {str(row.due_date)[11:19] or '09:00:00'}"
+        duplicate = frappe.db.exists("Task", {
+            "user": row.user,
+            "title": row.title,
+            "due_date": next_dt,
+        })
+        if duplicate:
+            continue
+        doc = frappe.new_doc("Task")
+        doc.user = row.user
+        doc.title = row.title
+        doc.description = row.description
+        doc.goal = row.goal
+        doc.priority = row.priority
+        doc.category = row.category
+        doc.estimated_minutes = row.estimated_minutes
+        doc.due_date = next_dt
+        doc.status = "انجام‌نشده"
+        doc.is_recurring = 1
+        doc.recurrence_rule = row.recurrence_rule
+        doc.insert(ignore_permissions=True)
+        generated += 1
+    if generated:
+        frappe.db.commit()
+    return {"generated": generated}
 
 
 def generate_recurring_transactions():
