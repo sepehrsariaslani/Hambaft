@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { LifeData, Transaction, Habit, Goal, Task, JournalEntry, GoalCategory, TransactionCategory, MoodType, Subscription, CategoryDef, Project, BankAccount, UserProfile, SleepLog, BudgetSettings, Document as LifeDocument, Occasion, MindfulnessSession, RecurringTransaction, Debt, AssetInvestment, MealLog, DietSetting, WeightLog, WorkoutLog, BodyMeasurementLog, Installment, Milestone } from './types';
 import { MOOD_LABELS, DEFAULT_CATEGORIES } from './initialData';
 import { createEmptyLifeData, derivePrimaryPriority } from '../app/workspace-defaults';
