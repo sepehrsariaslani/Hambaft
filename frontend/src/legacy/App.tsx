@@ -1,7 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { LifeData, Transaction, Habit, Goal, Task, JournalEntry, GoalCategory, TransactionCategory, MoodType, Subscription, CategoryDef, Project, BankAccount, UserProfile, SleepLog, BudgetSettings, Document as LifeDocument, Occasion, MindfulnessSession, RecurringTransaction, Debt, AssetInvestment, MealLog, DietSetting, WeightLog, WorkoutLog, BodyMeasurementLog, Installment, Milestone } from './types';
-import { MOOD_LABELS, DEFAULT_CATEGORIES } from './initialData';
+import { MOOD_LABELS, DEFAULT_CATEGORIES, TODAY_DATE as SEED_TODAY_DATE } from './initialData';
 import { createEmptyLifeData, derivePrimaryPriority } from '../app/workspace-defaults';
+import { useToday } from '../app/use-today';
+import { subscribeAction } from '../app/navigation-bus';
+import InboxSection from './components/InboxSection';
+import CalendarViewSwitcher from './components/CalendarViewSwitcher';
 import {
   parseCalendarPreferences,
   parseCustomCalendars,
@@ -144,6 +148,7 @@ const NAVIGATION_GROUPS = [
     title: 'برنامه‌ریزی و زمان',
     items: [
       { id: 'journal', label: 'کارها و ژورنال روزانه', icon: BookOpen },
+      { id: 'inbox', label: 'جعبه ورودی (Inbox)', icon: Info },
       { id: 'notes', label: 'دفترچه نوتشن (بلوکی)', icon: FileText },
       { id: 'calendar', label: 'تقویم توازن زندگی', icon: Calendar },
       { id: 'occasions', label: 'تقویم مناسبت‌ها', icon: Gift },
@@ -217,7 +222,10 @@ export function formatTimeHuman(seconds: number): string {
   return parts.join(' و ');
 }
 
-const TODAY_DATE = '2026-07-04'; // System simulated date
+// TODAY_DATE was previously a hard-coded system-simulated date; it is now a
+// live value from useToday() inside the component. SEED_TODAY_DATE is only
+// used for constant defaults exported by initialData.
+
 
 type AppProps = {
   initialTab?: string;
@@ -235,6 +243,7 @@ function tabToPath(tab: string, ids: { taskId?: string | null; goalId?: string |
   switch (tab) {
     case 'coach': return '/coach';
     case 'contacts': return '/contacts';
+    case 'inbox': return '/inbox';
     case 'journal':
     case 'notes': return '/journal';
     case 'calendar': return '/calendar';
