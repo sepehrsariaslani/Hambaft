@@ -1117,7 +1117,9 @@ export default function App({
     }));
     runSync('create category', async () => {
       const response: any = await createCategoryRecord(cat);
-      const saved = response?.name || response?.data?.name;
+      // Frappe REST returns the doc as `{ data: {...} }`; call() unwraps to payload.message.
+      // Support both shapes to be safe.
+      const saved = response?.name || response?.data?.name || response?.message?.name;
       if (!saved) return;
       setLifeData(prev => ({
         ...prev,
