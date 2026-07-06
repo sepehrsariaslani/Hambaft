@@ -148,3 +148,30 @@ export function parseCalendarPreferences(value: MaybeJson): CalendarPreferences 
 export function parseCustomCalendars(value: MaybeJson) {
   return parseJson<CustomCalendarPreference[]>(value, DEFAULT_CUSTOM_CALENDARS)
 }
+
+// ─── Generic JSON blob helpers (state without dedicated DocTypes) ─────────
+
+export function parseJsonArray<T>(value: MaybeJson): T[] {
+  return parseJson<T[]>(value, [])
+}
+
+export function parseJsonObject<T extends object>(value: MaybeJson, fallback: T): T {
+  return { ...fallback, ...parseJson<Partial<T>>(value, fallback) }
+}
+
+export type DailyHighlightsMap = Record<string, boolean>
+export type TaskTimeMap = Record<string, number>
+export type SubcategoriesMap = Record<string, string[]>
+
+export function parseDailyHighlights(value: MaybeJson): DailyHighlightsMap {
+  return parseJson<DailyHighlightsMap>(value, {})
+}
+
+export function parseTaskTime(value: MaybeJson): TaskTimeMap {
+  return parseJson<TaskTimeMap>(value, {})
+}
+
+export function parseSubcategoriesMap(value: MaybeJson): SubcategoriesMap {
+  return parseJson<SubcategoriesMap>(value, {})
+}
+

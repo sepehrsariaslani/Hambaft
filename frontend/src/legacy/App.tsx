@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { LifeData, Transaction, Habit, Goal, Task, JournalEntry, GoalCategory, TransactionCategory, MoodType, Subscription, CategoryDef, Project, BankAccount, UserProfile, SleepLog, BudgetSettings, Document as LifeDocument, Occasion, MindfulnessSession, RecurringTransaction, Debt, AssetInvestment, MealLog, DietSetting, WeightLog, WorkoutLog, BodyMeasurementLog, Installment, Milestone } from './types';
 import { MOOD_LABELS, DEFAULT_CATEGORIES } from './initialData';
 import { createEmptyLifeData, derivePrimaryPriority } from '../app/workspace-defaults';
@@ -347,6 +347,100 @@ export default function App({
       await updateSettingsRecord(patch);
     });
   };
+
+  // ─── Auto-persist collections without dedicated DocTypes ────────────────
+  // Debounced JSON-blob sync for state that used to live only in memory.
+  const hasHydratedRef = useRef(false);
+  const persistTimerRef = useRef<any>(null);
+  const lastPersistedRef = useRef<string>('');
+
+  useEffect(() => {
+    // Skip the very first pass so we do not overwrite hydrated data with empty defaults.
+    if (!hasHydratedRef.current) {
+      hasHydratedRef.current = true;
+      return;
+    }
+
+    // Extract subcategory overrides map from categories.
+    const subcategoriesMap: Record<string, string[]> = {};
+    for (const cat of (lifeData.categories || [])) {
+      if (cat && Array.isArray(cat.subcategories)) {
+        subcategoriesMap[cat.id] = cat.subcategories;
+      }
+    }
+
+    // Extract task time + daily highlight maps across general tasks and project tasks.
+    const taskTimeMap: Record<string, number> = {};
+    const dailyHighlightsMap: Record<string, boolean> = {};
+    const collectTask = (task: any) => {
+      if (!task || !task.id) return;
+      if (typeof task.totalTimeSpent === 'number' && task.totalTimeSpent > 0) {
+        taskTimeMap[task.id] = task.totalTimeSpent;
+      }
+      if (task.isDailyHighlight) {
+        dailyHighlightsMap[task.id] = true;
+      }
+    };
+    (lifeData.tasks || []).forEach(collectTask);
+    (lifeData.goals || []).forEach((g: any) => {
+      (g.projects || []).forEach((p: any) => (p.tasks || []).forEach(collectTask));
+    });
+
+    // Extract goal-scoped habits map (habits attached to a Goal, not the global habits list).
+    const goalHabitsMap: Record<string, any[]> = {};
+    for (const goal of (lifeData.goals || [])) {
+      if (Array.isArray((goal as any).habits) && (goal as any).habits.length) {
+        goalHabitsMap[goal.id] = (goal as any).habits;
+      }
+    }
+
+    const snapshot = {
+      debts_json: JSON.stringify(lifeData.debts || []),
+      subscriptions_json: JSON.stringify(lifeData.subscriptions || []),
+      recurring_transactions_json: JSON.stringify(lifeData.recurringTransactions || []),
+      assets_json: JSON.stringify(lifeData.assets || []),
+      installments_json: JSON.stringify(lifeData.installments || []),
+      diet_setting_json: JSON.stringify(lifeData.dietSetting ? [lifeData.dietSetting] : []),
+      budget_settings_json: JSON.stringify(lifeData.budgetSettings ? [lifeData.budgetSettings] : []),
+      subcategories_json: JSON.stringify(subcategoriesMap),
+      task_time_json: JSON.stringify(taskTimeMap),
+      daily_highlights_json: JSON.stringify(dailyHighlightsMap),
+      goal_habits_json: JSON.stringify(goalHabitsMap),
+    };
+
+    const signature = JSON.stringify(snapshot);
+    if (signature === lastPersistedRef.current) {
+      return;
+    }
+
+    if (persistTimerRef.current) {
+      clearTimeout(persistTimerRef.current);
+    }
+    persistTimerRef.current = setTimeout(() => {
+      lastPersistedRef.current = signature;
+      runSync('persist blob state', async () => {
+        await updateSettingsRecord(snapshot);
+      });
+    }, 600);
+
+    return () => {
+      if (persistTimerRef.current) {
+        clearTimeout(persistTimerRef.current);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    lifeData.debts,
+    lifeData.subscriptions,
+    lifeData.recurringTransactions,
+    lifeData.assets,
+    lifeData.installments,
+    lifeData.dietSetting,
+    lifeData.budgetSettings,
+    lifeData.categories,
+    lifeData.tasks,
+    lifeData.goals,
+  ]);
 
   const notionPages = parseNotionPages(settingsState.notion_pages_json);
   const sleepPreferences = parseSleepPreferences(settingsState.sleep_preferences_json);
@@ -1023,7 +1117,9 @@ export default function App({
     }));
     runSync('create category', async () => {
       const response: any = await createCategoryRecord(cat);
-      const saved = response?.name || response?.data?.name;
+      // Frappe REST returns the doc as `{ data: {...} }`; call() unwraps to payload.message.
+      // Support both shapes to be safe.
+      const saved = response?.name || response?.data?.name || response?.message?.name;
       if (!saved) return;
       setLifeData(prev => ({
         ...prev,
@@ -1220,6 +1316,7 @@ export default function App({
   };
 
   const handlePayInstallment = (id: string, bankAccountId: string) => {
+    let installmentTx: Transaction | null = null;
     setLifeData(prev => {
       const installments = prev.installments || [];
       const instIndex = installments.findIndex(inst => inst.id === id);
@@ -1230,7 +1327,7 @@ export default function App({
 
       const nextPaidMonths = inst.paidMonths + 1;
       const isCompleted = nextPaidMonths >= inst.totalMonths;
-      
+
       const updatedInst = {
         ...inst,
         paidMonths: nextPaidMonths,
@@ -1250,6 +1347,7 @@ export default function App({
         description: `پرداخت قسط ${nextPaidMonths} از ${inst.totalMonths} بابت ${inst.title}`,
         bankAccountId
       };
+      installmentTx = transaction;
 
       // Update bank account balance or credit card debt
       const updatedAccounts = (prev.bankAccounts || []).map(b => {
@@ -1276,6 +1374,21 @@ export default function App({
         occasions: updatedOccasions
       };
     });
+
+    if (installmentTx) {
+      const txId = (installmentTx as Transaction).id;
+      runSync('create installment transaction', async () => {
+        const response: any = await createTransactionRecord(installmentTx as Transaction);
+        const saved = response?.data?.entry;
+        if (!saved?.name) return;
+        setLifeData(prev => ({
+          ...prev,
+          transactions: prev.transactions.map(item => (
+            item.id === txId ? { ...item, id: saved.name } : item
+          ))
+        }));
+      });
+    }
   };
 
   // ─── Mindfulness ──────────────────────────────────────────────────────────────
@@ -1401,6 +1514,7 @@ export default function App({
     }
   };
   const handleUpdateGoalMetric = (goalId: string, newValue: number) => {
+    let syncedGoal: Goal | null = null;
     setLifeData(prev => ({
       ...prev,
       goals: prev.goals.map(g => {
@@ -1411,7 +1525,7 @@ export default function App({
             value: newValue,
             note: 'بروزرسانی خودکار شاخص'
           };
-          return {
+          const nextGoal = {
             ...g,
             metric: {
               ...g.metric,
@@ -1419,10 +1533,17 @@ export default function App({
               logs: [...(g.metric.logs || []), newMetricLog]
             }
           };
+          syncedGoal = nextGoal;
+          return nextGoal;
         }
         return g;
       })
     }));
+    if (syncedGoal && !goalId.startsWith('g-')) {
+      runSync('update goal metric', async () => {
+        await updateGoalRecord(syncedGoal as Goal);
+      });
+    }
   };
 
   // ─── Fitness & Workouts ────────────────────────────────────────────────────────
@@ -1604,6 +1725,7 @@ export default function App({
   };
 
   const handleToggleMilestone = (goalId: string, milestoneId: string) => {
+    let syncedGoal: Goal | null = null;
     setLifeData(prev => {
       const updatedGoals = prev.goals.map(g => {
         if (g.id === goalId) {
@@ -1615,19 +1737,27 @@ export default function App({
           });
           // Check if all milestones are completed
           const allDone = updatedMilestones.length > 0 && updatedMilestones.every(m => m.completed);
-          return {
+          const nextGoal = {
             ...g,
             milestones: updatedMilestones,
             completed: allDone ? true : g.completed
           };
+          syncedGoal = nextGoal;
+          return nextGoal;
         }
         return g;
       });
       return { ...prev, goals: updatedGoals };
     });
+    if (syncedGoal && !goalId.startsWith('g-')) {
+      runSync('toggle milestone', async () => {
+        await updateGoalRecord(syncedGoal as Goal);
+      });
+    }
   };
 
   const handleAddMilestone = (goalId: string, title: string) => {
+    let syncedGoal: Goal | null = null;
     setLifeData(prev => {
       const updatedGoals = prev.goals.map(g => {
         if (g.id === goalId) {
@@ -1636,16 +1766,23 @@ export default function App({
             title,
             completed: false
           };
-          return {
+          const nextGoal = {
             ...g,
             milestones: [...g.milestones, newM],
             completed: false // Adding milestone resets completion
           };
+          syncedGoal = nextGoal;
+          return nextGoal;
         }
         return g;
       });
       return { ...prev, goals: updatedGoals };
     });
+    if (syncedGoal && !goalId.startsWith('g-')) {
+      runSync('add milestone', async () => {
+        await updateGoalRecord(syncedGoal as Goal);
+      });
+    }
   };
 
   const handleUpdateGoal = (updatedGoal: Goal) => {
