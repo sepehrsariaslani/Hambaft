@@ -1495,6 +1495,7 @@ export default function App({
     }
   };
   const handleUpdateGoalMetric = (goalId: string, newValue: number) => {
+    let syncedGoal: Goal | null = null;
     setLifeData(prev => ({
       ...prev,
       goals: prev.goals.map(g => {
@@ -1505,7 +1506,7 @@ export default function App({
             value: newValue,
             note: 'بروزرسانی خودکار شاخص'
           };
-          return {
+          const nextGoal = {
             ...g,
             metric: {
               ...g.metric,
@@ -1513,10 +1514,17 @@ export default function App({
               logs: [...(g.metric.logs || []), newMetricLog]
             }
           };
+          syncedGoal = nextGoal;
+          return nextGoal;
         }
         return g;
       })
     }));
+    if (syncedGoal && !goalId.startsWith('g-')) {
+      runSync('update goal metric', async () => {
+        await updateGoalRecord(syncedGoal as Goal);
+      });
+    }
   };
 
   // ─── Fitness & Workouts ────────────────────────────────────────────────────────
