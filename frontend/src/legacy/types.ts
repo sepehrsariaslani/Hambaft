@@ -458,6 +458,14 @@ export interface MoodLog {
   weather?: 'sunny' | 'cloudy' | 'rainy' | 'windy';
 }
 
+export interface Area {
+  id: string;
+  title: string;
+  description?: string;
+  color?: string;
+  icon?: string;
+}
+
 export interface LifeData {
   transactions: Transaction[];
   habits: Habit[];
@@ -487,4 +495,5 @@ export interface LifeData {
   installments?: Installment[];
   contacts?: Contact[];
   moodLogs?: MoodLog[];
+  areas?: Area[];
 }

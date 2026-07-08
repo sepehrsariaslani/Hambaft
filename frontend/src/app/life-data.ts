@@ -17,6 +17,7 @@ import {
 } from './hambaft-api'
 import type { ScheduleItem } from '../legacy/components/CalendarSection'
 import type {
+  Area,
   BankAccount,
   Contact,
   Document,
@@ -58,6 +59,7 @@ function mapTasks(items: any[]): Task[] {
     dueDate: item.due_date ? String(item.due_date).slice(0, 10) : undefined,
     priority: mapBackendTaskPriority(item.priority),
     category: mapBackendTaskCategory(item.category),
+    projectId: item.project || undefined,
   }))
 }
 
@@ -67,6 +69,7 @@ function mapGoals(items: any[]): Goal[] {
     title: item.title || item.goal_name || item.name,
     description: item.description || '',
     category: mapBackendGoalCategory(item.category),
+    areaId: item.area || undefined,
     targetDate: item.target_date ? String(item.target_date).slice(0, 10) : '',
     milestones: [],
     createdAt: (item.creation || item.modified || new Date().toISOString()).slice(0, 10),
@@ -443,6 +446,7 @@ export function useBootstrapLifeData() {
           callGet<{ data?: { workout_logs?: any[] } }>('hambaft.hambaft.api.get_workout_logs'),
           getList<any>('Hambaft Measurement', { fields: ['*'], limit: 500 }),
           callGet<{ data?: { consumed_ml?: number } }>('hambaft.hambaft.api.get_water_summary'),
+          callGet<{ data?: { areas?: any[] } }>('hambaft.hambaft.api.get_areas'),
         ])
 
         const [
@@ -468,6 +472,7 @@ export function useBootstrapLifeData() {
           workoutResult,
           measurementsResult,
           waterSummaryResult,
+          areasResult,
         ] = results
 
         const tasks = unwrap(tasksResult, { data: { tasks: [] } }, 'get_tasks').data?.tasks ?? []
@@ -489,6 +494,7 @@ export function useBootstrapLifeData() {
         const workoutLogs = unwrap(workoutResult, { data: { workout_logs: [] } }, 'get_workout_logs').data?.workout_logs ?? []
         const measurementsRows = unwrap(measurementsResult, [], 'get_measurements')
         const waterSummaryPayload = unwrap(waterSummaryResult, { data: { consumed_ml: 0 } }, 'get_water_summary')
+        const areasRows = unwrap(areasResult, { data: { areas: [] } }, 'get_areas').data?.areas ?? []
 
         const profile = unwrap(profileResult, null, 'get_profile')
         const accountRows = unwrap(accountResult, [], 'get_accounts')
@@ -580,6 +586,13 @@ export function useBootstrapLifeData() {
           assets: assetsBlob,
           installments: installmentsBlob,
           dietSetting: dietSetting || emptyData.dietSetting,
+          areas: areasRows.map((item: any) => ({
+            id: item.name,
+            title: item.title || item.name,
+            description: item.description || '',
+            color: item.color || undefined,
+            icon: item.icon || undefined,
+          })),
         }
 
         if (!cancelled) {

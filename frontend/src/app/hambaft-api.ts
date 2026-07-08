@@ -231,6 +231,7 @@ export function toTaskPayload(task: Task): Record<string, unknown> {
     priority: taskPriorityToBackend[task.priority || 'medium'] || 'متوسط',
     category: taskCategoryToBackend[task.category || 'other'] || 'شخصی',
     status: task.completed ? 'انجام‌شده' : 'انجام‌نشده',
+    project: task.projectId || null,
   }
 }
 
@@ -240,6 +241,7 @@ export function toGoalPayload(goal: Goal): Record<string, unknown> {
     title: goal.title,
     description: goal.description || '',
     category: goalCategoryToBackend[goal.category || 'personal'] || 'شخصی',
+    area: goal.areaId || null,
     target_date: goal.targetDate || null,
     status: goal.completed ? 'تکمیل‌شده' : 'فعال',
     target_value: metric?.targetValue ?? null,
@@ -367,6 +369,10 @@ export async function updateGoalRecord(goal: Goal) {
 
 export async function deleteGoalRecord(name: string) {
   return call('hambaft.hambaft.api.delete_goal', { name })
+}
+
+export async function getAreaRecords() {
+  return callGet<{ data?: { areas?: any[] } }>('hambaft.hambaft.api.get_areas')
 }
 
 export async function createJournalRecord(entry: Omit<JournalEntry, 'id'>) {

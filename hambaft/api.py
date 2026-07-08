@@ -656,6 +656,16 @@ def delete_goal(name):
 
 
 @frappe.whitelist()
+def get_areas(limit=50, offset=0):
+    if frappe.session.user == "Guest":
+        frappe.throw("Authentication required", frappe.AuthenticationError)
+    areas = frappe.get_all("Hambaft Area", filters=_owner_filter(), fields="*",
+                           limit_page_length=cint(limit), start=cint(offset),
+                           order_by="title asc")
+    return _api_response({"areas": areas})
+
+
+@frappe.whitelist()
 def update_goal_progress(name, current_value):
     if frappe.session.user == "Guest":
         frappe.throw("Authentication required", frappe.AuthenticationError)
