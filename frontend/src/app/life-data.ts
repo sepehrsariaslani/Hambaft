@@ -170,7 +170,7 @@ function mapCategories(items: any[]): CategoryDef[] {
 
 function mapProfile(profile: any, settings: any): UserProfile {
   return {
-    name: settings?.display_name || profile.full_name || profile.name || 'کاربر',
+    name: settings?.display_name || profile?.full_name || profile?.name || 'کاربر',
     avatarUrl: '',
     motto: settings?.motto || 'مدیریت توازن هوشمند زندگی',
     workField: settings?.work_field || '',
@@ -396,6 +396,15 @@ function mapMeasurements(items: any[]) {
   return { weightLogs, bodyMeasurementLogs }
 }
 
+function unwrap<T>(result: PromiseSettledResult<T>, fallback: T, label: string, onError?: (err: any) => void): T {
+  if (result.status === 'fulfilled') {
+    return result.value
+  }
+  console.warn(`[hambaft] ${label} failed:`, result.reason)
+  onError?.(result.reason)
+  return fallback
+}
+
 export function useBootstrapLifeData() {
   const [state, setState] = useState<BootstrapState>({
     loading: true,
@@ -411,30 +420,7 @@ export function useBootstrapLifeData() {
 
     async function load() {
       try {
-        const [
-          tasksPayload,
-          goalsPayload,
-          habitsPayload,
-          habitLogsPayload,
-          notesPayload,
-          financePayload,
-          eventsPayload,
-          profile,
-          settingsPayload,
-          moodPayload,
-          accountRows,
-          categoryRows,
-          projectsPayload,
-          documentsPayload,
-          occasionsPayload,
-          contactsPayload,
-          sleepPayload,
-          mindfulnessPayload,
-          nutritionPayload,
-          workoutPayload,
-          measurementsRows,
-          waterSummaryPayload,
-        ] = await Promise.all([
+        const results = await Promise.allSettled([
           callGet<{ data?: { tasks?: any[] } }>('hambaft.hambaft.api.get_tasks'),
           callGet<{ data?: { goals?: any[] } }>('hambaft.hambaft.api.get_goals'),
           callGet<{ data?: { habits?: any[] } }>('hambaft.hambaft.api.get_habits'),
@@ -459,23 +445,70 @@ export function useBootstrapLifeData() {
           callGet<{ data?: { consumed_ml?: number } }>('hambaft.hambaft.api.get_water_summary'),
         ])
 
-        const tasks = tasksPayload?.data?.tasks ?? []
-        const goals = goalsPayload?.data?.goals ?? []
-        const habits = habitsPayload?.data?.habits ?? []
-        const habitLogs = habitLogsPayload?.data?.logs ?? []
-        const notes = notesPayload?.data?.notes ?? []
-        const financeEntries = financePayload?.data?.entries ?? []
-        const events = eventsPayload?.data?.events ?? []
-        const moodLogs = moodPayload?.data?.logs ?? []
-        const settings = settingsPayload?.data?.settings ?? {}
-        const projects = projectsPayload?.data?.projects ?? []
-        const documents = documentsPayload?.data?.documents ?? []
-        const occasions = occasionsPayload?.data?.occasions ?? []
-        const contacts = contactsPayload?.data?.contacts ?? []
-        const sleepLogs = sleepPayload?.data?.sleep_logs ?? []
-        const mindfulnessSessions = mindfulnessPayload?.data?.sessions ?? []
-        const nutritionLogs = nutritionPayload?.data?.nutrition_logs ?? []
-        const workoutLogs = workoutPayload?.data?.workout_logs ?? []
+        const [
+          tasksResult,
+          goalsResult,
+          habitsResult,
+          habitLogsResult,
+          notesResult,
+          financeResult,
+          eventsResult,
+          profileResult,
+          settingsResult,
+          moodResult,
+          accountResult,
+          categoryResult,
+          projectsResult,
+          documentsResult,
+          occasionsResult,
+          contactsResult,
+          sleepResult,
+          mindfulnessResult,
+          nutritionResult,
+          workoutResult,
+          measurementsResult,
+          waterSummaryResult,
+        ] = results
+
+        const tasks = unwrap(tasksResult, { data: { tasks: [] } }, 'get_tasks').data?.tasks ?? []
+        const goals = unwrap(goalsResult, { data: { goals: [] } }, 'get_goals').data?.goals ?? []
+        const habits = unwrap(habitsResult, { data: { habits: [] } }, 'get_habits').data?.habits ?? []
+        const habitLogs = unwrap(habitLogsResult, { data: { logs: [] } }, 'get_habit_logs').data?.logs ?? []
+        const notes = unwrap(notesResult, { data: { notes: [] } }, 'get_notes').data?.notes ?? []
+        const financeEntries = unwrap(financeResult, { data: { entries: [] } }, 'get_finance_entries').data?.entries ?? []
+        const events = unwrap(eventsResult, { data: { events: [] } }, 'get_events').data?.events ?? []
+        const moodLogs = unwrap(moodResult, { data: { logs: [] } }, 'get_mood_logs').data?.logs ?? []
+        const settings = unwrap(settingsResult, { data: { settings: {} } }, 'get_settings').data?.settings ?? {}
+        const projects = unwrap(projectsResult, { data: { projects: [] } }, 'get_projects').data?.projects ?? []
+        const documents = unwrap(documentsResult, { data: { documents: [] } }, 'get_documents').data?.documents ?? []
+        const occasions = unwrap(occasionsResult, { data: { occasions: [] } }, 'get_occasions').data?.occasions ?? []
+        const contacts = unwrap(contactsResult, { data: { contacts: [] } }, 'get_contacts').data?.contacts ?? []
+        const sleepLogs = unwrap(sleepResult, { data: { sleep_logs: [] } }, 'get_sleep_logs').data?.sleep_logs ?? []
+        const mindfulnessSessions = unwrap(mindfulnessResult, { data: { sessions: [] } }, 'get_mindfulness_sessions').data?.sessions ?? []
+        const nutritionLogs = unwrap(nutritionResult, { data: { nutrition_logs: [] } }, 'get_nutrition_logs').data?.nutrition_logs ?? []
+        const workoutLogs = unwrap(workoutResult, { data: { workout_logs: [] } }, 'get_workout_logs').data?.workout_logs ?? []
+        const measurementsRows = unwrap(measurementsResult, [], 'get_measurements')
+        const waterSummaryPayload = unwrap(waterSummaryResult, { data: { consumed_ml: 0 } }, 'get_water_summary')
+
+        const profile = unwrap(profileResult, null, 'get_profile')
+        const accountRows = unwrap(accountResult, [], 'get_accounts')
+        const categoryRows = unwrap(categoryResult, [], 'get_categories')
+
+        // If profile/auth completely failed, surface it as fatal
+        if (!profile) {
+          if (!cancelled) {
+            setState({
+              loading: false,
+              error: 'نشست کاربر منقضی شده یا ارتباط با سرور برقرار نشد. لطفاً دوباره وارد شوید.',
+              data: null,
+              scheduleItems: [],
+              waterIntake: 0,
+              settings: {},
+            })
+          }
+          return
+        }
+
         const measurements = mapMeasurements(measurementsRows)
         const mappedGoals = mergeProjectsIntoGoals(mapGoals(goals), mapProjects(projects))
         const mappedContacts = mapContacts(contacts)

@@ -1696,7 +1696,7 @@ def create_project(data):
 @frappe.whitelist()
 def update_project(name, data):
     _check_auth()
-    _require_owner(\"Hambaft Project\", name)
+    _require_owner("Hambaft Project", name)
     if isinstance(data, str):
         data = json.loads(data)
     data = data or {}
@@ -1733,7 +1733,7 @@ def update_project(name, data):
 @frappe.whitelist()
 def delete_project(name):
     _check_auth()
-    _require_owner(\"Hambaft Project\", name)
+    _require_owner("Hambaft Project", name)
     frappe.delete_doc("Hambaft Project", name, ignore_permissions=True)
     frappe.db.commit()
     return _api_response({"ok": True})
@@ -1780,7 +1780,7 @@ def create_document(data):
 @frappe.whitelist()
 def update_document(name, data):
     _check_auth()
-    _require_owner(\"Hambaft Document\", name)
+    _require_owner("Hambaft Document", name)
     if isinstance(data, str):
         data = json.loads(data)
     doc = frappe.get_doc("Hambaft Document", name)
@@ -1799,7 +1799,7 @@ def update_document(name, data):
 @frappe.whitelist()
 def delete_document(name):
     _check_auth()
-    _require_owner(\"Hambaft Document\", name)
+    _require_owner("Hambaft Document", name)
     frappe.delete_doc("Hambaft Document", name, ignore_permissions=True)
     frappe.db.commit()
     return _api_response({"ok": True})
@@ -1849,7 +1849,7 @@ def create_contact(data):
 @frappe.whitelist()
 def update_contact(name, data):
     _check_auth()
-    _require_owner(\"Hambaft Contact\", name)
+    _require_owner("Hambaft Contact", name)
     if isinstance(data, str):
         data = json.loads(data)
     doc = frappe.get_doc("Hambaft Contact", name)
@@ -1871,7 +1871,7 @@ def update_contact(name, data):
 @frappe.whitelist()
 def delete_contact(name):
     _check_auth()
-    _require_owner(\"Hambaft Contact\", name)
+    _require_owner("Hambaft Contact", name)
     frappe.delete_doc("Hambaft Contact", name, ignore_permissions=True)
     frappe.db.commit()
     return _api_response({"ok": True})
@@ -1909,7 +1909,7 @@ def create_occasion(data):
 @frappe.whitelist()
 def update_occasion(name, data):
     _check_auth()
-    _require_owner(\"Hambaft Occasion\", name)
+    _require_owner("Hambaft Occasion", name)
     if isinstance(data, str):
         data = json.loads(data)
     doc = frappe.get_doc("Hambaft Occasion", name)
@@ -1922,7 +1922,7 @@ def update_occasion(name, data):
 @frappe.whitelist()
 def delete_occasion(name):
     _check_auth()
-    _require_owner(\"Hambaft Occasion\", name)
+    _require_owner("Hambaft Occasion", name)
     frappe.delete_doc("Hambaft Occasion", name, ignore_permissions=True)
     frappe.db.commit()
     return _api_response({"ok": True})
@@ -1958,7 +1958,7 @@ def create_sleep_log(data):
 @frappe.whitelist()
 def update_sleep_log(name, data):
     _check_auth()
-    _require_owner(\"Hambaft Sleep Log\", name)
+    _require_owner("Hambaft Sleep Log", name)
     if isinstance(data, str):
         data = json.loads(data)
     doc = frappe.get_doc("Hambaft Sleep Log", name)
@@ -1971,7 +1971,7 @@ def update_sleep_log(name, data):
 @frappe.whitelist()
 def delete_sleep_log(name):
     _check_auth()
-    _require_owner(\"Hambaft Sleep Log\", name)
+    _require_owner("Hambaft Sleep Log", name)
     frappe.delete_doc("Hambaft Sleep Log", name, ignore_permissions=True)
     frappe.db.commit()
     return _api_response({"ok": True})
@@ -2006,7 +2006,7 @@ def create_mindfulness_session(data):
 @frappe.whitelist()
 def update_mindfulness_session(name, data):
     _check_auth()
-    _require_owner(\"Hambaft Mindfulness Session\", name)
+    _require_owner("Hambaft Mindfulness Session", name)
     if isinstance(data, str):
         data = json.loads(data)
     doc = frappe.get_doc("Hambaft Mindfulness Session", name)
@@ -2019,7 +2019,7 @@ def update_mindfulness_session(name, data):
 @frappe.whitelist()
 def delete_mindfulness_session(name):
     _check_auth()
-    _require_owner(\"Hambaft Mindfulness Session\", name)
+    _require_owner("Hambaft Mindfulness Session", name)
     frappe.delete_doc("Hambaft Mindfulness Session", name, ignore_permissions=True)
     frappe.db.commit()
     return _api_response({"ok": True})
@@ -2057,7 +2057,7 @@ def create_nutrition_log(data):
 @frappe.whitelist()
 def update_nutrition_log(name, data):
     _check_auth()
-    _require_owner(\"Hambaft Nutrition Log\", name)
+    _require_owner("Hambaft Nutrition Log", name)
     if isinstance(data, str):
         data = json.loads(data)
     doc = frappe.get_doc("Hambaft Nutrition Log", name)
@@ -2070,7 +2070,7 @@ def update_nutrition_log(name, data):
 @frappe.whitelist()
 def delete_nutrition_log(name):
     _check_auth()
-    _require_owner(\"Hambaft Nutrition Log\", name)
+    _require_owner("Hambaft Nutrition Log", name)
     frappe.delete_doc("Hambaft Nutrition Log", name, ignore_permissions=True)
     frappe.db.commit()
     return _api_response({"ok": True})
@@ -2110,7 +2110,7 @@ def create_workout_log(data):
 @frappe.whitelist()
 def update_workout_log(name, data):
     _check_auth()
-    _require_owner(\"Hambaft Workout Log\", name)
+    _require_owner("Hambaft Workout Log", name)
     if isinstance(data, str):
         data = json.loads(data)
     doc = frappe.get_doc("Hambaft Workout Log", name)
@@ -2128,7 +2128,7 @@ def update_workout_log(name, data):
 @frappe.whitelist()
 def delete_workout_log(name):
     _check_auth()
-    _require_owner(\"Hambaft Workout Log\", name)
+    _require_owner("Hambaft Workout Log", name)
     frappe.delete_doc("Hambaft Workout Log", name, ignore_permissions=True)
     frappe.db.commit()
     return _api_response({"ok": True})
