@@ -3009,7 +3009,6 @@ export default function App({
           />
         );
       case 'habits':
-      case 'tasks':
         return (
           <HabitSection 
             habits={lifeData.habits}
