@@ -2,24 +2,91 @@
  "doctype": "DocType",
  "name": "Hambaft Workout Log",
  "module": "Hambaft",
- "custom": 1,
+ "custom": 0,
  "autoname": "format:WRK-{#####}",
  "track_changes": 1,
  "fields": [
-  {"fieldname": "user", "fieldtype": "Link", "label": "کاربر", "options": "User", "reqd": 1, "in_list_view": 1},
-  {"fieldname": "workout_date", "fieldtype": "Date", "label": "تاریخ", "reqd": 1, "in_list_view": 1},
-  {"fieldname": "workout_type", "fieldtype": "Select", "label": "نوع", "options": "cardio\nstrength\nother", "default": "other"},
-  {"fieldname": "cardio_type", "fieldtype": "Select", "label": "نوع هوازی", "options": "running\ncycling\nswimming\nwalking"},
-  {"fieldname": "distance_km", "fieldtype": "Float", "label": "مسافت", "default": 0},
-  {"fieldname": "duration_minutes", "fieldtype": "Int", "label": "مدت", "default": 0},
-  {"fieldname": "calories_burned", "fieldtype": "Int", "label": "کالری", "default": 0},
-  {"fieldname": "gym_sets_json", "fieldtype": "Long Text", "label": "ست‌های باشگاهی"},
-  {"fieldname": "notes", "fieldtype": "Small Text", "label": "یادداشت"}
+  {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "label": "کاربر",
+   "options": "User",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "workout_date",
+   "fieldtype": "Date",
+   "label": "تاریخ",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "workout_type",
+   "fieldtype": "Select",
+   "label": "نوع",
+   "options": "cardio\nstrength\nother",
+   "default": "other"
+  },
+  {
+   "fieldname": "cardio_type",
+   "fieldtype": "Select",
+   "label": "نوع هوازی",
+   "options": "running\ncycling\nswimming\nwalking"
+  },
+  {
+   "fieldname": "distance_km",
+   "fieldtype": "Float",
+   "label": "مسافت",
+   "default": 0
+  },
+  {
+   "fieldname": "duration_minutes",
+   "fieldtype": "Int",
+   "label": "مدت",
+   "default": 0
+  },
+  {
+   "fieldname": "calories_burned",
+   "fieldtype": "Int",
+   "label": "کالری",
+   "default": 0
+  },
+  {
+   "fieldname": "gym_sets_json",
+   "fieldtype": "Long Text",
+   "label": "ست‌های باشگاهی"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "یادداشت"
+  }
  ],
  "permissions": [
-  {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1},
-  {"role": "Hambaft User", "read": 1, "write": 1, "create": 1, "delete": 1, "if_owner": 1},
-  {"role": "All", "read": 1, "write": 1, "create": 1, "delete": 1, "if_owner": 1}
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1
+  },
+  {
+   "role": "Hambaft User",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "if_owner": 1
+  },
+  {
+   "role": "All",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "if_owner": 1
+  }
  ],
  "sort_field": "workout_date",
  "sort_order": "DESC"

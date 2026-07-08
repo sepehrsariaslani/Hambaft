@@ -60,6 +60,17 @@ function redirectTo(path: string) {
   return <Navigate to={path} replace />
 }
 
+function RouteHydrateFallback() {
+  return (
+    <main className="min-h-screen bg-[linear-gradient(180deg,#fdf9f2_0%,#f3ebdf_100%)] px-6 py-10 text-[#2d3025]">
+      <div className="mx-auto max-w-4xl rounded-[28px] border border-[rgba(45,48,37,0.08)] bg-[rgba(255,252,246,0.92)] p-8 shadow-[0_24px_64px_rgba(84,66,37,0.08)]">
+        <p className="text-xs font-bold text-[#9b6b61]">Hambaft</p>
+        <h1 className="mt-3 text-2xl font-black">در حال بارگذاری برنامه</h1>
+      </div>
+    </main>
+  )
+}
+
 export const workspaceRoutes: RouteObject[] = [
   ...buildWorkspaceRoutes(),
   { path: 'settings/security', element: <SecurityPage /> },
@@ -69,15 +80,16 @@ export const workspaceRoutes: RouteObject[] = [
 ]
 
 export const appRoutes: RouteObject[] = [
-  { path: '/login', element: <AuthPage mode="login" /> },
-  { path: '/signup', element: <AuthPage mode="signup" /> },
-  { path: '/onboarding', element: <OnboardingPage /> },
+  { path: '/login', element: <AuthPage mode="login" />, hydrateFallbackElement: <RouteHydrateFallback /> },
+  { path: '/signup', element: <AuthPage mode="signup" />, hydrateFallbackElement: <RouteHydrateFallback /> },
+  { path: '/onboarding', element: <OnboardingPage />, hydrateFallbackElement: <RouteHydrateFallback /> },
   {
     path: '/',
     element: <ProtectedLayout />,
+    hydrateFallbackElement: <RouteHydrateFallback />,
     children: workspaceRoutes,
   },
-  { path: '*', element: redirectTo('/') },
+  { path: '*', element: redirectTo('/'), hydrateFallbackElement: <RouteHydrateFallback /> },
 ]
 
 export const router = createBrowserRouter(appRoutes, {

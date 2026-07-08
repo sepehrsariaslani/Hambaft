@@ -1,34 +1,132 @@
 {
-  "name": "Hambaft Bill",
-  "doctype": "DocType",
-  "module": "Hambaft Finance",
-  "custom": 1,
-  "autoname": "format:BILL-{#####}",
-  "istable": 0,
-  "issingle": 0,
-  "is_submittable": 0,
-  "track_changes": 1,
-  "fields": [
-    {"fieldname": "bill_name", "fieldtype": "Data", "label": "\u0646\u0627\u0645 \u0642\u0628\u0636", "reqd": 1, "in_list_view": 1, "in_standard_filter": 1},
-    {"fieldname": "user", "fieldtype": "Link", "label": "\u06a9\u0627\u0631\u0628\u0631", "options": "User", "reqd": 1, "in_list_view": 1, "in_standard_filter": 1},
-    {"fieldname": "category", "fieldtype": "Link", "label": "\u062f\u0633\u062a\u0647\u200c\u0628\u0646\u062f\u06cc", "options": "Hambaft Finance Category", "in_list_view": 1, "in_standard_filter": 1},
-    {"fieldname": "account", "fieldtype": "Link", "label": "\u062d\u0633\u0627\u0628", "options": "Hambaft Finance Account"},
-    {"fieldname": "amount", "fieldtype": "Currency", "label": "\u0645\u0628\u0644\u063a", "reqd": 1, "in_list_view": 1},
-    {"fieldname": "due_date", "fieldtype": "Date", "label": "\u0633\u0631\u0631\u0633\u06cc\u062f", "reqd": 1, "in_list_view": 1},
-    {"fieldname": "is_recurring", "fieldtype": "Check", "label": "\u062a\u06a9\u0631\u0627\u0631\u06cc", "default": 0},
-    {"fieldname": "recurrence_rule", "fieldtype": "Link", "label": "\u0642\u0627\u0639\u062f\u0647 \u062a\u06a9\u0631\u0627\u0631", "options": "Hambaft Recurrence Rule"},
-    {"fieldname": "reminder_days_before", "fieldtype": "Int", "label": "\u06cc\u0627\u062f\u0622\u0648\u0631\u06cc (\u0631\u0648\u0632 \u0642\u0628\u0644)", "default": 3},
-    {"fieldname": "status", "fieldtype": "Select", "label": "\u0648\u0636\u0639\u06cc\u062a", "options": "\u067e\u06cc\u0634\u200c\u0631\u0648\n\u067e\u0631\u062f\u0627\u062e\u062a\u200c\u0634\u062f\u0647\n\u0639\u0642\u0628\u200c\u0627\u0641\u062a\u0627\u062f\u0647\n\u0644\u063a\u0648\u0634\u062f\u0647", "default": "\u067e\u06cc\u0634\u200c\u0631\u0648", "in_list_view": 1},
-    {"fieldname": "paid_date", "fieldtype": "Date", "label": "\u062a\u0627\u0631\u06cc\u062e \u067e\u0631\u062f\u0627\u062e\u062a"},
-    {"fieldname": "paid_amount", "fieldtype": "Currency", "label": "\u0645\u0628\u0644\u063a \u067e\u0631\u062f\u0627\u062e\u062a\u06cc", "default": 0},
-    {"fieldname": "description", "fieldtype": "Small Text", "label": "\u062a\u0648\u0636\u06cc\u062d\u0627\u062a"},
-    {"fieldname": "receipt", "fieldtype": "Attach", "label": "\u0631\u0633\u06cc\u062f"}
-  ],
-  "permissions": [
-    {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1},
-    {"role": "Hambaft User", "read": 1, "write": 1, "create": 1, "delete": 1, "if_owner": 1},
-    {"role": "All", "read": 1, "write": 1, "create": 1, "delete": 1, "if_owner": 1}
-  ],
-  "sort_field": "due_date",
-  "sort_order": "ASC"
+ "name": "Hambaft Bill",
+ "doctype": "DocType",
+ "module": "Hambaft",
+ "custom": 0,
+ "autoname": "format:BILL-{#####}",
+ "istable": 0,
+ "issingle": 0,
+ "is_submittable": 0,
+ "track_changes": 1,
+ "fields": [
+  {
+   "fieldname": "bill_name",
+   "fieldtype": "Data",
+   "label": "نام قبض",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "label": "کاربر",
+   "options": "User",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "category",
+   "fieldtype": "Link",
+   "label": "دسته‌بندی",
+   "options": "Hambaft Finance Category",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "account",
+   "fieldtype": "Link",
+   "label": "حساب",
+   "options": "Hambaft Finance Account"
+  },
+  {
+   "fieldname": "amount",
+   "fieldtype": "Currency",
+   "label": "مبلغ",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "due_date",
+   "fieldtype": "Date",
+   "label": "سررسید",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "is_recurring",
+   "fieldtype": "Check",
+   "label": "تکراری",
+   "default": 0
+  },
+  {
+   "fieldname": "recurrence_rule",
+   "fieldtype": "Link",
+   "label": "قاعده تکرار",
+   "options": "Hambaft Recurrence Rule"
+  },
+  {
+   "fieldname": "reminder_days_before",
+   "fieldtype": "Int",
+   "label": "یادآوری (روز قبل)",
+   "default": 3
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "وضعیت",
+   "options": "پیش‌رو\nپرداخت‌شده\nعقب‌افتاده\nلغوشده",
+   "default": "پیش‌رو",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "paid_date",
+   "fieldtype": "Date",
+   "label": "تاریخ پرداخت"
+  },
+  {
+   "fieldname": "paid_amount",
+   "fieldtype": "Currency",
+   "label": "مبلغ پرداختی",
+   "default": 0
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "label": "توضیحات"
+  },
+  {
+   "fieldname": "receipt",
+   "fieldtype": "Attach",
+   "label": "رسید"
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1
+  },
+  {
+   "role": "Hambaft User",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "if_owner": 1
+  },
+  {
+   "role": "All",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "if_owner": 1
+  }
+ ],
+ "sort_field": "due_date",
+ "sort_order": "ASC"
 }

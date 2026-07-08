@@ -2,7 +2,7 @@
  "name": "Hambaft Note Link",
  "doctype": "DocType",
  "module": "Hambaft Core",
- "custom": 1,
+ "custom": 0,
  "istable": 1,
  "fields": [
   {

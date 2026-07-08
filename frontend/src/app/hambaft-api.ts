@@ -110,6 +110,53 @@ const projectStatusToBackend: Record<NonNullable<Project['status']>, string> = {
   completed: 'تکمیل‌شده',
 }
 
+const PERSIAN_DIGIT_MAP: Record<string, string> = {
+  '۰': '0',
+  '۱': '1',
+  '۲': '2',
+  '۳': '3',
+  '۴': '4',
+  '۵': '5',
+  '۶': '6',
+  '۷': '7',
+  '۸': '8',
+  '۹': '9',
+  '٠': '0',
+  '١': '1',
+  '٢': '2',
+  '٣': '3',
+  '٤': '4',
+  '٥': '5',
+  '٦': '6',
+  '٧': '7',
+  '٨': '8',
+  '٩': '9',
+}
+
+function normalizeAsciiDigits(value?: string | null) {
+  return String(value || '').replace(/[۰-۹٠-٩]/g, (digit) => PERSIAN_DIGIT_MAP[digit] || digit)
+}
+
+function normalizeClockValue(value?: string | null) {
+  const normalized = normalizeAsciiDigits(value).trim().replace(/[：]/g, ':')
+  if (!normalized) {
+    return '09:00'
+  }
+
+  const match = normalized.match(/^(\d{1,2}):(\d{1,2})$/)
+  if (!match) {
+    return normalized
+  }
+
+  const hours = Number(match[1])
+  const minutes = Number(match[2])
+  if (Number.isNaN(hours) || Number.isNaN(minutes) || hours > 23 || minutes > 59) {
+    return normalized
+  }
+
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
+}
+
 function splitDatetime(value?: string | null): { date?: string; time: string } {
   if (!value) {
     return { time: '09:00' }
@@ -123,13 +170,18 @@ function splitDatetime(value?: string | null): { date?: string; time: string } {
 
 function combineDateTime(date?: string, time?: string): string | undefined {
   if (!date) return undefined
-  return `${date} ${time || '09:00'}:00`
+  const normalizedDate = normalizeAsciiDigits(date)
+  const normalizedTime = normalizeClockValue(time)
+  return `${normalizedDate} ${normalizedTime || '09:00'}:00`
 }
 
 function addHours(date: string | undefined, time: string | undefined, durationHours: number | undefined): string | undefined {
   const start = combineDateTime(date, time)
   if (!start) return undefined
   const startDate = new Date(start.replace(' ', 'T'))
+  if (Number.isNaN(startDate.getTime())) {
+    return undefined
+  }
   const endDate = new Date(startDate.getTime() + Math.max(durationHours || 1, 1) * 60 * 60 * 1000)
   return `${endDate.toISOString().slice(0, 10)} ${endDate.toISOString().slice(11, 19)}`
 }

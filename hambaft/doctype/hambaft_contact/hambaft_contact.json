@@ -2,31 +2,128 @@
  "doctype": "DocType",
  "name": "Hambaft Contact",
  "module": "Hambaft",
- "custom": 1,
+ "custom": 0,
  "autoname": "format:CON-{#####}",
  "track_changes": 1,
  "fields": [
-  {"fieldname": "user", "fieldtype": "Link", "label": "کاربر", "options": "User", "reqd": 1, "in_list_view": 1, "in_standard_filter": 1},
-  {"fieldname": "full_name", "fieldtype": "Data", "label": "نام", "reqd": 1, "in_list_view": 1},
-  {"fieldname": "contact_category", "fieldtype": "Select", "label": "دسته", "options": "family\nfriend\nwork\nmentor\npartner\nother", "default": "other", "in_list_view": 1},
-  {"fieldname": "birthday", "fieldtype": "Date", "label": "تولد"},
-  {"fieldname": "phone", "fieldtype": "Data", "label": "تلفن"},
-  {"fieldname": "email", "fieldtype": "Data", "label": "ایمیل"},
-  {"fieldname": "traits_json", "fieldtype": "Long Text", "label": "ویژگی‌ها"},
-  {"fieldname": "strengths", "fieldtype": "Text", "label": "نقاط قوت"},
-  {"fieldname": "hobbies", "fieldtype": "Text", "label": "علایق"},
-  {"fieldname": "notes", "fieldtype": "Text Editor", "label": "یادداشت"},
-  {"fieldname": "last_interaction_date", "fieldtype": "Date", "label": "آخرین تعامل"},
-  {"fieldname": "last_interaction_type", "fieldtype": "Select", "label": "نوع آخرین تعامل", "options": "call\nmeeting\nchat\nother"},
-  {"fieldname": "interaction_logs_json", "fieldtype": "Long Text", "label": "لاگ تعامل"},
-  {"fieldname": "relationship_score", "fieldtype": "Int", "label": "امتیاز رابطه", "default": 0},
-  {"fieldname": "closeness_tier", "fieldtype": "Select", "label": "سطح نزدیکی", "options": "inner\nouter\nacquaintance", "default": "acquaintance"},
-  {"fieldname": "photo_url", "fieldtype": "Attach Image", "label": "تصویر"}
+  {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "label": "کاربر",
+   "options": "User",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "full_name",
+   "fieldtype": "Data",
+   "label": "نام",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "contact_category",
+   "fieldtype": "Select",
+   "label": "دسته",
+   "options": "family\nfriend\nwork\nmentor\npartner\nother",
+   "default": "other",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "birthday",
+   "fieldtype": "Date",
+   "label": "تولد"
+  },
+  {
+   "fieldname": "phone",
+   "fieldtype": "Data",
+   "label": "تلفن"
+  },
+  {
+   "fieldname": "email",
+   "fieldtype": "Data",
+   "label": "ایمیل"
+  },
+  {
+   "fieldname": "traits_json",
+   "fieldtype": "Long Text",
+   "label": "ویژگی‌ها"
+  },
+  {
+   "fieldname": "strengths",
+   "fieldtype": "Text",
+   "label": "نقاط قوت"
+  },
+  {
+   "fieldname": "hobbies",
+   "fieldtype": "Text",
+   "label": "علایق"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Text Editor",
+   "label": "یادداشت"
+  },
+  {
+   "fieldname": "last_interaction_date",
+   "fieldtype": "Date",
+   "label": "آخرین تعامل"
+  },
+  {
+   "fieldname": "last_interaction_type",
+   "fieldtype": "Select",
+   "label": "نوع آخرین تعامل",
+   "options": "call\nmeeting\nchat\nother"
+  },
+  {
+   "fieldname": "interaction_logs_json",
+   "fieldtype": "Long Text",
+   "label": "لاگ تعامل"
+  },
+  {
+   "fieldname": "relationship_score",
+   "fieldtype": "Int",
+   "label": "امتیاز رابطه",
+   "default": 0
+  },
+  {
+   "fieldname": "closeness_tier",
+   "fieldtype": "Select",
+   "label": "سطح نزدیکی",
+   "options": "inner\nouter\nacquaintance",
+   "default": "acquaintance"
+  },
+  {
+   "fieldname": "photo_url",
+   "fieldtype": "Attach Image",
+   "label": "تصویر"
+  }
  ],
  "permissions": [
-  {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1},
-  {"role": "Hambaft User", "read": 1, "write": 1, "create": 1, "delete": 1, "if_owner": 1},
-  {"role": "All", "read": 1, "write": 1, "create": 1, "delete": 1, "if_owner": 1}
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1
+  },
+  {
+   "role": "Hambaft User",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "if_owner": 1
+  },
+  {
+   "role": "All",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "if_owner": 1
+  }
  ],
  "sort_field": "modified",
  "sort_order": "DESC"

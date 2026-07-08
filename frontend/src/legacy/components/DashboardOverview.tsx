@@ -542,18 +542,12 @@ export default function DashboardOverview({
                 </span>
 
                 <div className="flex -space-x-1.5 space-x-reverse items-center">
-                  <img 
-                    src="https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=100&auto=format&fit=crop" 
-                    alt="user1" 
-                    className="w-5 h-5 rounded-full object-cover border border-white"
-                    referrerPolicy="no-referrer"
-                  />
-                  <img 
-                    src="https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?q=80&w=100&auto=format&fit=crop" 
-                    alt="user2" 
-                    className="w-5 h-5 rounded-full object-cover border border-white"
-                    referrerPolicy="no-referrer"
-                  />
+                  <div className="flex h-5 w-5 items-center justify-center rounded-full border border-white bg-[#f5c7bb] text-[8px] font-black text-[#6f3f34]">
+                    س
+                  </div>
+                  <div className="flex h-5 w-5 items-center justify-center rounded-full border border-white bg-[#c7d4b3] text-[8px] font-black text-[#40512d]">
+                    م
+                  </div>
                   <div className="w-5 h-5 rounded-full bg-white/30 text-[8px] text-white font-black flex items-center justify-center border border-white">
                     +۲
                   </div>

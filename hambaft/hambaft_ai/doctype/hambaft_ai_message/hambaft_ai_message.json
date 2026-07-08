@@ -6,7 +6,7 @@
  "owner": "Administrator",
  "docstatus": 0,
  "module": "Hambaft AI",
- "istable": 1,
+ "istable": 0,
  "track_changes": 1,
  "fields": [
   {
@@ -88,5 +88,5 @@
   }
  ],
  "doctype": "DocType",
- "custom": 1
+ "custom": 0
 }

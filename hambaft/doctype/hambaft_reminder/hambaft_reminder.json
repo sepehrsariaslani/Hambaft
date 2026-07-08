@@ -2,7 +2,7 @@
  "name": "Hambaft Reminder",
  "doctype": "DocType",
  "module": "Hambaft",
- "custom": 1,
+ "custom": 0,
  "autoname": "format:REM-{#####}",
  "label": "یادآوری",
  "fields": [
@@ -100,6 +100,6 @@
  ],
  "sort_field": "remind_at",
  "sort_order": "ASC",
- "istable": 1,
+ "istable": 0,
  "issingle": 0
 }

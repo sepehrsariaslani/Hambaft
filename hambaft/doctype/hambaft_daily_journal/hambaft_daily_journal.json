@@ -125,7 +125,7 @@
  "sort_field": "journal_date",
  "sort_order": "DESC",
  "doctype": "DocType",
- "custom": 1,
+ "custom": 0,
  "istable": 0,
  "issingle": 0
 }

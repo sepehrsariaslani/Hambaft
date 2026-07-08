@@ -1,4 +1,4 @@
-import { mapBackendTaskCategory, mapBackendTaskPriority, mapEventToScheduleItem, toTaskPayload } from '../app/hambaft-api'
+import { mapBackendTaskCategory, mapBackendTaskPriority, mapEventToScheduleItem, toSchedulePayload, toTaskPayload } from '../app/hambaft-api'
 
 describe('hambaft data mappers', () => {
   it('maps backend task enums to frontend task enums', () => {
@@ -40,6 +40,22 @@ describe('hambaft data mappers', () => {
       status: 'انجام‌شده',
       priority: 'بالا',
       category: 'مالی',
+    })
+  })
+
+  it('normalizes persian clock digits before creating schedule payloads', () => {
+    expect(
+      toSchedulePayload({
+        title: 'جلسه',
+        desc: 'مرور',
+        time: '۱۲:۳۰',
+        category: 'purple',
+        date: '2026-07-07',
+        durationHours: 2,
+      }),
+    ).toMatchObject({
+      starts_at: '2026-07-07 12:30:00',
+      ends_at: '2026-07-07 14:30:00',
     })
   })
 })

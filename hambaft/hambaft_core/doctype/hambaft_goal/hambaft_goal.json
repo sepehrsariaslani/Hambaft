@@ -2,7 +2,7 @@
  "name": "Hambaft Goal",
  "doctype": "DocType",
  "module": "Hambaft Core",
- "custom": 1,
+ "custom": 0,
  "autoname": "format:GOAL-{#####}",
  "fields": [
   {

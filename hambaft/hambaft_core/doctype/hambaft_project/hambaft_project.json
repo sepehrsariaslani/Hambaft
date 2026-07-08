@@ -2,7 +2,7 @@
  "name": "Hambaft Project",
  "doctype": "DocType",
  "module": "Hambaft Core",
- "custom": 1,
+ "custom": 0,
  "autoname": "format:PROJ-{#####}",
  "fields": [
   {

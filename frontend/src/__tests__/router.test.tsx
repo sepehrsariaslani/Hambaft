@@ -51,4 +51,10 @@ describe('appRoutes', () => {
   it('uses /hambaft basename when the app is served from the hambaft route', () => {
     expect(getRouterBasename('/hambaft/profile', false)).toBe('/hambaft')
   })
+
+  it('provides a hydrate fallback on the protected root route', () => {
+    const protectedRoute = appRoutes.find((item) => item.path === '/')
+
+    expect(protectedRoute?.hydrateFallbackElement).toBeTruthy()
+  })
 })

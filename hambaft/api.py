@@ -7,6 +7,7 @@ from datetime import datetime, date, timedelta
 import frappe
 from frappe import _
 from frappe.utils import now_datetime, getdate, today, cint, flt
+from .settings_contract import SETTINGS_FIELDS, get_supported_settings_fields, normalize_settings_update
 from .dashboard_home import (
     build_finance_snapshot,
     build_summary_metrics,
@@ -19,42 +20,6 @@ from .dashboard_home import (
 DONE_TASK_STATUSES = {"done", "انجام‌شده"}
 ACTIVE_GOAL_STATUSES = {"active", "فعال"}
 DONE_HABIT_STATUSES = {"done", "انجام‌شده"}
-SETTINGS_FIELDS = (
-    "display_name",
-    "motto",
-    "work_field",
-    "daily_water_goal",
-    "sleep_goal_hours",
-    "monthly_budget",
-    "language",
-    "timezone",
-    "currency",
-    "theme",
-    "week_starts_on",
-    "onboarding_completed",
-    "onboarding_step",
-    "default_view",
-    "reminder_notifications",
-    "daily_reminder_time",
-    "life_score_target",
-    "notion_pages_json",
-    "sleep_preferences_json",
-    "custom_exercises_json",
-    "finance_quick_templates_json",
-    "calendar_preferences_json",
-    "custom_calendars_json",
-    "debts_json",
-    "subscriptions_json",
-    "recurring_transactions_json",
-    "assets_json",
-    "installments_json",
-    "diet_setting_json",
-    "budget_settings_json",
-    "subcategories_json",
-    "task_time_json",
-    "daily_highlights_json",
-    "goal_habits_json",
-)
 
 
 def _unwrap_response(value):
@@ -244,6 +209,23 @@ def _save_doc(doc):
     return doc
 
 
+def _persist_settings_updates(doc, updates):
+    updates = updates or {}
+    if not updates:
+        return doc
+
+    if doc.is_new():
+        doc.update(updates)
+        return _save_doc(doc)
+
+    allowed_updates = {fieldname: value for fieldname, value in updates.items() if hasattr(doc, fieldname)}
+    if not allowed_updates:
+        return doc
+
+    frappe.db.set_value("Profile Settings", doc.name, allowed_updates, update_modified=True)
+    return frappe.get_doc("Profile Settings", doc.name)
+
+
 def _default_settings(user):
     user_doc = frappe.db.get_value("User", user, ["full_name", "first_name"], as_dict=True) or {}
     display_name = user_doc.get("full_name") or user_doc.get("first_name") or user
@@ -272,12 +254,36 @@ def _default_settings(user):
         "finance_quick_templates_json": None,
         "calendar_preferences_json": None,
         "custom_calendars_json": None,
+        "debts_json": None,
+        "subscriptions_json": None,
+        "recurring_transactions_json": None,
+        "assets_json": None,
+        "installments_json": None,
+        "diet_setting_json": None,
+        "budget_settings_json": None,
+        "subcategories_json": None,
+        "task_time_json": None,
+        "daily_highlights_json": None,
+        "goal_habits_json": None,
     }
+
+
+def _get_settings_meta_fieldnames():
+    try:
+        meta = frappe.get_meta("Profile Settings")
+    except Exception:
+        return set(SETTINGS_FIELDS)
+
+    return {field.fieldname for field in meta.fields if getattr(field, "fieldname", None)}
+
+
+def _get_supported_settings_fieldnames():
+    return get_supported_settings_fields(_get_settings_meta_fieldnames())
 
 
 def _get_settings_row(user=None):
     user = user or frappe.session.user
-    return frappe.db.get_value("Profile Settings", {"user": user}, ["name", *SETTINGS_FIELDS], as_dict=True)
+    return frappe.db.get_value("Profile Settings", {"user": user}, ["name", *_get_supported_settings_fieldnames()], as_dict=True)
 
 
 def _get_settings_payload(user=None):
@@ -299,10 +305,14 @@ def _get_or_create_settings_doc(user=None):
     doc = frappe.new_doc("Profile Settings")
     doc.user = user
     defaults = _default_settings(user)
-    for fieldname in SETTINGS_FIELDS:
+    for fieldname in _get_supported_settings_fieldnames():
         if hasattr(doc, fieldname) and defaults.get(fieldname) is not None:
             setattr(doc, fieldname, defaults.get(fieldname))
     return doc
+
+
+def _normalize_settings_update(data):
+    return normalize_settings_update(data, available_fields=_get_supported_settings_fieldnames())
 
 
 def _ensure_hambaft_user_role(user_name):
@@ -471,8 +481,7 @@ def update_profile(data):
         settings_updates["display_name"] = data.get("name")
 
     if settings_updates:
-        settings_doc.update(settings_updates)
-        _save_doc(settings_doc)
+        settings_doc = _persist_settings_updates(settings_doc, settings_updates)
 
     frappe.db.commit()
 
@@ -1405,13 +1414,11 @@ def get_settings():
 def update_settings(data):
     if frappe.session.user == "Guest":
         frappe.throw("Authentication required", frappe.AuthenticationError)
-    if isinstance(data, str):
-        data = json.loads(data)
+    data = _normalize_settings_update(data)
     doc = _get_or_create_settings_doc()
-    doc.update(data)
-    _save_doc(doc)
+    doc = _persist_settings_updates(doc, data)
     frappe.db.commit()
-    return _api_response({"settings": doc.as_dict()})
+    return _api_response({"settings": _get_settings_payload()})
 
 
 @frappe.whitelist()
@@ -1419,8 +1426,7 @@ def complete_onboarding_step(step):
     if frappe.session.user == "Guest":
         frappe.throw("Authentication required", frappe.AuthenticationError)
     doc = _get_or_create_settings_doc()
-    doc.onboarding_step = cint(step)
-    _save_doc(doc)
+    doc = _persist_settings_updates(doc, {"onboarding_step": cint(step)})
     frappe.db.commit()
     return _api_response({"settings": doc.as_dict()})
 
@@ -1430,9 +1436,7 @@ def finish_onboarding():
     if frappe.session.user == "Guest":
         frappe.throw("Authentication required", frappe.AuthenticationError)
     doc = _get_or_create_settings_doc()
-    doc.onboarding_completed = 1
-    doc.onboarding_step = 5
-    _save_doc(doc)
+    doc = _persist_settings_updates(doc, {"onboarding_completed": 1, "onboarding_step": 5})
     frappe.db.commit()
     return _api_response({"settings": doc.as_dict()})
 
@@ -1457,14 +1461,12 @@ def get_onboarding_status():
 def submit_onboarding_step(step, data=None):
     if frappe.session.user == "Guest":
         frappe.throw("Authentication required", frappe.AuthenticationError)
-    if isinstance(data, str):
-        data = json.loads(data)
+    data = _normalize_settings_update(data)
     step = cint(step)
     doc = _get_or_create_settings_doc()
-    if data:
-        doc.update(data)
-    doc.onboarding_step = step
-    _save_doc(doc)
+    payload = dict(data or {})
+    payload["onboarding_step"] = step
+    _persist_settings_updates(doc, payload)
     frappe.db.commit()
     return _api_response({"ok": True, "next_step": step + 1})
 

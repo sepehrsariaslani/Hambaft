@@ -1,144 +1,144 @@
 {
-  "name": "Hambaft Monthly Review",
-  "doctype": "DocType",
-  "module": "Hambaft",
-  "custom": 1,
-  "autoname": "format:MONTHLY-{user}-{jalali_year}-{jalali_month}-{#####}",
-  "title_field": "jalali_month",
-  "track_changes": 1,
-  "istable": 0,
-  "issingle": 0,
-  "sort_field": "month_start",
-  "sort_order": "DESC",
-  "fields": [
-    {
-      "fieldname": "user",
-      "fieldtype": "Link",
-      "label": "کاربر",
-      "options": "User",
-      "reqd": 1,
-      "in_list_view": 1,
-      "in_standard_filter": 1,
-      "hidden": 1
-    },
-    {
-      "fieldname": "jalali_year",
-      "fieldtype": "Int",
-      "label": "سال جلالی",
-      "reqd": 1,
-      "in_list_view": 1,
-      "in_standard_filter": 1,
-      "description": "سال شمسی (مثال: ۱۴۰۵)"
-    },
-    {
-      "fieldname": "jalali_month",
-      "fieldtype": "Select",
-      "label": "ماه جلالی",
-      "reqd": 1,
-      "in_list_view": 1,
-      "in_standard_filter": 1,
-      "options": "فروردین\nاردیبهشت\nخرداد\nتیر\nمرداد\nشهریور\nمهر\nآبان\nآذر\nدی\nبهمن\nاسفند",
-      "description": "نام ماه شمسی"
-    },
-    {
-      "fieldname": "month_start",
-      "fieldtype": "Date",
-      "label": "شروع ماه",
-      "reqd": 1,
-      "description": "تاریخ میلادی روز اول ماه"
-    },
-    {
-      "fieldname": "month_end",
-      "fieldtype": "Date",
-      "label": "پایان ماه",
-      "reqd": 1,
-      "description": "تاریخ میلادی آخرین روز ماه"
-    },
-    {
-      "fieldname": "jalali_month_display",
-      "fieldtype": "Data",
-      "label": "ماه شمسی",
-      "read_only": 1,
-      "in_list_view": 1,
-      "description": "نمایش ماه و سال جلالی"
-    },
-    {
-      "fieldname": "scores_section",
-      "fieldtype": "Section Break",
-      "label": "امتیازها",
-      "collapsible": 1
-    },
-    {
-      "fieldname": "overall_score",
-      "fieldtype": "Float",
-      "label": "امتیاز کلی",
-      "in_list_view": 1,
-      "description": "امتیاز کلی از ۰ تا ۱۰"
-    },
-    {
-      "fieldname": "summaries_section",
-      "fieldtype": "Section Break",
-      "label": "خلاصه‌ها",
-      "collapsible": 1
-    },
-    {
-      "fieldname": "finance_summary",
-      "fieldtype": "Text",
-      "label": "خلاصه مالی",
-      "description": "خلاصه وضعیت مالی در این ماه"
-    },
-    {
-      "fieldname": "goal_summary",
-      "fieldtype": "Text",
-      "label": "خلاصه اهداف",
-      "description": "خلاصه پیشرفت و وضعیت اهداف"
-    },
-    {
-      "fieldname": "habit_summary",
-      "fieldtype": "Text",
-      "label": "خلاصه عادت‌ها",
-      "description": "خلاصه عملکرد عادت‌های این ماه"
-    },
-    {
-      "fieldname": "reflection_section",
-      "fieldtype": "Section Break",
-      "label": "بازتاب",
-      "collapsible": 1
-    },
-    {
-      "fieldname": "big_wins",
-      "fieldtype": "Text",
-      "label": "بردهای بزرگ",
-      "description": "مهم‌ترین موفقیت‌های این ماه"
-    },
-    {
-      "fieldname": "big_problems",
-      "fieldtype": "Text",
-      "label": "مشکلات بزرگ",
-      "description": "مهم‌ترین چالش‌ها و مشکلات این ماه"
-    },
-    {
-      "fieldname": "next_month_goals",
-      "fieldtype": "Text",
-      "label": "اهداف ماه بعد",
-      "description": "اهداف و برنامه‌های ماه آینده"
-    }
-  ],
-  "permissions": [
-    {
-      "role": "System Manager",
-      "read": 1,
-      "write": 1,
-      "create": 1,
-      "delete": 1
-    },
-    {
-      "role": "Hambaft User",
-      "read": 1,
-      "write": 1,
-      "create": 1,
-      "delete": 1,
-      "if_owner": 1
-    }
-  ]
+ "name": "Hambaft Monthly Review",
+ "doctype": "DocType",
+ "module": "Hambaft",
+ "custom": 0,
+ "autoname": "format:MONTHLY-{user}-{jalali_year}-{jalali_month}-{#####}",
+ "title_field": "jalali_month",
+ "track_changes": 1,
+ "istable": 0,
+ "issingle": 0,
+ "sort_field": "month_start",
+ "sort_order": "DESC",
+ "fields": [
+  {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "label": "کاربر",
+   "options": "User",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "hidden": 1
+  },
+  {
+   "fieldname": "jalali_year",
+   "fieldtype": "Int",
+   "label": "سال جلالی",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "سال شمسی (مثال: ۱۴۰۵)"
+  },
+  {
+   "fieldname": "jalali_month",
+   "fieldtype": "Select",
+   "label": "ماه جلالی",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "options": "فروردین\nاردیبهشت\nخرداد\nتیر\nمرداد\nشهریور\nمهر\nآبان\nآذر\nدی\nبهمن\nاسفند",
+   "description": "نام ماه شمسی"
+  },
+  {
+   "fieldname": "month_start",
+   "fieldtype": "Date",
+   "label": "شروع ماه",
+   "reqd": 1,
+   "description": "تاریخ میلادی روز اول ماه"
+  },
+  {
+   "fieldname": "month_end",
+   "fieldtype": "Date",
+   "label": "پایان ماه",
+   "reqd": 1,
+   "description": "تاریخ میلادی آخرین روز ماه"
+  },
+  {
+   "fieldname": "jalali_month_display",
+   "fieldtype": "Data",
+   "label": "ماه شمسی",
+   "read_only": 1,
+   "in_list_view": 1,
+   "description": "نمایش ماه و سال جلالی"
+  },
+  {
+   "fieldname": "scores_section",
+   "fieldtype": "Section Break",
+   "label": "امتیازها",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "overall_score",
+   "fieldtype": "Float",
+   "label": "امتیاز کلی",
+   "in_list_view": 1,
+   "description": "امتیاز کلی از ۰ تا ۱۰"
+  },
+  {
+   "fieldname": "summaries_section",
+   "fieldtype": "Section Break",
+   "label": "خلاصه‌ها",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "finance_summary",
+   "fieldtype": "Text",
+   "label": "خلاصه مالی",
+   "description": "خلاصه وضعیت مالی در این ماه"
+  },
+  {
+   "fieldname": "goal_summary",
+   "fieldtype": "Text",
+   "label": "خلاصه اهداف",
+   "description": "خلاصه پیشرفت و وضعیت اهداف"
+  },
+  {
+   "fieldname": "habit_summary",
+   "fieldtype": "Text",
+   "label": "خلاصه عادت‌ها",
+   "description": "خلاصه عملکرد عادت‌های این ماه"
+  },
+  {
+   "fieldname": "reflection_section",
+   "fieldtype": "Section Break",
+   "label": "بازتاب",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "big_wins",
+   "fieldtype": "Text",
+   "label": "بردهای بزرگ",
+   "description": "مهم‌ترین موفقیت‌های این ماه"
+  },
+  {
+   "fieldname": "big_problems",
+   "fieldtype": "Text",
+   "label": "مشکلات بزرگ",
+   "description": "مهم‌ترین چالش‌ها و مشکلات این ماه"
+  },
+  {
+   "fieldname": "next_month_goals",
+   "fieldtype": "Text",
+   "label": "اهداف ماه بعد",
+   "description": "اهداف و برنامه‌های ماه آینده"
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1
+  },
+  {
+   "role": "Hambaft User",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "if_owner": 1
+  }
+ ]
 }

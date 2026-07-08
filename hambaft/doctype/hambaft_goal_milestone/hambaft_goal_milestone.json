@@ -2,7 +2,7 @@
  "name": "Hambaft Goal Milestone",
  "doctype": "DocType",
  "module": "Hambaft",
- "custom": 1,
+ "custom": 0,
  "istable": 1,
  "issingle": 0,
  "fields": [

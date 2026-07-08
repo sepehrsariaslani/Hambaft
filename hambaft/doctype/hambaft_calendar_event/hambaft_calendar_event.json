@@ -2,7 +2,7 @@
  "name": "Hambaft Calendar Event",
  "doctype": "DocType",
  "module": "Hambaft",
- "custom": 1,
+ "custom": 0,
  "autoname": "format:EVT-{#####}",
  "label": "رویداد تقویم",
  "track_changes": 1,

@@ -15,15 +15,54 @@ function isStandalone() {
   return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true
 }
 
+export function resolvePwaAssetUrl(assetPath: string, baseUrl = import.meta.env.BASE_URL || '/') {
+  const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`
+  const normalizedPath = assetPath.replace(/^\/+/, '')
+  return `${normalizedBase}${normalizedPath}`.replace(/([^:]\/)\/+/g, '$1')
+}
+
+export async function probeServiceWorkerScript(scriptUrl: string) {
+  try {
+    const response = await fetch(scriptUrl, {
+      method: 'GET',
+      credentials: 'same-origin',
+      cache: 'no-store',
+      headers: {
+        Accept: 'application/javascript,text/javascript,*/*;q=0.1',
+      },
+    })
+
+    if (!response.ok) {
+      return false
+    }
+
+    const contentType = response.headers.get('content-type') || ''
+    return /javascript|ecmascript/i.test(contentType)
+  } catch {
+    return false
+  }
+}
+
 export function registerPwaServiceWorker() {
   if (import.meta.env.DEV || typeof window === 'undefined' || !('serviceWorker' in navigator)) {
     return
   }
 
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch((error) => {
-      console.error('PWA service worker registration failed', error)
-    })
+    const serviceWorkerUrl = resolvePwaAssetUrl('sw.js')
+
+    probeServiceWorkerScript(serviceWorkerUrl)
+      .then((isValidScript) => {
+        if (!isValidScript) {
+          console.warn('PWA service worker registration skipped: service worker script is unavailable or not JavaScript')
+          return
+        }
+
+        return navigator.serviceWorker.register(serviceWorkerUrl)
+      })
+      .catch((error) => {
+        console.error('PWA service worker registration failed', error)
+      })
   })
 }
 

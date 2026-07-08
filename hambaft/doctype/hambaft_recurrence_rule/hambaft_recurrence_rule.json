@@ -1,7 +1,7 @@
 {
  "name": "Hambaft Recurrence Rule",
  "doctype": "DocType",
- "module": "hambaft",
+ "module": "Hambaft",
  "label": "قانون تکرار",
  "custom": 0,
  "autoname": "format:REC-{#####}",

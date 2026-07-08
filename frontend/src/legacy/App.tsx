@@ -278,6 +278,11 @@ export default function App({
   seedWaterIntake = null,
   seedSettings = null,
 }: AppProps) {
+  // Live "today" (ISO YYYY-MM-DD). Replaces the former hard-coded constant so
+  // all streak/agenda/date logic below tracks the real current day and
+  // re-renders at local midnight. See use-today.ts.
+  const TODAY_DATE = useToday();
+
   const [activeTab, setActiveTab] = useState<string>(initialTab);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(initialTaskId);
   const [selectedGoalId, setSelectedGoalId] = useState<string | null>(initialGoalId);
@@ -291,6 +296,7 @@ export default function App({
   };
 
   const [settingsState, setSettingsState] = useState<Record<string, any>>(() => seedSettings || {});
+  const settingsStateRef = useRef<Record<string, any>>(seedSettings || {});
   
   // App core state
   const [lifeData, setLifeData] = useState<LifeData>(() => seedLifeData || createEmptyLifeData());
@@ -347,13 +353,25 @@ export default function App({
   }, [seedSettings]);
 
   useEffect(() => {
+    settingsStateRef.current = settingsState;
+  }, [settingsState]);
+
+  useEffect(() => {
     setDarkMode(settingsState.theme === 'تاریک');
   }, [settingsState.theme]);
 
   const patchSettings = (patch: Record<string, unknown>) => {
-    setSettingsState((prev) => ({ ...prev, ...patch }));
+    const changedEntries = Object.entries(patch).filter(([fieldname, value]) => settingsStateRef.current[fieldname] !== value);
+    if (changedEntries.length === 0) {
+      return;
+    }
+
+    const changedPatch = Object.fromEntries(changedEntries);
+    const nextState = { ...settingsStateRef.current, ...changedPatch };
+    settingsStateRef.current = nextState;
+    setSettingsState(nextState);
     runSync('update settings', async () => {
-      await updateSettingsRecord(patch);
+      await updateSettingsRecord(changedPatch);
     });
   };
 

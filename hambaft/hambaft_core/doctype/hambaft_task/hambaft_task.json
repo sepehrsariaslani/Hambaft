@@ -2,7 +2,7 @@
  "name": "Hambaft Task",
  "doctype": "DocType",
  "module": "Hambaft Core",
- "custom": 1,
+ "custom": 0,
  "autoname": "format:TASK-{#####}",
  "fields": [
   {

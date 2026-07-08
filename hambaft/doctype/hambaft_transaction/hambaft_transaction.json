@@ -1,38 +1,154 @@
 {
-  "name": "Hambaft Transaction",
-  "doctype": "DocType",
-  "module": "Hambaft Finance",
-  "custom": 1,
-  "autoname": "format:TXN-{#####}",
-  "istable": 0,
-  "issingle": 0,
-  "is_submittable": 0,
-  "track_changes": 1,
-  "allow_import": 1,
-  "fields": [
-    {"fieldname": "transaction_type", "fieldtype": "Select", "label": "\u0646\u0648\u0639 \u062a\u0631\u0627\u06a9\u0646\u0634", "options": "\u062f\u0631\u0622\u0645\u062f\n\u0647\u0632\u06cc\u0646\u0647\n\u0627\u0646\u062a\u0642\u0627\u0644\n\u067e\u0633\u200c\u0627\u0646\u062f\u0627\u0632\n\u067e\u0631\u062f\u0627\u062e\u062a \u0628\u062f\u0647\u06cc", "reqd": 1, "in_list_view": 1, "in_standard_filter": 1},
-    {"fieldname": "transaction_date", "fieldtype": "Date", "label": "\u062a\u0627\u0631\u06cc\u062e \u062a\u0631\u0627\u06a9\u0646\u0634", "reqd": 1, "in_list_view": 1, "in_standard_filter": 1},
-    {"fieldname": "amount", "fieldtype": "Currency", "label": "\u0645\u0628\u0644\u063a", "reqd": 1, "in_list_view": 1},
-    {"fieldname": "currency", "fieldtype": "Link", "label": "\u0648\u0627\u062d\u062f \u067e\u0648\u0644", "options": "Currency"},
-    {"fieldname": "account", "fieldtype": "Link", "label": "\u062d\u0633\u0627\u0628 \u0645\u0628\u062f\u0623", "options": "Hambaft Finance Account", "reqd": 1, "in_list_view": 1, "in_standard_filter": 1},
-    {"fieldname": "to_account", "fieldtype": "Link", "label": "\u062d\u0633\u0627\u0628 \u0645\u0642\u0635\u062f", "options": "Hambaft Finance Account"},
-    {"fieldname": "category", "fieldtype": "Link", "label": "\u062f\u0633\u062a\u0647\u200c\u0628\u0646\u062f\u06cc", "options": "Hambaft Finance Category", "in_list_view": 1, "in_standard_filter": 1},
-    {"fieldname": "description", "fieldtype": "Small Text", "label": "\u0634\u0631\u062d", "in_list_view": 1},
-    {"fieldname": "note", "fieldtype": "Text Editor", "label": "\u06cc\u0627\u062f\u062f\u0627\u0634\u062a"},
-    {"fieldname": "receipt", "fieldtype": "Attach", "label": "\u0631\u0633\u06cc\u062f"},
-    {"fieldname": "is_recurring", "fieldtype": "Check", "label": "\u062a\u06a9\u0631\u0627\u0631\u06cc", "default": 0},
-    {"fieldname": "recurrence_rule", "fieldtype": "Link", "label": "\u0642\u0627\u0639\u062f\u0647 \u062a\u06a9\u0631\u0627\u0631", "options": "Hambaft Recurrence Rule"},
-    {"fieldname": "linked_goal", "fieldtype": "Link", "label": "\u0647\u062f\u0641 \u0645\u0631\u062a\u0628\u0637", "options": "Hambaft Goal"},
-    {"fieldname": "linked_project", "fieldtype": "Link", "label": "\u067e\u0631\u0648\u0698\u0647 \u0645\u0631\u062a\u0628\u0637", "options": "Hambaft Project"},
-    {"fieldname": "user", "fieldtype": "Link", "label": "\u06a9\u0627\u0631\u0628\u0631", "options": "User", "reqd": 1, "in_list_view": 1, "in_standard_filter": 1},
-    {"fieldname": "amended_from", "fieldtype": "Link", "label": "Amended From", "options": "Hambaft Transaction"},
-    {"fieldname": "reference_number", "fieldtype": "Data", "label": "\u0634\u0645\u0627\u0631\u0647 \u0627\u0631\u062c\u0627\u0639"}
-  ],
-  "permissions": [
-    {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1},
-    {"role": "Hambaft User", "read": 1, "write": 1, "create": 1, "delete": 1, "if_owner": 1},
-    {"role": "All", "read": 1, "write": 1, "create": 1, "delete": 1, "if_owner": 1}
-  ],
-  "sort_field": "transaction_date",
-  "sort_order": "DESC"
+ "name": "Hambaft Transaction",
+ "doctype": "DocType",
+ "module": "Hambaft",
+ "custom": 0,
+ "autoname": "format:TXN-{#####}",
+ "istable": 0,
+ "issingle": 0,
+ "is_submittable": 0,
+ "track_changes": 1,
+ "allow_import": 1,
+ "fields": [
+  {
+   "fieldname": "transaction_type",
+   "fieldtype": "Select",
+   "label": "نوع تراکنش",
+   "options": "درآمد\nهزینه\nانتقال\nپس‌انداز\nپرداخت بدهی",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "transaction_date",
+   "fieldtype": "Date",
+   "label": "تاریخ تراکنش",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "amount",
+   "fieldtype": "Currency",
+   "label": "مبلغ",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "currency",
+   "fieldtype": "Link",
+   "label": "واحد پول",
+   "options": "Currency"
+  },
+  {
+   "fieldname": "account",
+   "fieldtype": "Link",
+   "label": "حساب مبدأ",
+   "options": "Hambaft Finance Account",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "to_account",
+   "fieldtype": "Link",
+   "label": "حساب مقصد",
+   "options": "Hambaft Finance Account"
+  },
+  {
+   "fieldname": "category",
+   "fieldtype": "Link",
+   "label": "دسته‌بندی",
+   "options": "Hambaft Finance Category",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "label": "شرح",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "note",
+   "fieldtype": "Text Editor",
+   "label": "یادداشت"
+  },
+  {
+   "fieldname": "receipt",
+   "fieldtype": "Attach",
+   "label": "رسید"
+  },
+  {
+   "fieldname": "is_recurring",
+   "fieldtype": "Check",
+   "label": "تکراری",
+   "default": 0
+  },
+  {
+   "fieldname": "recurrence_rule",
+   "fieldtype": "Link",
+   "label": "قاعده تکرار",
+   "options": "Hambaft Recurrence Rule"
+  },
+  {
+   "fieldname": "linked_goal",
+   "fieldtype": "Link",
+   "label": "هدف مرتبط",
+   "options": "Hambaft Goal"
+  },
+  {
+   "fieldname": "linked_project",
+   "fieldtype": "Link",
+   "label": "پروژه مرتبط",
+   "options": "Hambaft Project"
+  },
+  {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "label": "کاربر",
+   "options": "User",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "options": "Hambaft Transaction"
+  },
+  {
+   "fieldname": "reference_number",
+   "fieldtype": "Data",
+   "label": "شماره ارجاع"
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1
+  },
+  {
+   "role": "Hambaft User",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "if_owner": 1
+  },
+  {
+   "role": "All",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "if_owner": 1
+  }
+ ],
+ "sort_field": "transaction_date",
+ "sort_order": "DESC"
 }

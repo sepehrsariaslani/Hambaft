@@ -2,26 +2,102 @@
  "doctype": "DocType",
  "name": "Hambaft Nutrition Log",
  "module": "Hambaft",
- "custom": 1,
+ "custom": 0,
  "autoname": "format:NUT-{#####}",
  "track_changes": 1,
  "fields": [
-  {"fieldname": "user", "fieldtype": "Link", "label": "کاربر", "options": "User", "reqd": 1, "in_list_view": 1},
-  {"fieldname": "log_date", "fieldtype": "Date", "label": "تاریخ", "reqd": 1, "in_list_view": 1},
-  {"fieldname": "log_time", "fieldtype": "Time", "label": "زمان"},
-  {"fieldname": "meal_type", "fieldtype": "Select", "label": "نوع وعده", "options": "breakfast\nlunch\ndinner\nsnack", "default": "breakfast"},
-  {"fieldname": "foods", "fieldtype": "Text", "label": "مواد غذایی"},
-  {"fieldname": "calories", "fieldtype": "Int", "label": "کالری", "default": 0},
-  {"fieldname": "protein", "fieldtype": "Float", "label": "پروتئین", "default": 0},
-  {"fieldname": "carbs", "fieldtype": "Float", "label": "کربوهیدرات", "default": 0},
-  {"fieldname": "fat", "fieldtype": "Float", "label": "چربی", "default": 0},
-  {"fieldname": "water_glasses", "fieldtype": "Float", "label": "لیوان آب", "default": 0},
-  {"fieldname": "notes", "fieldtype": "Small Text", "label": "یادداشت"}
+  {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "label": "کاربر",
+   "options": "User",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "log_date",
+   "fieldtype": "Date",
+   "label": "تاریخ",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "log_time",
+   "fieldtype": "Time",
+   "label": "زمان"
+  },
+  {
+   "fieldname": "meal_type",
+   "fieldtype": "Select",
+   "label": "نوع وعده",
+   "options": "breakfast\nlunch\ndinner\nsnack",
+   "default": "breakfast"
+  },
+  {
+   "fieldname": "foods",
+   "fieldtype": "Text",
+   "label": "مواد غذایی"
+  },
+  {
+   "fieldname": "calories",
+   "fieldtype": "Int",
+   "label": "کالری",
+   "default": 0
+  },
+  {
+   "fieldname": "protein",
+   "fieldtype": "Float",
+   "label": "پروتئین",
+   "default": 0
+  },
+  {
+   "fieldname": "carbs",
+   "fieldtype": "Float",
+   "label": "کربوهیدرات",
+   "default": 0
+  },
+  {
+   "fieldname": "fat",
+   "fieldtype": "Float",
+   "label": "چربی",
+   "default": 0
+  },
+  {
+   "fieldname": "water_glasses",
+   "fieldtype": "Float",
+   "label": "لیوان آب",
+   "default": 0
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "یادداشت"
+  }
  ],
  "permissions": [
-  {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1},
-  {"role": "Hambaft User", "read": 1, "write": 1, "create": 1, "delete": 1, "if_owner": 1},
-  {"role": "All", "read": 1, "write": 1, "create": 1, "delete": 1, "if_owner": 1}
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1
+  },
+  {
+   "role": "Hambaft User",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "if_owner": 1
+  },
+  {
+   "role": "All",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "if_owner": 1
+  }
  ],
  "sort_field": "log_date",
  "sort_order": "DESC"

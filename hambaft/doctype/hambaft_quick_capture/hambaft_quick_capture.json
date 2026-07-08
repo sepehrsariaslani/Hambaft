@@ -88,7 +88,7 @@
  "sort_field": "created_on",
  "sort_order": "DESC",
  "doctype": "DocType",
- "custom": 1,
+ "custom": 0,
  "istable": 0,
  "issingle": 0
 }

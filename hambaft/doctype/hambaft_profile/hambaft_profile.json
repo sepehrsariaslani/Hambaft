@@ -50,7 +50,7 @@
   }
  ],
  "doctype": "DocType",
- "custom": 1,
- "istable": 1,
+ "custom": 0,
+ "istable": 0,
  "issingle": 0
 }
