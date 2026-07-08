@@ -122,6 +122,7 @@ export interface Goal {
   title: string;
   description: string;
   category: GoalCategory;
+  areaId?: string; // Link to Hambaft Area
   targetDate: string; // YYYY-MM-DD
   milestones: Milestone[];
   createdAt: string;

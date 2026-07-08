@@ -23,6 +23,12 @@
    "label": "توضیحات"
   },
   {
+   "fieldname": "project",
+   "fieldtype": "Link",
+   "label": "پروژه",
+   "options": "Hambaft Project"
+  },
+  {
    "fieldname": "goal",
    "fieldtype": "Link",
    "label": "هدف",

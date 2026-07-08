@@ -25,6 +25,14 @@
    "label": "توضیحات"
   },
   {
+   "fieldname": "area",
+   "fieldtype": "Link",
+   "label": "حوزه",
+   "options": "Hambaft Area",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
    "fieldname": "category",
    "fieldtype": "Select",
    "label": "دسته‌بندی",

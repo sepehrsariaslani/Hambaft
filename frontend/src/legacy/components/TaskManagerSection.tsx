@@ -1,5 +1,8 @@
-import { useState, useMemo, useCallback } from 'react'
-import type { Task, Goal, Project } from '../types'
+import { useState, useMemo, useCallback, lazy, Suspense } from 'react'
+import type { Task, Goal } from '../types'
+
+const TaskTableView = lazy(() => import('./TaskTableView'))
+const TaskKanbanView = lazy(() => import('./TaskKanbanView'))
 
 interface TaskManagerSectionProps {
   tasks: Task[]
@@ -12,9 +15,11 @@ interface TaskManagerSectionProps {
   todayDate: string
 }
 
+type ViewMode = 'list' | 'table' | 'kanban'
 type GroupBy = 'none' | 'project' | 'priority' | 'status' | 'category' | 'dueDate'
 type SortBy = 'dueDate' | 'priority' | 'createdAt' | 'title'
 type FilterStatus = 'all' | 'open' | 'completed'
+type KanbanGroup = 'status' | 'priority' | 'project'
 
 const priorityOrder: Record<string, number> = { high: 0, medium: 1, low: 2 }
 const priorityLabels: Record<string, string> = { high: 'بالا', medium: 'متوسط', low: 'پایین' }
@@ -57,12 +62,14 @@ export default function TaskManagerSection({
   onViewTaskDetails,
   todayDate,
 }: TaskManagerSectionProps) {
+  const [viewMode, setViewMode] = useState<ViewMode>('list')
   const [search, setSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('all')
   const [filterPriority, setFilterPriority] = useState<string>('all')
   const [filterCategory, setFilterCategory] = useState<string>('all')
   const [groupBy, setGroupBy] = useState<GroupBy>('none')
   const [sortBy, setSortBy] = useState<SortBy>('dueDate')
+  const [kanbanGroup, setKanbanGroup] = useState<KanbanGroup>('status')
   const [newTaskTitle, setNewTaskTitle] = useState('')
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set())
 
@@ -215,15 +222,38 @@ export default function TaskManagerSection({
         </div>
 
         <div className="flex flex-wrap gap-3 items-center border-t border-[#E6DFD3] pt-3">
-          <span className="text-xs font-bold text-[#8D7F72]">گروه‌بندی:</span>
-          <Segmented value={groupBy} onChange={(v) => setGroupBy(v as GroupBy)} options={[
-            { value: 'none', label: 'بدون' },
-            { value: 'project', label: 'پروژه' },
-            { value: 'priority', label: 'اولویت' },
-            { value: 'status', label: 'وضعیت' },
-            { value: 'category', label: 'دسته' },
-            { value: 'dueDate', label: 'تاریخ' },
+          {/* View Switcher */}
+          <span className="text-xs font-bold text-[#8D7F72]">نمایش:</span>
+          <Segmented value={viewMode} onChange={(v) => setViewMode(v as ViewMode)} options={[
+            { value: 'list', label: 'لیست' },
+            { value: 'table', label: 'جدول' },
+            { value: 'kanban', label: 'کانبان' },
           ]} />
+
+          {viewMode === 'kanban' && (
+            <>
+              <span className="text-xs font-bold text-[#8D7F72] mr-2">ستون‌ها:</span>
+              <Segmented value={kanbanGroup} onChange={(v) => setKanbanGroup(v as KanbanGroup)} options={[
+                { value: 'status', label: 'وضعیت' },
+                { value: 'priority', label: 'اولویت' },
+                { value: 'project', label: 'پروژه' },
+              ]} />
+            </>
+          )}
+
+          {viewMode !== 'kanban' && (
+            <>
+              <span className="text-xs font-bold text-[#8D7F72] mr-2">گروه‌بندی:</span>
+              <Segmented value={groupBy} onChange={(v) => setGroupBy(v as GroupBy)} options={[
+                { value: 'none', label: 'بدون' },
+                { value: 'project', label: 'پروژه' },
+                { value: 'priority', label: 'اولویت' },
+                { value: 'status', label: 'وضعیت' },
+                { value: 'category', label: 'دسته' },
+                { value: 'dueDate', label: 'تاریخ' },
+              ]} />
+            </>
+          )}
 
           <span className="text-xs font-bold text-[#8D7F72] mr-2">مرتب‌سازی:</span>
           <Segmented value={sortBy} onChange={(v) => setSortBy(v as SortBy)} options={[
@@ -235,36 +265,66 @@ export default function TaskManagerSection({
         </div>
       </div>
 
-      {/* Task List */}
-      <div className="space-y-6">
-        {Object.entries(grouped).map(([groupName, groupTasks]) => (
-          <div key={groupName} className="space-y-3">
-            {groupBy !== 'none' && (
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-black text-[#2d3025]">{groupName}</h3>
-                <span className="text-[10px] font-bold text-[#8D7F72] bg-[#E6DFD3] px-2 py-0.5 rounded-full">{groupTasks.length}</span>
-              </div>
-            )}
-            <div className="space-y-2">
-              {groupTasks.map((task) => (
-                <TaskRow
-                  key={task.id}
-                  task={task}
-                  selected={selectedTaskIds.has(task.id)}
-                  onToggleSelect={() => toggleSelect(task.id)}
-                  onToggle={() => onToggleTask(task.id)}
-                  onDelete={() => onDeleteTask(task.id)}
-                  onView={() => onViewTaskDetails?.(task.id)}
-                  todayDate={todayDate}
-                />
-              ))}
-              {groupTasks.length === 0 && (
-                <div className="text-center py-8 text-sm text-[#9D978B]">تسکی یافت نشد</div>
+      {/* Views */}
+      {viewMode === 'list' && (
+        <div className="space-y-6">
+          {Object.entries(grouped).map(([groupName, groupTasks]) => (
+            <div key={groupName} className="space-y-3">
+              {groupBy !== 'none' && (
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-black text-[#2d3025]">{groupName}</h3>
+                  <span className="text-[10px] font-bold text-[#8D7F72] bg-[#E6DFD3] px-2 py-0.5 rounded-full">{groupTasks.length}</span>
+                </div>
               )}
+              <div className="space-y-2">
+                {groupTasks.map((task) => (
+                  <TaskRow
+                    key={task.id}
+                    task={task}
+                    selected={selectedTaskIds.has(task.id)}
+                    onToggleSelect={() => toggleSelect(task.id)}
+                    onToggle={() => onToggleTask(task.id)}
+                    onDelete={() => onDeleteTask(task.id)}
+                    onView={() => onViewTaskDetails?.(task.id)}
+                    todayDate={todayDate}
+                  />
+                ))}
+                {groupTasks.length === 0 && (
+                  <div className="text-center py-8 text-sm text-[#9D978B]">تسکی یافت نشد</div>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
+
+      {viewMode === 'table' && (
+        <Suspense fallback={<div className="text-center py-10 text-sm text-[#9D978B]">در حال بارگذاری جدول...</div>}>
+          <TaskTableView
+            tasks={filteredTasks}
+            goals={goals}
+            onToggleTask={onToggleTask}
+            onDeleteTask={onDeleteTask}
+            onUpdateTask={onUpdateTask}
+            onViewTaskDetails={onViewTaskDetails}
+            todayDate={todayDate}
+          />
+        </Suspense>
+      )}
+
+      {viewMode === 'kanban' && (
+        <Suspense fallback={<div className="text-center py-10 text-sm text-[#9D978B]">در حال بارگذاری کانبان...</div>}>
+          <TaskKanbanView
+            tasks={filteredTasks}
+            goals={goals}
+            onToggleTask={onToggleTask}
+            onDeleteTask={onDeleteTask}
+            onUpdateTask={onUpdateTask}
+            onViewTaskDetails={onViewTaskDetails}
+            groupBy={kanbanGroup}
+          />
+        </Suspense>
+      )}
     </div>
   )
 }
