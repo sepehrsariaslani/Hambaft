@@ -85,6 +85,7 @@ import DocumentsSection from './components/DocumentsSection';
 import MindfulnessSection from './components/MindfulnessSection';
 import OccasionsSection from './components/OccasionsSection';
 import NotionNotesSection from './components/NotionNotesSection';
+import TaskManagerSection from './components/TaskManagerSection';
 import NutritionSection from './components/NutritionSection';
 import FitnessSection from './components/FitnessSection';
 import MoodSection from './components/MoodSection';
@@ -147,9 +148,9 @@ const NAVIGATION_GROUPS = [
   {
     title: 'برنامه‌ریزی و زمان',
     items: [
-      { id: 'journal', label: 'کارها و ژورنال روزانه', icon: BookOpen },
+      { id: 'journal', label: 'دفترچه یادداشت‌ها', icon: BookOpen },
+      { id: 'tasks', label: 'مدیریت تسک‌ها', icon: FileText },
       { id: 'inbox', label: 'جعبه ورودی (Inbox)', icon: Info },
-      { id: 'notes', label: 'دفترچه نوتشن (بلوکی)', icon: FileText },
       { id: 'calendar', label: 'تقویم توازن زندگی', icon: Calendar },
       { id: 'occasions', label: 'تقویم مناسبت‌ها', icon: Gift },
       { id: 'balance_report', label: 'گزارش توازن زندگی', icon: Activity }
@@ -244,8 +245,9 @@ function tabToPath(tab: string, ids: { taskId?: string | null; goalId?: string |
     case 'coach': return '/coach';
     case 'contacts': return '/contacts';
     case 'inbox': return '/inbox';
-    case 'journal':
-    case 'notes': return '/journal';
+    case 'journal': return '/journal';
+    case 'tasks': return '/tasks';
+    case 'mood': return '/mood';
     case 'calendar': return '/calendar';
     case 'occasions': return '/occasions';
     case 'balance_report': return '/balance-report';
@@ -259,7 +261,7 @@ function tabToPath(tab: string, ids: { taskId?: string | null; goalId?: string |
     case 'finance': return '/finance';
     case 'documents': return '/documents';
     case 'profile': return '/profile';
-    case 'task-detail': return ids.taskId ? `/task/${ids.taskId}` : '/journal';
+    case 'task-detail': return ids.taskId ? `/task/${ids.taskId}` : '/tasks';
     case 'home':
     case 'dashboard':
     default:
@@ -2818,7 +2820,7 @@ export default function App({
     setQuickHabitName('');
     setQuickHabitDesc('');
     setQuickAddType(null);
-    goToTab('journal'); // Route to habits/tasks view
+    goToTab('tasks'); // Route to tasks view
   };
 
   const submitQuickExpense = (e: React.FormEvent) => {
@@ -3007,7 +3009,6 @@ export default function App({
           />
         );
       case 'habits':
-      case 'tasks':
         return (
           <HabitSection 
             habits={lifeData.habits}
@@ -3020,26 +3021,24 @@ export default function App({
         );
       case 'journal':
         return (
-          <JournalSection 
+          <NotionNotesSection
+            initialPages={notionPages}
+            onPagesChange={(pages) => patchSettings({ notion_pages_json: JSON.stringify(pages) })}
+          />
+        );
+      case 'tasks':
+        return (
+          <TaskManagerSection
             tasks={lifeData.tasks}
-            journalEntries={lifeData.journalEntries}
-            onAddTask={handleAddTask}
+            goals={lifeData.goals}
             onToggleTask={handleToggleTask}
             onDeleteTask={handleDeleteTask}
-            onAddJournalEntry={handleAddJournalEntry}
-            onDeleteJournalEntry={handleDeleteJournalEntry}
-            todayDate={TODAY_DATE}
+            onUpdateTask={handleUpdateTask}
+            onAddTask={handleAddTask}
             onViewTaskDetails={(id) => {
               goToTaskDetail(id);
             }}
-            activeTimerTaskId={activeTimerTaskId}
-            activeTimerSeconds={activeTimerSeconds}
-            isTimerRunning={isTimerRunning}
-            onStartTimer={handleStartTimer}
-            onPauseTimer={handlePauseTimer}
-            onResumeTimer={handleResumeTimer}
-            onStopTimer={handleStopTimer}
-            onResetTimer={handleResetTimerForTask}
+            todayDate={TODAY_DATE}
           />
         );
       case 'task-detail':
@@ -3053,7 +3052,7 @@ export default function App({
           return null;
         })();
         if (!selectedTask) {
-          goToTab('journal');
+          goToTab('tasks');
           return null;
         }
         return (
@@ -3063,9 +3062,9 @@ export default function App({
             onUpdateTask={handleUpdateTask}
             onDeleteTask={(id) => {
               handleDeleteTask(id);
-              goToTab('journal');
+              goToTab('tasks');
             }}
-            onBack={() => goToTab('journal')}
+            onBack={() => goToTab('tasks')}
             activeTimerTaskId={activeTimerTaskId}
             activeTimerSeconds={activeTimerSeconds}
             isTimerRunning={isTimerRunning}
@@ -3288,13 +3287,7 @@ export default function App({
             todayDate={TODAY_DATE}
           />
         );
-      case 'notes':
-        return (
-          <NotionNotesSection
-            initialPages={notionPages}
-            onPagesChange={(pages) => patchSettings({ notion_pages_json: JSON.stringify(pages) })}
-          />
-        );
+
       case 'coach':
         return (
           <ProfileSection 
@@ -3408,7 +3401,9 @@ export default function App({
                 <h2 className="text-base font-black text-[#2D3025] dark:text-[#E8ECE0] font-serif-elegant flex items-center gap-2">
                   <span>{
                     activeTab === 'dashboard' || activeTab === 'home' ? 'داشبورد جامع همبافت' :
-                    activeTab === 'journal' ? 'برنامه‌ریزی، کارها و ژورنال خودآگاهی' :
+                    activeTab === 'journal' ? 'دفترچه یادداشت‌ها' :
+                    activeTab === 'tasks' ? 'مدیریت تسک‌ها' :
+                    activeTab === 'mood' ? 'ارزیابی احساسات و مود' :
                     activeTab === 'calendar' ? 'تقویم زندگی و زمان‌بندی توازن' :
                     activeTab === 'occasions' ? 'تقویم مناسبت‌ها و یادآورهای مهم' :
                     activeTab === 'sleep' ? 'تنظیم بیوریتم بدنی و ردیاب علمی خواب' :
@@ -4206,17 +4201,17 @@ export default function App({
             <span>منو</span>
           </button>
 
-          {/* Item 2: Tasks & Habits */}
-          <button 
+          {/* Item 2: Tasks */}
+          <button
             onClick={() => {
-              goToTab('journal');
+              goToTab('tasks');
               setMobileMenuOpen(false);
             }}
             className={`flex flex-col items-center gap-1 flex-1 py-1 cursor-pointer transition-colors ${
-              activeTab === 'journal' ? 'text-white scale-105' : 'text-[#DDE2D5]/70 hover:text-white'
+              activeTab === 'tasks' ? 'text-white scale-105' : 'text-[#DDE2D5]/70 hover:text-white'
             }`}
           >
-            <BookOpen className="w-4 h-4" />
+            <FileText className="w-4 h-4" />
             <span>کارها</span>
           </button>
 

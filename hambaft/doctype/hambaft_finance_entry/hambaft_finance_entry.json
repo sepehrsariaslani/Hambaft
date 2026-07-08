@@ -1,84 +1,84 @@
 {
- "name": "Hambaft Finance Entry",
- "doctype": "DocType",
- "module": "Hambaft Core",
- "custom": 0,
- "autoname": "format:FIN-{#####}",
- "fields": [
-  {
-   "fieldname": "title",
-   "fieldtype": "Data",
-   "label": "عنوان",
-   "reqd": 1,
-   "in_list_view": 1,
-   "in_standard_filter": 1
-  },
-  {
-   "fieldname": "entry_type",
-   "fieldtype": "Select",
-   "label": "نوع",
-   "options": "درآمد\nهزینه",
-   "reqd": 1,
-   "in_list_view": 1,
-   "in_standard_filter": 1
-  },
-  {
-   "fieldname": "amount",
-   "fieldtype": "Currency",
-   "label": "مبلغ",
-   "reqd": 1,
-   "in_list_view": 1
-  },
-  {
-   "fieldname": "category",
-   "fieldtype": "Select",
-   "label": "دسته‌بندی",
-   "options": "غذا\nحمل‌ونقل\nقبض\nسرگرمی\nسلامت\nآموزش\nسایر",
-   "default": "سایر",
-   "in_list_view": 1,
-   "in_standard_filter": 1
-  },
-  {
-   "fieldname": "date",
-   "fieldtype": "Date",
-   "label": "تاریخ",
-   "reqd": 1,
-   "in_list_view": 1
-  },
-  {
-   "fieldname": "description",
-   "fieldtype": "Text",
-   "label": "توضیحات"
-  },
-  {
-   "fieldname": "user",
-   "fieldtype": "Link",
-   "label": "کاربر",
-   "options": "User",
-   "reqd": 1,
-   "in_list_view": 1,
-   "in_standard_filter": 1
-  }
- ],
- "permissions": [
-  {
-   "role": "System Manager",
-   "read": 1,
-   "write": 1,
-   "create": 1,
-   "delete": 1
-  },
-  {
-   "role": "All",
-   "read": 1,
-   "write": 1,
-   "create": 1,
-   "delete": 1,
-   "if_owner": 1
-  }
- ],
- "sort_field": "date",
- "sort_order": "DESC",
- "istable": 1,
- "issingle": 0
+  "name": "Hambaft Finance Entry",
+  "doctype": "DocType",
+  "module": "Hambaft",
+  "custom": 0,
+  "autoname": "format:FIN-{#####}",
+  "fields": [
+    {
+      "fieldname": "title",
+      "fieldtype": "Data",
+      "label": "عنوان",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "entry_type",
+      "fieldtype": "Select",
+      "label": "نوع",
+      "options": "درآمد\nهزینه",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "amount",
+      "fieldtype": "Currency",
+      "label": "مبلغ",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "category",
+      "fieldtype": "Select",
+      "label": "دسته‌بندی",
+      "options": "غذا\nحمل‌ونقل\nقبض\nسرگرمی\nسلامت\nآموزش\nسایر",
+      "default": "سایر",
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "date",
+      "fieldtype": "Date",
+      "label": "تاریخ",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "description",
+      "fieldtype": "Text",
+      "label": "توضیحات"
+    },
+    {
+      "fieldname": "user",
+      "fieldtype": "Link",
+      "label": "کاربر",
+      "options": "User",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    }
+  ],
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1
+    },
+    {
+      "role": "All",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "if_owner": 1
+    }
+  ],
+  "sort_field": "date",
+  "sort_order": "DESC",
+  "istable": 1,
+  "issingle": 0
 }

@@ -1,93 +1,93 @@
 {
- "name": "Hambaft AI Message",
- "creation": "2026-01-01 00:00:00",
- "modified": "2026-01-01 00:00:00",
- "modified_by": "Administrator",
- "owner": "Administrator",
- "docstatus": 0,
- "module": "Hambaft AI",
- "istable": 1,
- "track_changes": 1,
- "fields": [
-  {
-   "fieldname": "user",
-   "fieldtype": "Link",
-   "label": "کاربر",
-   "options": "User",
-   "reqd": 1,
-   "in_list_view": 1,
-   "in_standard_filter": 1
-  },
-  {
-   "fieldname": "conversation",
-   "fieldtype": "Link",
-   "label": "مکالمه",
-   "options": "Hambaft AI Conversation",
-   "reqd": 1,
-   "in_list_view": 1,
-   "in_standard_filter": 1
-  },
-  {
-   "fieldname": "role",
-   "fieldtype": "Select",
-   "label": "نقش",
-   "options": "کاربر\nدستیار\nسیستم",
-   "reqd": 1,
-   "in_list_view": 1
-  },
-  {
-   "fieldname": "content",
-   "fieldtype": "Text Editor",
-   "label": "محتوا",
-   "reqd": 1
-  },
-  {
-   "fieldname": "tokens_used",
-   "fieldtype": "Int",
-   "label": "توکن مصرفی",
-   "read_only": 1
-  },
-  {
-   "fieldname": "model",
-   "fieldtype": "Data",
-   "label": "مدل"
-  },
-  {
-   "fieldname": "timestamp",
-   "fieldtype": "Datetime",
-   "label": "زمان",
-   "read_only": 1
-  },
-  {
-   "fieldname": "is_actionable",
-   "fieldtype": "Check",
-   "label": "قابل اقدام",
-   "default": 0
-  },
-  {
-   "fieldname": "action_taken",
-   "fieldtype": "Data",
-   "label": "اقدام انجام‌شده"
-  }
- ],
- "permissions": [
-  {
-   "role": "System Manager",
-   "read": 1,
-   "write": 1,
-   "create": 1,
-   "delete": 1
-  },
-  {
-   "role": "Hambaft User",
-   "read": 1,
-   "write": 1,
-   "create": 1,
-   "delete": 1,
-   "if_owner": 1
-  }
- ],
- "doctype": "DocType",
- "custom": 0,
- "issingle": 0
+  "name": "Hambaft AI Message",
+  "creation": "2026-01-01 00:00:00",
+  "modified": "2026-01-01 00:00:00",
+  "modified_by": "Administrator",
+  "owner": "Administrator",
+  "docstatus": 0,
+  "module": "Hambaft",
+  "istable": 1,
+  "track_changes": 1,
+  "fields": [
+    {
+      "fieldname": "user",
+      "fieldtype": "Link",
+      "label": "کاربر",
+      "options": "User",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "conversation",
+      "fieldtype": "Link",
+      "label": "مکالمه",
+      "options": "Hambaft AI Conversation",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "role",
+      "fieldtype": "Select",
+      "label": "نقش",
+      "options": "کاربر\nدستیار\nسیستم",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "content",
+      "fieldtype": "Text Editor",
+      "label": "محتوا",
+      "reqd": 1
+    },
+    {
+      "fieldname": "tokens_used",
+      "fieldtype": "Int",
+      "label": "توکن مصرفی",
+      "read_only": 1
+    },
+    {
+      "fieldname": "model",
+      "fieldtype": "Data",
+      "label": "مدل"
+    },
+    {
+      "fieldname": "timestamp",
+      "fieldtype": "Datetime",
+      "label": "زمان",
+      "read_only": 1
+    },
+    {
+      "fieldname": "is_actionable",
+      "fieldtype": "Check",
+      "label": "قابل اقدام",
+      "default": 0
+    },
+    {
+      "fieldname": "action_taken",
+      "fieldtype": "Data",
+      "label": "اقدام انجام‌شده"
+    }
+  ],
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1
+    },
+    {
+      "role": "Hambaft User",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "if_owner": 1
+    }
+  ],
+  "doctype": "DocType",
+  "custom": 0,
+  "issingle": 0
 }

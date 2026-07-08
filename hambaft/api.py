@@ -172,6 +172,12 @@ def _check_auth():
 def _owner_filter():
     return {"user": frappe.session.user}
 
+def _require_owner(doctype, name):
+    if not frappe.db.exists(doctype, {"name": name, "user": frappe.session.user}):
+        frappe.throw(_("Permission denied"), frappe.PermissionError)
+
+
+
 
 def _ensure_settings():
     """Ensure Profile Settings exists for current user."""
@@ -621,6 +627,7 @@ def create_goal(data):
         data = json.loads(data)
     doc = frappe.new_doc("Goal")
     doc.update(data)
+    doc.user = frappe.session.user
     doc.insert()
     frappe.db.commit()
     return _api_response({"goal": doc.as_dict()})
@@ -695,6 +702,7 @@ def create_task(data):
         data = json.loads(data)
     doc = frappe.new_doc("Task")
     doc.update(data)
+    doc.user = frappe.session.user
     doc.insert()
     frappe.db.commit()
     return _api_response({"task": doc.as_dict()})
@@ -769,6 +777,7 @@ def create_habit(data):
         data = json.loads(data)
     doc = frappe.new_doc("Habit")
     doc.update(data)
+    doc.user = frappe.session.user
     doc.insert()
     frappe.db.commit()
     return _api_response({"habit": doc.as_dict()})
@@ -822,6 +831,7 @@ def log_habit(habit, date=None, status="done", value=1, note=None, mood=None):
         doc.value = flt(value)
         doc.note = note
         doc.mood = mood
+    doc.user = frappe.session.user
     doc.save()
     frappe.db.commit()
     return _api_response({"log": doc.as_dict()})
@@ -886,6 +896,7 @@ def create_note(data):
         data = json.loads(data)
     doc = frappe.new_doc("Note")
     doc.update(data)
+    doc.user = frappe.session.user
     doc.insert()
     frappe.db.commit()
     return _api_response({"note": doc.as_dict()})
@@ -920,8 +931,9 @@ def get_finance_entries(type=None, from_date=None, to_date=None, category=None, 
     if frappe.session.user == "Guest":
         frappe.throw("Authentication required", frappe.AuthenticationError)
     filters = _owner_filter()
+    type_map = {"income": "درآمد", "expense": "هزینه"}
     if type:
-        filters["type"] = type
+        filters["type"] = type_map.get(type, type)
     if from_date:
         filters["date"] = [">=", from_date]
     if to_date:
@@ -935,10 +947,10 @@ def get_finance_entries(type=None, from_date=None, to_date=None, category=None, 
                              limit_page_length=cint(limit), start=cint(offset),
                              order_by="date desc, creation desc")
     total_income = flt(frappe.db.sql(
-        "SELECT SUM(amount) FROM `tabFinance Entry` WHERE user=%s AND type='income'",
+        "SELECT SUM(amount) FROM `tabFinance Entry` WHERE user=%s AND type='درآمد'",
         frappe.session.user)[0][0] or 0)
     total_expense = flt(frappe.db.sql(
-        "SELECT SUM(amount) FROM `tabFinance Entry` WHERE user=%s AND type='expense'",
+        "SELECT SUM(amount) FROM `tabFinance Entry` WHERE user=%s AND type='هزینه'",
         frappe.session.user)[0][0] or 0)
     return _api_response({"entries": entries, "total_income": total_income, "total_expense": total_expense})
 
@@ -958,6 +970,7 @@ def create_finance_entry(data):
         data = json.loads(data)
     doc = frappe.new_doc("Finance Entry")
     doc.update(data)
+    doc.user = frappe.session.user
     doc.insert()
     frappe.db.commit()
     return _api_response({"entry": doc.as_dict()})
@@ -998,13 +1011,13 @@ def get_finance_summary(month=None):
     else:
         to_date = f"{year}-{mon + 1:02d}-01"
     income = flt(frappe.db.sql(
-        "SELECT SUM(amount) FROM `tabFinance Entry` WHERE user=%s AND type='income' AND date>=%s AND date<%s",
+        "SELECT SUM(amount) FROM `tabFinance Entry` WHERE user=%s AND type='درآمد' AND date>=%s AND date<%s",
         (frappe.session.user, from_date, to_date))[0][0] or 0)
     expense = flt(frappe.db.sql(
-        "SELECT SUM(amount) FROM `tabFinance Entry` WHERE user=%s AND type='expense' AND date>=%s AND date<%s",
+        "SELECT SUM(amount) FROM `tabFinance Entry` WHERE user=%s AND type='هزینه' AND date>=%s AND date<%s",
         (frappe.session.user, from_date, to_date))[0][0] or 0)
     by_category = frappe.db.sql(
-        "SELECT category, SUM(amount) as total FROM `tabFinance Entry` WHERE user=%s AND type='expense' AND date>=%s AND date<%s GROUP BY category ORDER BY total DESC",
+        "SELECT category, SUM(amount) as total FROM `tabFinance Entry` WHERE user=%s AND type='هزینه' AND date>=%s AND date<%s GROUP BY category ORDER BY total DESC",
         (frappe.session.user, from_date, to_date), as_dict=True)
     return _api_response({
         "income": income, "expense": expense, "balance": income - expense,
@@ -1048,6 +1061,7 @@ def create_event(data):
         data = json.loads(data)
     doc = frappe.new_doc("Calendar Event")
     doc.update(data)
+    doc.user = frappe.session.user
     doc.insert()
     frappe.db.commit()
     return _api_response({"event": doc.as_dict()})
@@ -1112,6 +1126,7 @@ def create_review(data):
         data = json.loads(data)
     doc = frappe.new_doc("Review")
     doc.update(data)
+    doc.user = frappe.session.user
     doc.insert()
     frappe.db.commit()
     return _api_response({"review": doc.as_dict()})
@@ -1180,6 +1195,7 @@ def log_water(date=None, amount_ml=0, note=None):
 
     if note:
         setattr(doc, note_field, note)
+    doc.user = frappe.session.user
     doc.save()
     frappe.db.commit()
     return _api_response({"log": doc.as_dict()})
@@ -1246,6 +1262,7 @@ def create_supplement(data):
         data = json.loads(data)
     doc = frappe.new_doc("Supplement Reminder")
     doc.update(data)
+    doc.user = frappe.session.user
     doc.insert()
     frappe.db.commit()
     return _api_response({"supplement": doc.as_dict()})
@@ -1326,6 +1343,7 @@ def log_mood_energy(date=None, mood=None, energy=None, stress=None, sleep_hours=
             doc.sleep_hours = flt(sleep_hours)
         doc.note = note
         doc.gratitude = gratitude
+    doc.user = frappe.session.user
     doc.save()
     frappe.db.commit()
     return _api_response({"log": doc.as_dict()})
@@ -1385,6 +1403,7 @@ def create_motivation(data):
         data = json.loads(data)
     doc = frappe.new_doc("Motivation")
     doc.update(data)
+    doc.user = frappe.session.user
     doc.insert()
     frappe.db.commit()
     return _api_response({"motivation": doc.as_dict()})
@@ -1394,6 +1413,7 @@ def create_motivation(data):
 def toggle_favorite(name):
     if frappe.session.user == "Guest":
         frappe.throw("Authentication required", frappe.AuthenticationError)
+    _require_owner("Motivation", name)
     doc = frappe.get_doc("Motivation", name)
     doc.is_favorite = not doc.is_favorite
     doc.save()
@@ -1676,6 +1696,7 @@ def create_project(data):
 @frappe.whitelist()
 def update_project(name, data):
     _check_auth()
+    _require_owner("Hambaft Project", name)
     if isinstance(data, str):
         data = json.loads(data)
     data = data or {}
@@ -1712,6 +1733,7 @@ def update_project(name, data):
 @frappe.whitelist()
 def delete_project(name):
     _check_auth()
+    _require_owner("Hambaft Project", name)
     frappe.delete_doc("Hambaft Project", name, ignore_permissions=True)
     frappe.db.commit()
     return _api_response({"ok": True})
@@ -1758,6 +1780,7 @@ def create_document(data):
 @frappe.whitelist()
 def update_document(name, data):
     _check_auth()
+    _require_owner("Hambaft Document", name)
     if isinstance(data, str):
         data = json.loads(data)
     doc = frappe.get_doc("Hambaft Document", name)
@@ -1776,6 +1799,7 @@ def update_document(name, data):
 @frappe.whitelist()
 def delete_document(name):
     _check_auth()
+    _require_owner("Hambaft Document", name)
     frappe.delete_doc("Hambaft Document", name, ignore_permissions=True)
     frappe.db.commit()
     return _api_response({"ok": True})
@@ -1825,6 +1849,7 @@ def create_contact(data):
 @frappe.whitelist()
 def update_contact(name, data):
     _check_auth()
+    _require_owner("Hambaft Contact", name)
     if isinstance(data, str):
         data = json.loads(data)
     doc = frappe.get_doc("Hambaft Contact", name)
@@ -1846,6 +1871,7 @@ def update_contact(name, data):
 @frappe.whitelist()
 def delete_contact(name):
     _check_auth()
+    _require_owner("Hambaft Contact", name)
     frappe.delete_doc("Hambaft Contact", name, ignore_permissions=True)
     frappe.db.commit()
     return _api_response({"ok": True})
@@ -1883,6 +1909,7 @@ def create_occasion(data):
 @frappe.whitelist()
 def update_occasion(name, data):
     _check_auth()
+    _require_owner("Hambaft Occasion", name)
     if isinstance(data, str):
         data = json.loads(data)
     doc = frappe.get_doc("Hambaft Occasion", name)
@@ -1895,6 +1922,7 @@ def update_occasion(name, data):
 @frappe.whitelist()
 def delete_occasion(name):
     _check_auth()
+    _require_owner("Hambaft Occasion", name)
     frappe.delete_doc("Hambaft Occasion", name, ignore_permissions=True)
     frappe.db.commit()
     return _api_response({"ok": True})
@@ -1930,6 +1958,7 @@ def create_sleep_log(data):
 @frappe.whitelist()
 def update_sleep_log(name, data):
     _check_auth()
+    _require_owner("Hambaft Sleep Log", name)
     if isinstance(data, str):
         data = json.loads(data)
     doc = frappe.get_doc("Hambaft Sleep Log", name)
@@ -1942,6 +1971,7 @@ def update_sleep_log(name, data):
 @frappe.whitelist()
 def delete_sleep_log(name):
     _check_auth()
+    _require_owner("Hambaft Sleep Log", name)
     frappe.delete_doc("Hambaft Sleep Log", name, ignore_permissions=True)
     frappe.db.commit()
     return _api_response({"ok": True})
@@ -1976,6 +2006,7 @@ def create_mindfulness_session(data):
 @frappe.whitelist()
 def update_mindfulness_session(name, data):
     _check_auth()
+    _require_owner("Hambaft Mindfulness Session", name)
     if isinstance(data, str):
         data = json.loads(data)
     doc = frappe.get_doc("Hambaft Mindfulness Session", name)
@@ -1988,6 +2019,7 @@ def update_mindfulness_session(name, data):
 @frappe.whitelist()
 def delete_mindfulness_session(name):
     _check_auth()
+    _require_owner("Hambaft Mindfulness Session", name)
     frappe.delete_doc("Hambaft Mindfulness Session", name, ignore_permissions=True)
     frappe.db.commit()
     return _api_response({"ok": True})
@@ -2025,6 +2057,7 @@ def create_nutrition_log(data):
 @frappe.whitelist()
 def update_nutrition_log(name, data):
     _check_auth()
+    _require_owner("Hambaft Nutrition Log", name)
     if isinstance(data, str):
         data = json.loads(data)
     doc = frappe.get_doc("Hambaft Nutrition Log", name)
@@ -2037,6 +2070,7 @@ def update_nutrition_log(name, data):
 @frappe.whitelist()
 def delete_nutrition_log(name):
     _check_auth()
+    _require_owner("Hambaft Nutrition Log", name)
     frappe.delete_doc("Hambaft Nutrition Log", name, ignore_permissions=True)
     frappe.db.commit()
     return _api_response({"ok": True})
@@ -2076,6 +2110,7 @@ def create_workout_log(data):
 @frappe.whitelist()
 def update_workout_log(name, data):
     _check_auth()
+    _require_owner("Hambaft Workout Log", name)
     if isinstance(data, str):
         data = json.loads(data)
     doc = frappe.get_doc("Hambaft Workout Log", name)
@@ -2093,6 +2128,7 @@ def update_workout_log(name, data):
 @frappe.whitelist()
 def delete_workout_log(name):
     _check_auth()
+    _require_owner("Hambaft Workout Log", name)
     frappe.delete_doc("Hambaft Workout Log", name, ignore_permissions=True)
     frappe.db.commit()
     return _api_response({"ok": True})
@@ -2258,6 +2294,8 @@ def _advance_task_due(date_value, rule):
 
 @frappe.whitelist()
 def generate_recurring_tasks():
+    if frappe.session.user == "Guest":
+        frappe.throw("Authentication required", frappe.AuthenticationError)
     """Instantiate the next occurrence of each recurring task whose due_date
     has passed. Idempotent: skips when an instance already exists for the
     next occurrence date and user.
