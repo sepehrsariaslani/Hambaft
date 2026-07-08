@@ -1,135 +1,135 @@
 {
- "name": "Hambaft Project",
- "doctype": "DocType",
- "module": "Hambaft Core",
- "custom": 0,
- "autoname": "format:PRJ-{#####}",
- "istable": 0,
- "issingle": 0,
- "track_changes": 1,
- "fields": [
-  {
-   "fieldname": "user",
-   "fieldtype": "Link",
-   "label": "کاربر",
-   "reqd": 1,
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "options": "User"
-  },
-  {
-   "fieldname": "title",
-   "fieldtype": "Data",
-   "label": "عنوان",
-   "reqd": 1,
-   "in_list_view": 1,
-   "in_standard_filter": 1
-  },
-  {
-   "fieldname": "area",
-   "fieldtype": "Link",
-   "label": "حوزه",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "options": "Hambaft Area"
-  },
-  {
-   "fieldname": "goal",
-   "fieldtype": "Link",
-   "label": "هدف",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "options": "Goal"
-  },
-  {
-   "fieldname": "status",
-   "fieldtype": "Select",
-   "label": "وضعیت",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "options": "برنامه‌ریزی\nفعال\nمتوقف\nتکمیل‌شده\nلغو‌شده\nآرشیو‌شده",
-   "default": "برنامه‌ریزی"
-  },
-  {
-   "fieldname": "priority",
-   "fieldtype": "Select",
-   "label": "اولویت",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "options": "کم\nمتوسط\nزیاد\nحیاتی",
-   "default": "متوسط"
-  },
-  {
-   "fieldname": "start_date",
-   "fieldtype": "Date",
-   "label": "تاریخ شروع",
-   "in_list_view": 1
-  },
-  {
-   "fieldname": "target_date",
-   "fieldtype": "Date",
-   "label": "تاریخ هدف",
-   "in_list_view": 1
-  },
-  {
-   "fieldname": "progress",
-   "fieldtype": "Percent",
-   "label": "پیشرفت",
-   "in_list_view": 1,
-   "default": "0"
-  },
-  {
-   "fieldname": "description",
-   "fieldtype": "Text Editor",
-   "label": "توضیحات"
-  },
-  {
-   "fieldname": "notes",
-   "fieldtype": "Text Editor",
-   "label": "یادداشت‌ها"
-  },
-  {
-   "fieldname": "color",
-   "fieldtype": "Color",
-   "label": "رنگ"
-  },
-  {
-   "fieldname": "icon",
-   "fieldtype": "Data",
-   "label": "آیکون"
-  },
-  {
-   "fieldname": "tasks",
-   "fieldtype": "Table",
-   "label": "وظایف",
-   "options": "Hambaft Task"
-  }
- ],
- "permissions": [
-  {
-   "role": "System Manager",
-   "read": 1,
-   "write": 1,
-   "create": 1,
-   "delete": 1
-  },
-  {
-   "role": "Hambaft User",
-   "read": 1,
-   "write": 1,
-   "create": 1,
-   "delete": 1,
-   "if_owner": 1
-  },
-  {
-   "role": "All",
-   "read": 1,
-   "write": 1,
-   "create": 1,
-   "delete": 1,
-   "if_owner": 1
-  }
- ],
- "sort_field": "title",
- "sort_order": "ASC"
+  "name": "Hambaft Project",
+  "doctype": "DocType",
+  "module": "Hambaft",
+  "custom": 0,
+  "autoname": "format:PRJ-{#####}",
+  "istable": 0,
+  "issingle": 0,
+  "track_changes": 1,
+  "fields": [
+    {
+      "fieldname": "user",
+      "fieldtype": "Link",
+      "label": "کاربر",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1,
+      "options": "User"
+    },
+    {
+      "fieldname": "title",
+      "fieldtype": "Data",
+      "label": "عنوان",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "area",
+      "fieldtype": "Link",
+      "label": "حوزه",
+      "in_list_view": 1,
+      "in_standard_filter": 1,
+      "options": "Hambaft Area"
+    },
+    {
+      "fieldname": "goal",
+      "fieldtype": "Link",
+      "label": "هدف",
+      "in_list_view": 1,
+      "in_standard_filter": 1,
+      "options": "Goal"
+    },
+    {
+      "fieldname": "status",
+      "fieldtype": "Select",
+      "label": "وضعیت",
+      "in_list_view": 1,
+      "in_standard_filter": 1,
+      "options": "برنامه‌ریزی\nفعال\nمتوقف\nتکمیل‌شده\nلغو‌شده\nآرشیو‌شده",
+      "default": "برنامه‌ریزی"
+    },
+    {
+      "fieldname": "priority",
+      "fieldtype": "Select",
+      "label": "اولویت",
+      "in_list_view": 1,
+      "in_standard_filter": 1,
+      "options": "کم\nمتوسط\nزیاد\nحیاتی",
+      "default": "متوسط"
+    },
+    {
+      "fieldname": "start_date",
+      "fieldtype": "Date",
+      "label": "تاریخ شروع",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "target_date",
+      "fieldtype": "Date",
+      "label": "تاریخ هدف",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "progress",
+      "fieldtype": "Percent",
+      "label": "پیشرفت",
+      "in_list_view": 1,
+      "default": "0"
+    },
+    {
+      "fieldname": "description",
+      "fieldtype": "Text Editor",
+      "label": "توضیحات"
+    },
+    {
+      "fieldname": "notes",
+      "fieldtype": "Text Editor",
+      "label": "یادداشت‌ها"
+    },
+    {
+      "fieldname": "color",
+      "fieldtype": "Color",
+      "label": "رنگ"
+    },
+    {
+      "fieldname": "icon",
+      "fieldtype": "Data",
+      "label": "آیکون"
+    },
+    {
+      "fieldname": "tasks",
+      "fieldtype": "Table",
+      "label": "وظایف",
+      "options": "Hambaft Task"
+    }
+  ],
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1
+    },
+    {
+      "role": "Hambaft User",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "if_owner": 1
+    },
+    {
+      "role": "All",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "if_owner": 1
+    }
+  ],
+  "sort_field": "title",
+  "sort_order": "ASC"
 }
