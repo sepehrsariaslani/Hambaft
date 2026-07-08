@@ -66,6 +66,7 @@ export interface Project {
   milestones?: Milestone[];
   linkedGoalId?: string; // پیوند به هدف (Goal Tree)
   status?: 'waiting' | 'in_progress' | 'paused' | 'completed'; // ستون بورد کانبان
+  noteBlocks?: import('../notes/types').Block[]; // Notion-like rich text blocks
 }
 
 export interface Milestone {
@@ -138,6 +139,7 @@ export interface Goal {
   visionAffirmation?: string; // جمله انگیزشی اختصاصی
   parentGoalId?: string; // شناسه هدف بالاتر (درخت اهداف)
   goalLevel?: 'annual' | 'quarterly' | 'monthly' | 'none'; // سطح هدف
+  noteBlocks?: import('../notes/types').Block[]; // Notion-like rich text blocks
 }
 
 export interface SubTask {
@@ -166,6 +168,7 @@ export interface Task {
   projectId?: string; // پیوند به پروژه
   isDailyHighlight?: boolean; // تسک برجسته روزانه
   dependencies?: string[]; // پیش‌نیازها (شناسه تسک‌های دیگر)
+  noteBlocks?: import('../notes/types').Block[]; // Notion-like rich text blocks
 }
 
 export type MoodType = 'excited' | 'happy' | 'neutral' | 'tired' | 'sad' | 'stressed';

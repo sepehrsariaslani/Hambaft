@@ -2454,3 +2454,92 @@ def jalali_convert(date_str=None):
         "month_name": get_jalali_month_name(date_str),
         "jalali_year": get_jalali_year(date_str),
     }
+
+
+# ─── Notion-like Note Pages CRUD ─────────────────────────────────
+
+@frappe.whitelist()
+def get_note_pages(limit=100, offset=0):
+    _check_auth()
+    rows = frappe.get_all(
+        "Hambaft Note Page",
+        filters=_owner_filter(),
+        fields="*",
+        limit_page_length=cint(limit),
+        start=cint(offset),
+        order_by="modified desc",
+    )
+    for row in rows:
+        row["blocks"] = _loads_json(row.get("blocks_json"), [])
+    return _api_response({"pages": rows})
+
+
+@frappe.whitelist()
+def get_note_page(name):
+    _check_auth()
+    doc = frappe.get_doc("Hambaft Note Page", name)
+    result = doc.as_dict()
+    result["blocks"] = _loads_json(doc.blocks_json, [])
+    return _api_response({"page": result})
+
+
+@frappe.whitelist()
+def create_note_page(data):
+    _check_auth()
+    if isinstance(data, str):
+        data = json.loads(data)
+    data = data or {}
+    doc = frappe.new_doc("Hambaft Note Page")
+    doc.user = frappe.session.user
+    doc.title = data.get("title") or "بدون عنوان"
+    doc.icon = data.get("icon")
+    doc.cover = data.get("cover")
+    doc.parent_page = data.get("parentId")
+    doc.is_favorite = cint(data.get("isFavorite") or 0)
+    doc.is_archived = cint(data.get("isArchived") or 0)
+    doc.is_trashed = cint(data.get("isTrashed") or 0)
+    doc.blocks_json = json.dumps(data.get("blocks") or [], ensure_ascii=False)
+    doc.insert(ignore_permissions=True)
+    frappe.db.commit()
+    result = doc.as_dict()
+    result["blocks"] = _loads_json(doc.blocks_json, [])
+    return _api_response({"page": result})
+
+
+@frappe.whitelist()
+def update_note_page(name, data):
+    _check_auth()
+    _require_owner("Hambaft Note Page", name)
+    if isinstance(data, str):
+        data = json.loads(data)
+    doc = frappe.get_doc("Hambaft Note Page", name)
+    if "title" in data:
+        doc.title = data["title"]
+    if "icon" in data:
+        doc.icon = data["icon"]
+    if "cover" in data:
+        doc.cover = data["cover"]
+    if "parentId" in data:
+        doc.parent_page = data["parentId"] or None
+    if "isFavorite" in data:
+        doc.is_favorite = cint(data["isFavorite"])
+    if "isArchived" in data:
+        doc.is_archived = cint(data["isArchived"])
+    if "isTrashed" in data:
+        doc.is_trashed = cint(data["isTrashed"])
+    if "blocks" in data:
+        doc.blocks_json = json.dumps(data["blocks"] or [], ensure_ascii=False)
+    doc.save(ignore_permissions=True)
+    frappe.db.commit()
+    result = doc.as_dict()
+    result["blocks"] = _loads_json(doc.blocks_json, [])
+    return _api_response({"page": result})
+
+
+@frappe.whitelist()
+def delete_note_page(name):
+    _check_auth()
+    _require_owner("Hambaft Note Page", name)
+    frappe.delete_doc("Hambaft Note Page", name, ignore_permissions=True)
+    frappe.db.commit()
+    return _api_response({"ok": True})

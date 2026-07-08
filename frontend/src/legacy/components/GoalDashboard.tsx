@@ -28,7 +28,16 @@ import {
   Image,
   Upload,
   X,
-  Edit2
+  Edit2,
+  Search,
+  Filter,
+  ChevronLeft,
+  ChevronRight,
+  GitFork,
+  Table as TableIcon,
+  LayoutList,
+  Columns,
+  TreePine
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -99,9 +108,13 @@ export default function GoalDashboard({
   onDeleteHabitFromGoal,
   onUpdateGoal
 }: GoalDashboardProps) {
+  const [viewMode, setViewMode] = useState<'list' | 'table' | 'kanban' | 'tree'>('list');
   const [activeGoalId, setActiveGoalId] = useState<string | null>(null);
   const [newMilestoneTexts, setNewMilestoneTexts] = useState<Record<string, string>>({});
   const [showAddInline, setShowAddInline] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'completed'>('all');
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
 
   // Form State for Inline Add Goal
   const [newTitle, setNewTitle] = useState('');
@@ -131,6 +144,16 @@ export default function GoalDashboard({
   // Quick image states
   const [isDownloadingGoalImage, setIsDownloadingGoalImage] = useState<Record<string, boolean>>({});
   const [downloadGoalError, setDownloadGoalError] = useState<Record<string, string | null>>({});
+
+  const filteredGoals = goals.filter(g => {
+    const matchesSearch = g.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          (g.description || '').toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = statusFilter === 'all' ||
+                          (statusFilter === 'completed' && g.completed) ||
+                          (statusFilter === 'active' && !g.completed);
+    const matchesCategory = categoryFilter === 'all' || g.category === categoryFilter;
+    return matchesSearch && matchesStatus && matchesCategory;
+  });
 
   const handleLocalImageUploadDashboard = (goal: Goal, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -371,10 +394,84 @@ export default function GoalDashboard({
         </div>
       </div>
 
-      {/* 3. Goals List */}
+      {/* Filters & View Switcher */}
+      <div className="bg-white p-4 rounded-2xl border border-[#E6DFD3] flex flex-col md:flex-row gap-3 items-center">
+        <div className="relative w-full md:w-72">
+          <Search className="w-4 h-4 text-[#8D7F72] absolute right-3 top-2.5" />
+          <input
+            type="text"
+            placeholder="جستجوی اهداف..."
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+            className="w-full pr-9 pl-3 py-1.5 text-xs bg-[#F9F6EE] border border-[#D6CFC3] rounded-xl focus:outline-none focus:border-[#7C8363]"
+          />
+        </div>
+        <div className="flex gap-1.5 w-full md:w-auto overflow-x-auto">
+          {[
+            { id: 'all', label: 'همه' },
+            { id: 'active', label: 'جاری' },
+            { id: 'completed', label: 'تکمیل‌شده' }
+          ].map(opt => (
+            <button
+              key={opt.id}
+              onClick={() => setStatusFilter(opt.id as any)}
+              className={`px-3 py-1.5 rounded-xl text-[10px] font-bold transition-all cursor-pointer whitespace-nowrap ${
+                statusFilter === opt.id
+                  ? 'bg-[#7C8363] text-white'
+                  : 'bg-[#F9F6EE] hover:bg-[#E6DFD3]/40 text-[#8D7F72]'
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+        <div className="w-full md:w-auto md:mr-auto flex items-center gap-2">
+          <span className="text-[10px] font-bold text-[#8D7F72] whitespace-nowrap">دسته:</span>
+          <select
+            value={categoryFilter}
+            onChange={e => setCategoryFilter(e.target.value)}
+            className="px-2 py-1.5 text-[10px] bg-[#F9F6EE] border border-[#D6CFC3] rounded-xl focus:outline-none font-bold text-[#3D3D3D] cursor-pointer"
+          >
+            <option value="all">همه</option>
+            <option value="financial">مالی</option>
+            <option value="health">سلامت</option>
+            <option value="career">شغلی</option>
+            <option value="learning">یادگیری</option>
+            <option value="personal">شخصی</option>
+            <option value="other">سایر</option>
+          </select>
+        </div>
+      </div>
+
+      {/* View Switcher */}
+      <div className="flex bg-[#F9F6EE] p-1 rounded-2xl border border-[#E6DFD3] max-w-2xl overflow-x-auto scrollbar-none">
+        {[
+          { id: 'list', label: '🗂️ نمای لیست' },
+          { id: 'table', label: '⊞ نمای جدول' },
+          { id: 'kanban', label: '📋 بورد کانبان' },
+          { id: 'tree', label: '🌲 نمای درختی' }
+        ].map(tab => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => setViewMode(tab.id as any)}
+            className={`flex-1 py-2 px-4 text-[10px] font-black rounded-xl text-center transition-all cursor-pointer whitespace-nowrap ${
+              viewMode === tab.id
+                ? 'bg-[#7C8363] text-white shadow-xs'
+                : 'text-[#8D7F72] hover:text-[#2D3025]'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* 3. Goals Views */}
       <div className="space-y-4" id="goals-list-section">
-        {goals.length > 0 ? (
-          goals.map((goal) => {
+        {viewMode === 'list' && (
+          <div className="space-y-4">
+            {filteredGoals.length > 0 ? (
+              filteredGoals.map((goal) => {
             const categoryDetails = GOAL_CATEGORY_LABELS[goal.category] || GOAL_CATEGORY_LABELS.other;
             const colStyle = CATEGORY_COLORS[goal.category] || CATEGORY_COLORS.other;
             
@@ -1041,9 +1138,238 @@ export default function GoalDashboard({
               </div>
             );
           })
-        ) : (
-          <div className="bg-[#FDFBF7] p-8 text-center text-[#8D7F72] border border-dashed border-[#D6CFC3] rounded-2xl font-bold text-xs" id="no-goals-placeholder">
-            هیچ هدفی تعریف نکرده‌اید. با دکمه بالا اولین هدف خود را بسازید!
+            ) : (
+              <div className="bg-[#FDFBF7] p-8 text-center text-[#8D7F72] border border-dashed border-[#D6CFC3] rounded-2xl font-bold text-xs" id="no-goals-placeholder">
+                هیچ هدفی مطابق فیلترها یافت نشد.
+              </div>
+            )}
+          </div>
+        )}
+
+        {viewMode === 'table' && (
+          <div className="bg-white rounded-3xl border border-[#E6DFD3] overflow-hidden shadow-xs">
+            <div className="overflow-x-auto">
+              <table className="w-full text-right">
+                <thead className="bg-[#F9F6EE] border-b border-[#E6DFD3]">
+                  <tr className="text-[10px] font-black text-[#8D7F72]">
+                    <th className="px-4 py-3">هدف</th>
+                    <th className="px-4 py-3">دسته‌بندی</th>
+                    <th className="px-4 py-3">سررسید</th>
+                    <th className="px-4 py-3">پیشرفت</th>
+                    <th className="px-4 py-3">وضعیت</th>
+                    <th className="px-4 py-3">عملیات</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#E6DFD3]/40">
+                  {filteredGoals.length > 0 ? filteredGoals.map(goal => {
+                    const total = goal.milestones.length;
+                    const done = goal.milestones.filter(m => m.completed).length;
+                    const percentage = total > 0 ? Math.round((done / total) * 100) : (goal.completed ? 100 : 0);
+                    const categoryDetails = GOAL_CATEGORY_LABELS[goal.category] || GOAL_CATEGORY_LABELS.other;
+                    return (
+                      <tr key={goal.id} className="hover:bg-[#F9F6EE]/50 transition-colors">
+                        <td className="px-4 py-3">
+                          <div className="text-xs font-bold text-[#2D3025]">{goal.title}</div>
+                          <div className="text-[9px] text-[#8D7F72] truncate max-w-[200px]">{goal.description}</div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="px-2 py-0.5 rounded-full text-[9px] font-bold border bg-[#FDFBF7] border-[#E6DFD3] text-[#8D7F72]">
+                            {categoryDetails.label}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-[10px] font-mono text-[#8D7F72]">{goal.targetDate}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 bg-[#E6DFD3]/40 h-1.5 rounded-full overflow-hidden w-16">
+                              <div className="bg-[#7C8363] h-full rounded-full" style={{ width: `${percentage}%` }} />
+                            </div>
+                            <span className="text-[9px] font-bold text-[#7C8363]">{percentage}%</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <button
+                            onClick={() => onToggleGoalCompletion(goal.id)}
+                            className={`text-[9px] font-bold px-2 py-0.5 rounded-lg border cursor-pointer ${
+                              goal.completed
+                                ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                                : 'bg-amber-50 border-amber-200 text-amber-700'
+                            }`}
+                          >
+                            {goal.completed ? 'تکمیل' : 'جاری'}
+                          </button>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => onSelectGoal(goal.id)}
+                              className="px-2 py-1 text-[9px] font-bold bg-[#7C8363] text-white rounded-lg hover:bg-[#5A5A40] transition-colors"
+                            >
+                              جزئیات
+                            </button>
+                            <button
+                              onClick={() => {
+                                if (confirm('آیا مایل به حذف این هدف هستید؟')) onDeleteGoal(goal.id);
+                              }}
+                              className="p-1 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  }) : (
+                    <tr>
+                      <td colSpan={6} className="px-4 py-8 text-center text-[10px] text-[#8D7F72]">
+                        هیچ هدفی مطابق فیلترها یافت نشد.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {viewMode === 'kanban' && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start pt-2">
+            {[
+              { id: 'active', label: '🚀 در حال پیگیری', color: 'border-blue-200 bg-blue-50/50 text-blue-800' },
+              { id: 'completed', label: '✅ تکمیل شده', color: 'border-emerald-200 bg-emerald-50/50 text-emerald-800' },
+              { id: 'overdue', label: '⏰ سررسید گذشته', color: 'border-rose-200 bg-rose-50/50 text-rose-800' }
+            ].map(col => {
+              const columnGoals = filteredGoals.filter(g => {
+                if (col.id === 'completed') return g.completed;
+                if (col.id === 'overdue') return !g.completed && g.targetDate < '2026-07-09';
+                return !g.completed && g.targetDate >= '2026-07-09';
+              });
+              return (
+                <div key={col.id} className="bg-[#FDFBF7] rounded-3xl border border-[#E6DFD3] p-4 flex flex-col space-y-3.5 min-h-[400px]">
+                  <div className="flex items-center justify-between pb-2 border-b border-[#E6DFD3]/60">
+                    <span className="text-[11px] font-black text-[#2D3025]">{col.label}</span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 bg-[#E6DFD3]/40 text-[#8D7F72] rounded-md font-mono">
+                      {columnGoals.length}
+                    </span>
+                  </div>
+                  <div className="space-y-3 flex-1 overflow-y-auto max-h-[500px] pr-0.5">
+                    {columnGoals.length > 0 ? columnGoals.map(goal => {
+                      const total = goal.milestones.length;
+                      const done = goal.milestones.filter(m => m.completed).length;
+                      const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+                      return (
+                        <div
+                          key={goal.id}
+                          onClick={() => onSelectGoal(goal.id)}
+                          className="bg-white p-3.5 rounded-2xl border border-[#E6DFD3]/80 hover:border-[#7C8363] transition-all shadow-xs flex flex-col space-y-2 text-right cursor-pointer"
+                        >
+                          <h5 className="text-[11px] font-black text-[#2D3025] leading-tight">{goal.title}</h5>
+                          <div className="space-y-1">
+                            <div className="flex justify-between items-center text-[8px] font-bold text-[#8D7F72]">
+                              <span>پیشرفت: {pct}%</span>
+                              <span>{done}/{total} گام</span>
+                            </div>
+                            <div className="w-full bg-slate-100 h-1 rounded-full overflow-hidden">
+                              <div className="h-full bg-[#E26645]" style={{ width: `${pct}%` }} />
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1 pt-1">
+                            <span className="text-[8px] text-[#8D7F72] bg-[#F9F6EE] px-1.5 py-0.5 rounded">{goal.targetDate}</span>
+                            <span className="text-[8px] text-[#8D7F72] bg-[#F9F6EE] px-1.5 py-0.5 rounded">{(goal.projects || []).length} پروژه</span>
+                          </div>
+                        </div>
+                      );
+                    }) : (
+                      <div className="text-center py-8 text-[9px] text-[#8D7F72] font-semibold border border-dashed border-[#D6CFC3] rounded-2xl bg-white/40">
+                        هدفی در این ستون نیست
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {viewMode === 'tree' && (
+          <div className="bg-[#FDFBF7] rounded-3xl border border-[#E6DFD3] p-5 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-[#E6DFD3]/60">
+              <div className="space-y-0.5">
+                <h4 className="text-xs font-black text-[#2D3025] flex items-center gap-1.5">
+                  <GitFork className="w-4 h-4 text-[#E26645]" />
+                  <span>نقشه درختی اهداف و پروژه‌ها</span>
+                </h4>
+                <p className="text-[9px] text-[#8D7F72] font-semibold">ساختار سلسله مراتبی اهداف، پروژه‌ها و کارهای خرد</p>
+              </div>
+            </div>
+            <div className="space-y-6 max-h-[600px] overflow-y-auto pr-1">
+              {filteredGoals.length > 0 ? filteredGoals.map(g => {
+                const total = g.milestones.length;
+                const done = g.milestones.filter(m => m.completed).length;
+                const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+                return (
+                  <div key={g.id} className="space-y-4 bg-white p-4 rounded-2xl border border-[#E6DFD3]/60">
+                    <div className="flex items-center gap-2 bg-[#E26645]/5 p-2.5 rounded-xl border border-[#E26645]/20">
+                      <span className="text-base">🎯</span>
+                      <div className="text-right flex-1">
+                        <span className="text-[7px] font-bold text-[#E26645] uppercase tracking-wider block">هدف کلان</span>
+                        <h4 className="text-xs font-black text-[#2D3025]">{g.title}</h4>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <div className="w-16 bg-[#E6DFD3]/40 h-1.5 rounded-full overflow-hidden">
+                          <div className="bg-[#7C8363] h-full rounded-full" style={{ width: `${pct}%` }} />
+                        </div>
+                        <span className="text-[8px] font-bold text-[#7C8363]">{pct}%</span>
+                      </div>
+                    </div>
+                    {(g.projects || []).length > 0 ? (
+                      <div className="mr-6 border-r-2 border-dashed border-[#C6BFA3] pr-4 space-y-4 text-right">
+                        {g.projects.map(proj => {
+                          const pTasks = proj.tasks || [];
+                          const pDone = pTasks.filter(t => t.completed).length;
+                          const pPct = pTasks.length > 0 ? Math.round((pDone / pTasks.length) * 100) : 0;
+                          return (
+                            <div key={proj.id} className="space-y-2 relative">
+                              <div className="absolute top-4 -right-[21px] w-2 h-2 bg-[#7C8363] rounded-full border border-white" />
+                              <div className="flex items-center gap-2 bg-[#7C8363]/5 p-2 rounded-xl border border-[#7C8363]/20">
+                                <span className="text-xs">📂</span>
+                                <div className="text-right flex-1">
+                                  <span className="text-[7px] font-bold text-[#7C8363] block">پروژه</span>
+                                  <h5 className="text-[11px] font-black text-[#2D3025]">{proj.title}</h5>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <div className="w-12 bg-[#E6DFD3]/40 h-1 rounded-full overflow-hidden">
+                                    <div className="bg-[#9B6B61] h-full rounded-full" style={{ width: `${pPct}%` }} />
+                                  </div>
+                                  <span className="text-[8px] font-bold text-[#9B6B61]">{pPct}%</span>
+                                </div>
+                              </div>
+                              {pTasks.length > 0 ? (
+                                <div className="mr-5 border-r border-[#E6DFD3] pr-3 space-y-1 pt-1 text-right">
+                                  {pTasks.map(task => (
+                                    <div key={task.id} className="flex items-center gap-1.5 py-1 text-xs text-[#3D3D3D] relative">
+                                      <div className="absolute top-3 -right-[16px] w-3 h-[1px] bg-[#E6DFD3]" />
+                                      <span className="text-[9px] text-[#8D7F72]">├─</span>
+                                      <span className="text-[9px]">◽</span>
+                                      <span className={`font-semibold ${task.completed ? 'line-through text-[#8D7F72]' : ''}`}>{task.title}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="mr-5 text-[8px] text-[#8D7F72] italic font-semibold">هنوز تسکی به این پروژه پیوند نخورده است.</p>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="mr-6 text-[8px] text-[#8D7F72] italic font-semibold text-right">پروژه‌ای به این هدف تخصیص نیافته است.</p>
+                    )}
+                  </div>
+                );
+              }) : (
+                <p className="text-center py-6 text-xs text-[#8D7F72]">هدفی برای ساخت درخت یافت نشد.</p>
+              )}
+            </div>
           </div>
         )}
       </div>

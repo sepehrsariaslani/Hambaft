@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Goal, GoalCategory, Milestone, Habit, BankAccount, Project, Task, MetricLog, GoalMetric, WorkoutLog, SleepLog, MindfulnessSession, JournalEntry } from '../types';
 import { GOAL_CATEGORY_LABELS } from '../initialData';
 import PersianDatePicker from './PersianDatePicker';
+import EntityNoteEditor from '../../notes/components/EntityNoteEditor';
 import { 
   Target, 
   Calendar, 
@@ -42,7 +43,8 @@ import {
   PenTool,
   HelpCircle,
   Check,
-  LineChart as LucideLineChart
+  LineChart as LucideLineChart,
+  FileText
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -139,7 +141,7 @@ export default function GoalDetailView({
   onAddBankAccount
 }: GoalDetailViewProps) {
   
-  const [activeTab, setActiveTab] = useState<'projects' | 'habits' | 'milestones' | 'metrics' | 'vision'>('projects');
+  const [activeTab, setActiveTab] = useState<'projects' | 'habits' | 'milestones' | 'metrics' | 'vision' | 'notes'>('projects');
   
   // Vision Board State
   const [visionInputUrl, setVisionInputUrl] = useState('');
@@ -941,6 +943,18 @@ export default function GoalDetailView({
           >
             <Image className="w-4 h-4" />
             <span>برد تصویرسازی ({(goal.visionImages || []).length})</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('notes')}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 text-xs font-extrabold rounded-xl transition-all cursor-pointer whitespace-nowrap ${
+              activeTab === 'notes'
+                ? 'bg-[#7C8363] text-white shadow-xs'
+                : 'text-[#8D7F72] hover:bg-[#E6DFD3]/40'
+            }`}
+          >
+            <FileText className="w-4 h-4" />
+            <span>یادداشت‌ها (Notion)</span>
           </button>
         </div>
 
@@ -2437,6 +2451,19 @@ export default function GoalDetailView({
               </div>
             </div>
 
+          </div>
+        )}
+
+        {/* WORKSPACE CONTENT: NOTES */}
+        {activeTab === 'notes' && (
+          <div className="space-y-4 animate-fade-in">
+            <EntityNoteEditor
+              entityId={goal.id}
+              entityType="goal"
+              title="یادداشت‌ها و جزئیات هدف (Notion)"
+              initialBlocks={goal.noteBlocks}
+              onSave={(blocks) => onUpdateGoal({ ...goal, noteBlocks: blocks })}
+            />
           </div>
         )}
 

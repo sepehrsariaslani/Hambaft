@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Goal, Project, Task, GoalCategory, BankAccount, Transaction, Milestone } from '../types';
+import EntityNoteEditor from '../../notes/components/EntityNoteEditor';
 import { 
   ArrowRight, 
   FolderKanban, 
@@ -104,7 +105,7 @@ export default function ProjectDetailView({
   onUpdateProjectDetails
 }: ProjectDetailViewProps) {
   // Views/Tabs State
-  const [activeTab, setActiveTab] = useState<'tasks' | 'planning' | 'milestones'>('tasks');
+  const [activeTab, setActiveTab] = useState<'tasks' | 'planning' | 'milestones' | 'report' | 'notes'>('tasks');
   const [selectedTaskForDetails, setSelectedTaskForDetails] = useState<Task | null>(null);
   const [schedulingTaskId, setSchedulingTaskId] = useState<string | null>(null);
   const [calendarDate, setCalendarDate] = useState(() => new Date());
@@ -493,6 +494,30 @@ export default function ProjectDetailView({
           <div className="flex items-center gap-1">
             <Flag className="w-3.5 h-3.5" />
             <span>مایلستون‌ها (نقاط عطف)</span>
+          </div>
+        </button>
+
+        <button
+          onClick={() => { setActiveTab('report'); setSchedulingTaskId(null); }}
+          className={`px-4 py-2 text-xs font-black transition-all cursor-pointer ${
+            activeTab === 'report' ? 'border-b-2 border-[#7C8363] text-[#7C8363]' : 'text-[#8D7F72]'
+          }`}
+        >
+          <div className="flex items-center gap-1">
+            <TrendingUp className="w-3.5 h-3.5" />
+            <span>گزارش زمان</span>
+          </div>
+        </button>
+
+        <button
+          onClick={() => { setActiveTab('notes'); setSchedulingTaskId(null); }}
+          className={`px-4 py-2 text-xs font-black transition-all cursor-pointer ${
+            activeTab === 'notes' ? 'border-b-2 border-[#7C8363] text-[#7C8363]' : 'text-[#8D7F72]'
+          }`}
+        >
+          <div className="flex items-center gap-1">
+            <FileText className="w-3.5 h-3.5" />
+            <span>یادداشت‌ها (Notion)</span>
           </div>
         </button>
       </div>
@@ -1021,6 +1046,74 @@ export default function ProjectDetailView({
               )}
             </div>
 
+          </div>
+        )}
+
+        {/* REPORT VIEW */}
+        {activeTab === 'report' && (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-white dark:bg-[#1C1D17] rounded-3xl border border-[#E6DFD3] p-5 text-center space-y-2">
+                <div className="text-[9px] font-bold text-[#8D7F72]">کل زمان صرف‌شده</div>
+                <div className="text-xl font-black text-[#2D3025] dark:text-[#E8ECE0] font-mono">{formatSeconds(totalProjectSeconds)}</div>
+              </div>
+              <div className="bg-white dark:bg-[#1C1D17] rounded-3xl border border-[#E6DFD3] p-5 text-center space-y-2">
+                <div className="text-[9px] font-bold text-[#8D7F72]">تعداد کارها</div>
+                <div className="text-xl font-black text-[#2D3025] dark:text-[#E8ECE0]">{totalTasks}</div>
+              </div>
+              <div className="bg-white dark:bg-[#1C1D17] rounded-3xl border border-[#E6DFD3] p-5 text-center space-y-2">
+                <div className="text-[9px] font-bold text-[#8D7F72]">میانگین زمان هر کار</div>
+                <div className="text-xl font-black text-[#2D3025] dark:text-[#E8ECE0] font-mono">
+                  {totalTasks > 0 ? formatSeconds(Math.round(totalProjectSeconds / totalTasks)) : '0'}
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white dark:bg-[#1C1D17] rounded-3xl border border-[#E6DFD3] p-5 space-y-4">
+              <h3 className="text-xs font-black text-[#2D3025] dark:text-[#E8ECE0] flex items-center gap-1.5">
+                <Clock className="w-4 h-4 text-[#7C8363]" />
+                <span>جزئیات زمان هر کار</span>
+              </h3>
+              <div className="space-y-2">
+                {tasksList.map((t) => {
+                  const sec = getTaskSeconds(t)
+                  const pct = totalProjectSeconds > 0 ? Math.round((sec / totalProjectSeconds) * 100) : 0
+                  return (
+                    <div key={t.id} className="flex items-center gap-3 p-3 bg-[#FDFBF7] dark:bg-[#121411] border border-[#E6DFD3]/60 rounded-xl">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <span className={`text-xs font-bold ${t.completed ? 'line-through text-[#8D7F72]' : 'text-[#2D3025] dark:text-[#E8ECE0]'}`}>{t.title}</span>
+                          <span className="text-[10px] font-mono text-[#7C8363]">{formatSeconds(sec)}</span>
+                        </div>
+                        <div className="w-full bg-[#E6DFD3]/40 h-1.5 rounded-full overflow-hidden mt-1.5">
+                          <div className="bg-[#7C8363] h-full rounded-full transition-all" style={{ width: `${pct}%` }} />
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+                {tasksList.length === 0 && (
+                  <div className="text-center py-8 text-[10px] text-[#8D7F72]">هیچ کاری ثبت نشده است</div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* NOTES VIEW */}
+        {activeTab === 'notes' && (
+          <div className="space-y-4">
+            <EntityNoteEditor
+              entityId={project.id}
+              entityType="project"
+              title="یادداشت‌ها و جزئیات پروژه (Notion)"
+              initialBlocks={project.noteBlocks}
+              onSave={(blocks) => {
+                if (onUpdateProjectDetails) {
+                  onUpdateProjectDetails(project.goalId, project.id, { noteBlocks: blocks });
+                }
+              }}
+            />
           </div>
         )}
       </div>

@@ -86,6 +86,9 @@ import MindfulnessSection from './components/MindfulnessSection';
 import OccasionsSection from './components/OccasionsSection';
 import NotionNotesSection from './components/NotionNotesSection';
 import TaskManagerSection from './components/TaskManagerSection';
+import AreasSection from './components/AreasSection';
+import NotesLayout from '../notes/components/NotesLayout';
+import { useNotesStore, initMockPages } from '../notes/useNotesStore';
 import NutritionSection from './components/NutritionSection';
 import FitnessSection from './components/FitnessSection';
 import MoodSection from './components/MoodSection';
@@ -172,6 +175,8 @@ const NAVIGATION_GROUPS = [
     items: [
       { id: 'goals', label: 'اهداف بلندمدت', icon: Target },
       { id: 'projects', label: 'مدیریت پروژه‌ها', icon: FolderKanban },
+      { id: 'areas', label: 'حوزه‌های زندگی', icon: Layers },
+      { id: 'notes', label: 'یادداشت‌ها (Notion)', icon: FileText },
       { id: 'finance', label: 'امور مالی و مخارج', icon: Wallet },
       { id: 'documents', label: 'مدیریت اسناد', icon: FolderOpen }
     ]
@@ -258,6 +263,8 @@ function tabToPath(tab: string, ids: { taskId?: string | null; goalId?: string |
     case 'fitness': return '/fitness';
     case 'goals': return ids.goalId ? `/goals/${ids.goalId}` : '/goals';
     case 'projects': return ids.projectId ? `/projects/${ids.projectId}` : '/projects';
+    case 'areas': return '/areas';
+    case 'notes': return '/notes';
     case 'finance': return '/finance';
     case 'documents': return '/documents';
     case 'profile': return '/profile';
@@ -302,6 +309,10 @@ export default function App({
   
   // App core state
   const [lifeData, setLifeData] = useState<LifeData>(() => seedLifeData || createEmptyLifeData());
+
+  // Notes store
+  initMockPages();
+  const notesStore = useNotesStore();
 
   useEffect(() => {
     if (seedLifeData) {
@@ -3059,6 +3070,7 @@ export default function App({
           <TaskDetailView 
             task={selectedTask}
             allTasks={[...lifeData.tasks, ...lifeData.goals.flatMap(g => (g.projects || []).flatMap(p => p.tasks || []))]}
+            goals={lifeData.goals}
             onUpdateTask={handleUpdateTask}
             onDeleteTask={(id) => {
               handleDeleteTask(id);
@@ -3288,6 +3300,34 @@ export default function App({
           />
         );
 
+      case 'areas':
+        return (
+          <AreasSection
+            areas={lifeData.areas || []}
+            goals={lifeData.goals}
+            tasks={lifeData.tasks}
+            onSelectGoal={(id) => goToGoal(id)}
+            onSelectProject={(id) => goToProject(id)}
+            onSelectTask={(id) => goToTaskDetail(id)}
+          />
+        );
+      case 'notes':
+        return (
+          <NotesLayout
+            pages={notesStore.pages}
+            onAddPage={notesStore.addPage}
+            onUpdatePage={notesStore.updatePage}
+            onDeletePage={notesStore.deletePage}
+            onDuplicatePage={notesStore.duplicatePage}
+            onMovePage={notesStore.movePage}
+            onAddBlock={notesStore.addBlock}
+            onUpdateBlock={notesStore.updateBlock}
+            onDeleteBlock={notesStore.deleteBlock}
+            onMoveBlock={notesStore.moveBlock}
+            onReorderBlocks={notesStore.reorderBlocks}
+            savingState={notesStore.getSavingState()}
+          />
+        );
       case 'coach':
         return (
           <ProfileSection 
@@ -3412,6 +3452,8 @@ export default function App({
                     activeTab === 'habits' ? 'ردیاب عادت‌ها و رفتارهای روزانه' :
                     activeTab === 'goals' ? 'اهداف و میانی‌های کلیدی زندگی' :
                     activeTab === 'projects' ? 'مرکز مدیریت و پیشبرد پروژه‌ها' :
+                    activeTab === 'areas' ? 'حوزه‌های زندگی و اهداف' :
+                    activeTab === 'notes' ? 'دفترچه یادداشت‌های هوشمند' :
                     activeTab === 'documents' ? 'مدیریت اسناد، بیمه‌ها و مدارک' :
                     activeTab === 'nutrition' ? 'تغذیه، رژیم غذایی و ردیاب بدنی' :
                     activeTab === 'fitness' ? 'باشگاه بدنسازی، تمرینات و هوازی' :

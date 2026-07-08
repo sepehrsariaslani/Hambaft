@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Task, SubTask } from '../types';
 import PersianDatePicker from './PersianDatePicker';
+import EntityNoteEditor from '../../notes/components/EntityNoteEditor';
 import { 
   ArrowRight, 
   CheckCircle, 
@@ -19,7 +20,8 @@ import {
   Play,
   Pause,
   Square,
-  RotateCcw
+  RotateCcw,
+  FolderKanban
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { toPersianDigits, formatTimeDigital, formatTimeHuman } from '../App';
@@ -27,10 +29,11 @@ import { toPersianDigits, formatTimeDigital, formatTimeHuman } from '../App';
 interface TaskDetailViewProps {
   task: Task;
   allTasks?: Task[];
+  goals?: any[];
   onUpdateTask: (updatedTask: Task) => void;
   onDeleteTask: (id: string) => void;
   onBack: () => void;
-  
+
   // Timer Props
   activeTimerTaskId: string | null;
   activeTimerSeconds: number;
@@ -60,6 +63,7 @@ const PRIORITIES = [
 export default function TaskDetailView({
   task,
   allTasks = [],
+  goals = [],
   onUpdateTask,
   onDeleteTask,
   onBack,
@@ -446,6 +450,31 @@ export default function TaskDetailView({
           </div>
         </div>
 
+        {/* PROJECT SELECTOR */}
+        <div className="bg-[#FDFBF7] p-4 rounded-3xl border border-[#E6DFD3] space-y-3 shadow-xs">
+          <div className="flex items-center gap-2">
+            <FolderKanban className="w-4 h-4 text-[#7C8363]" />
+            <h4 className="text-xs font-bold text-[#2D3025]">اختصاص به پروژه</h4>
+          </div>
+          <select
+            value={task.projectId || ''}
+            onChange={(e) => onUpdateTask({ ...task, projectId: e.target.value || undefined })}
+            className="w-full px-3 py-2.5 text-xs bg-white border border-[#D6CFC3] rounded-xl focus:outline-none focus:border-[#7C8363] font-semibold text-[#2D3025]"
+          >
+            <option value="">-- بدون پروژه --</option>
+            {goals.flatMap((g) => (g.projects || []).map((p: any) => ({ ...p, goalTitle: g.title }))).map((project: any) => (
+              <option key={project.id} value={project.id}>
+                {project.title} (هدف: {project.goalTitle})
+              </option>
+            ))}
+          </select>
+          {task.projectId && (
+            <div className="text-[10px] text-[#7C8363] font-semibold bg-[#E8ECE0] px-2 py-1 rounded-lg inline-block">
+              این تسک به پروژه اختصاص دارد
+            </div>
+          )}
+        </div>
+
         {/* DAILY HIGHLIGHT (تسک برجسته روز) */}
         <div className="bg-[#FDFBF7] p-4 rounded-3xl border border-[#E5C158]/50 shadow-xs relative overflow-hidden transition-colors">
           <div className="absolute top-0 right-0 w-16 h-16 bg-[#E5C158]/5 rounded-full blur-lg pointer-events-none" />
@@ -615,6 +644,17 @@ export default function TaskDetailView({
               </div>
             )}
           </AnimatePresence>
+        </div>
+
+        {/* NOTION-LIKE NOTES EDITOR */}
+        <div className="pt-4">
+          <EntityNoteEditor
+            entityId={task.id}
+            entityType="task"
+            title="یادداشت‌ها و جزئیات (Notion)"
+            initialBlocks={task.noteBlocks}
+            onSave={(blocks) => onUpdateTask({ ...task, noteBlocks: blocks })}
+          />
         </div>
 
       </div>
