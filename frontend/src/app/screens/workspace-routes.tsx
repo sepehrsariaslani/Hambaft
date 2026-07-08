@@ -7,6 +7,8 @@ export type WorkspaceTab =
   | 'coach'
   | 'contacts'
   | 'journal'
+  | 'tasks'
+  | 'mood'
   | 'inbox'
   | 'calendar'
   | 'occasions'
@@ -33,8 +35,9 @@ export const workspaceRouteConfigs: WorkspaceRouteConfig[] = [
   { path: 'coach', tab: 'coach' },
   { path: 'contacts', tab: 'contacts' },
   { path: 'journal', tab: 'journal' },
+  { path: 'tasks', tab: 'tasks' },
+  { path: 'mood', tab: 'mood' },
   { path: 'inbox', tab: 'inbox' },
-  { path: 'notes', tab: 'journal' },
   { path: 'calendar', tab: 'calendar' },
   { path: 'occasions', tab: 'occasions' },
   { path: 'balance-report', tab: 'balance_report' },
