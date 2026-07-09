@@ -3309,6 +3309,7 @@ export default function App({
             onSelectGoal={(id) => goToGoal(id)}
             onSelectProject={(id) => goToProject(id)}
             onSelectTask={(id) => goToTaskDetail(id)}
+            onUpdateAreas={(areas) => setLifeData(prev => ({ ...prev, areas }))}
           />
         );
       case 'notes':

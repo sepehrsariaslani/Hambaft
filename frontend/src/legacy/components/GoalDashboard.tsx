@@ -131,6 +131,10 @@ export default function GoalDashboard({
   const [editCategory, setEditCategory] = useState<GoalCategory>('personal');
   const [editTargetDate, setEditTargetDate] = useState('2026-12-31');
 
+  // Inline table edit state
+  const [inlineEditingId, setInlineEditingId] = useState<string | null>(null)
+  const [inlineDraft, setInlineDraft] = useState<Partial<Goal>>({})
+
   // Interactive Goal Relationships States
   const [activeSubTabs, setActiveSubTabs] = useState<Record<string, 'milestones' | 'projects' | 'habits' | 'vision'>>({});
   
@@ -1157,18 +1161,65 @@ export default function GoalDashboard({
                     const done = goal.milestones.filter(m => m.completed).length;
                     const percentage = total > 0 ? Math.round((done / total) * 100) : (goal.completed ? 100 : 0);
                     const categoryDetails = GOAL_CATEGORY_LABELS[goal.category] || GOAL_CATEGORY_LABELS.other;
+                    const isEditing = inlineEditingId === goal.id;
+                    const draft = isEditing ? inlineDraft : goal;
                     return (
-                      <tr key={goal.id} className="hover:bg-[#F9F6EE]/50 transition-colors">
+                      <tr key={goal.id} className="hover:bg-[#F9F6EE]/50 transition-colors" onDoubleClick={() => { if (!isEditing) { setInlineEditingId(goal.id); setInlineDraft({ ...goal }); } }}>
                         <td className="px-4 py-3">
-                          <div className="text-xs font-bold text-[#2D3025]">{goal.title}</div>
-                          <div className="text-[9px] text-[#8D7F72] truncate max-w-[200px]">{goal.description}</div>
+                          {isEditing ? (
+                            <div className="space-y-1">
+                              <input
+                                value={draft.title || ''}
+                                onChange={e => setInlineDraft(d => ({ ...d, title: e.target.value }))}
+                                className="w-full px-2 py-1 text-xs border border-[#7C8363] rounded-lg bg-white"
+                                autoFocus
+                              />
+                              <input
+                                value={draft.description || ''}
+                                onChange={e => setInlineDraft(d => ({ ...d, description: e.target.value }))}
+                                placeholder="توضیحات"
+                                className="w-full px-2 py-1 text-[10px] border border-[#D6CFC3] rounded-lg bg-white"
+                              />
+                            </div>
+                          ) : (
+                            <>
+                              <div className="text-xs font-bold text-[#2D3025]">{goal.title}</div>
+                              <div className="text-[9px] text-[#8D7F72] truncate max-w-[200px]">{goal.description}</div>
+                            </>
+                          )}
                         </td>
                         <td className="px-4 py-3">
-                          <span className="px-2 py-0.5 rounded-full text-[9px] font-bold border bg-[#FDFBF7] border-[#E6DFD3] text-[#8D7F72]">
-                            {categoryDetails.label}
-                          </span>
+                          {isEditing ? (
+                            <select
+                              value={draft.category || 'personal'}
+                              onChange={e => setInlineDraft(d => ({ ...d, category: e.target.value as GoalCategory }))}
+                              className="px-2 py-1 text-xs border border-[#D6CFC3] rounded-lg bg-white"
+                            >
+                              <option value="financial">مالی</option>
+                              <option value="health">سلامت</option>
+                              <option value="career">شغلی</option>
+                              <option value="learning">یادگیری</option>
+                              <option value="personal">شخصی</option>
+                              <option value="other">سایر</option>
+                            </select>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full text-[9px] font-bold border bg-[#FDFBF7] border-[#E6DFD3] text-[#8D7F72]">
+                              {categoryDetails.label}
+                            </span>
+                          )}
                         </td>
-                        <td className="px-4 py-3 text-[10px] font-mono text-[#8D7F72]">{goal.targetDate}</td>
+                        <td className="px-4 py-3">
+                          {isEditing ? (
+                            <input
+                              type="date"
+                              value={draft.targetDate || ''}
+                              onChange={e => setInlineDraft(d => ({ ...d, targetDate: e.target.value }))}
+                              className="px-2 py-1 text-xs border border-[#D6CFC3] rounded-lg bg-white"
+                            />
+                          ) : (
+                            <span className="text-[10px] font-mono text-[#8D7F72]">{goal.targetDate}</span>
+                          )}
+                        </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
                             <div className="flex-1 bg-[#E6DFD3]/40 h-1.5 rounded-full overflow-hidden w-16">
@@ -1190,22 +1241,43 @@ export default function GoalDashboard({
                           </button>
                         </td>
                         <td className="px-4 py-3">
-                          <div className="flex items-center gap-1">
-                            <button
-                              onClick={() => onSelectGoal(goal.id)}
-                              className="px-2 py-1 text-[9px] font-bold bg-[#7C8363] text-white rounded-lg hover:bg-[#5A5A40] transition-colors"
-                            >
-                              جزئیات
-                            </button>
-                            <button
-                              onClick={() => {
-                                if (confirm('آیا مایل به حذف این هدف هستید؟')) onDeleteGoal(goal.id);
-                              }}
-                              className="p-1 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
-                          </div>
+                          {isEditing ? (
+                            <div className="flex gap-1">
+                              <button
+                                onClick={() => {
+                                  onUpdateGoal({ ...goal, ...inlineDraft } as Goal)
+                                  setInlineEditingId(null)
+                                  setInlineDraft({})
+                                }}
+                                className="p-1 bg-[#7C8363] text-white rounded-lg"
+                              >
+                                <CheckSquare className="w-3 h-3" />
+                              </button>
+                              <button
+                                onClick={() => { setInlineEditingId(null); setInlineDraft({}) }}
+                                className="p-1 bg-[#E6DFD3] text-[#2D3025] rounded-lg"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={() => onSelectGoal(goal.id)}
+                                className="px-2 py-1 text-[9px] font-bold bg-[#7C8363] text-white rounded-lg hover:bg-[#5A5A40] transition-colors"
+                              >
+                                جزئیات
+                              </button>
+                              <button
+                                onClick={() => {
+                                  if (confirm('آیا مایل به حذف این هدف هستید؟')) onDeleteGoal(goal.id);
+                                }}
+                                className="p-1 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
+                          )}
                         </td>
                       </tr>
                     );
