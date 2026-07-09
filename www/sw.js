@@ -9,8 +9,8 @@ const APP_SHELL_URLS = [
   '/hambaft-icon-192.png',
   '/hambaft-icon-512.png',
   '/apple-touch-icon.png',
-  '/assets/hambaft/frontend/assets/index.css',
-  '/assets/hambaft/frontend/assets/index.js',
+  '/assets/hambaft/assets/index.css',
+  '/assets/hambaft/assets/index.js',
 ]
 
 self.addEventListener('install', (event) => {
@@ -69,7 +69,7 @@ self.addEventListener('fetch', (event) => {
   }
 
   const isStaticAsset =
-    url.pathname.startsWith('/assets/hambaft/frontend/') ||
+    url.pathname.startsWith('/assets/hambaft/') ||
     url.pathname === '/manifest.json' ||
     url.pathname === '/hambaft-icon.svg' ||
     url.pathname === '/hambaft-icon-192.png' ||

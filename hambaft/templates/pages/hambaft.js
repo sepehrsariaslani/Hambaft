@@ -25,13 +25,13 @@ frappe.pages['hambaft'].on_page_load = function (wrapper) {
 
     ensureAsset('link', {
         rel: 'stylesheet',
-        href: '/assets/hambaft/frontend/assets/index.css',
+        href: '/assets/hambaft/assets/index.css',
     });
 
     if (!window.__hambaftDeskScriptLoaded) {
         const script = document.createElement('script');
         script.type = 'module';
-        script.src = '/assets/hambaft/frontend/assets/index.js';
+        script.src = '/assets/hambaft/assets/index.js';
         document.body.appendChild(script);
         window.__hambaftDeskScriptLoaded = true;
     }
