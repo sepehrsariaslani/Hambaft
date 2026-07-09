@@ -1,6 +1,7 @@
-import { useRef, useEffect, useState } from 'react'
+import { useRef, useEffect, useState, useCallback } from 'react'
 import { motion } from 'motion/react'
-import { GripVertical, Plus, Trash2, ChevronDown, ChevronLeft } from 'lucide-react'
+import { GripVertical, Plus, Trash2, ChevronDown, ChevronLeft, ImagePlus, Loader2 } from 'lucide-react'
+import { uploadFile } from '../../app/frappe'
 import type { Block } from '../types'
 
 interface BlockRendererProps {
@@ -15,6 +16,7 @@ interface BlockRendererProps {
   onTurnInto: (type: Block['type']) => void
   onMove: (dir: 'up' | 'down') => void
   onToggleCollapse?: () => void
+  onUpdateBlock?: (patch: Partial<Block>) => void
   onDragStart?: (e: React.DragEvent) => void
   onDragOver?: (e: React.DragEvent) => void
   onDrop?: (e: React.DragEvent) => void
@@ -57,7 +59,7 @@ function getPlaceholder(type: Block['type']): string {
 }
 
 export default function BlockRenderer({
-  block, index, isFocused, onFocus, onChange, onKeyDown, onAddBelow, onDelete, onTurnInto, onMove, onToggleCollapse,
+  block, index, isFocused, onFocus, onChange, onKeyDown, onAddBelow, onDelete, onTurnInto, onMove, onToggleCollapse, onUpdateBlock,
   onDragStart, onDragOver, onDrop, onDragEnd, isDragging, isDropTarget,
 }: BlockRendererProps) {
   const editorRef = useRef<HTMLDivElement>(null)
@@ -185,8 +187,7 @@ export default function BlockRenderer({
               type="checkbox"
               checked={!!block.props?.checked}
               onChange={(e) => {
-                const el = editorRef.current
-                if (el) onChange([{ text: el.innerText }])
+                onUpdateBlock?.({ props: { ...block.props, checked: e.target.checked } })
               }}
               className="mt-1.5 w-3.5 h-3.5 rounded border-[#D6CFC3] text-[#7C8363] focus:ring-[#7C8363]/20 cursor-pointer shrink-0"
             />
@@ -235,30 +236,9 @@ export default function BlockRenderer({
           </div>
         )
       case 'image':
-        return (
-          <div className="bg-[#F9F6EE] dark:bg-[#121411] border border-dashed border-[#D6CFC3] dark:border-[#2D3025] rounded-xl p-6 text-center text-[10px] text-[#8D7F72]">
-            🖼 تصویر (آپلود به زودی)
-          </div>
-        )
+        return <ImageBlock block={block} onUpdateBlock={onUpdateBlock} />
       case 'table':
-        return (
-          <div className="border border-[#E6DFD3] dark:border-[#2D3025] rounded-xl overflow-hidden">
-            <table className="w-full text-[10px]">
-              <tbody>
-                <tr className="border-b border-[#E6DFD3] dark:border-[#2D3025]">
-                  {['ستون ۱', 'ستون ۲', 'ستون ۳'].map((h, i) => (
-                    <th key={i} className="px-3 py-2 bg-[#F9F6EE] dark:bg-[#1B1D16] text-[#2D3025] dark:text-[#E8ECE0] font-bold text-right">{h}</th>
-                  ))}
-                </tr>
-                <tr>
-                  {['مقدار ۱', 'مقدار ۲', 'مقدار ۳'].map((c, i) => (
-                    <td key={i} className="px-3 py-2 text-[#3D3D3D] dark:text-[#D6CFC3]">{c}</td>
-                  ))}
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        )
+        return <TableBlock block={block} onUpdateBlock={onUpdateBlock} />
       default:
         return <div {...commonProps} className={`${commonProps.className} text-xs text-[#3D3D3D] dark:text-[#D6CFC3] leading-relaxed py-0.5`} />
     }
@@ -310,5 +290,168 @@ export default function BlockRenderer({
       </div>
       {moreMenu}
     </motion.div>
+  )
+}
+
+/* ─── Image Block ─── */
+function ImageBlock({ block, onUpdateBlock }: { block: Block; onUpdateBlock?: (patch: Partial<Block>) => void }) {
+  const [uploading, setUploading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !onUpdateBlock) return
+    setUploading(true)
+    setError(null)
+    try {
+      const result = await uploadFile(file, { folder: 'Home/Notes' })
+      onUpdateBlock({ props: { ...block.props, src: result.file_url } })
+    } catch (err: any) {
+      setError(err?.message || 'خطا در آپلود تصویر')
+    } finally {
+      setUploading(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }, [block.props, onUpdateBlock])
+
+  const src = block.props?.src as string | undefined
+
+  if (src) {
+    return (
+      <div className="relative group">
+        <img
+          src={src}
+          alt=""
+          className="max-w-full rounded-xl border border-[#E6DFD3] dark:border-[#2D3025]"
+          loading="lazy"
+        />
+        <button
+          onClick={() => onUpdateBlock?.({ props: { ...block.props, src: undefined } })}
+          className="absolute top-2 left-2 p-1.5 bg-white/90 dark:bg-black/70 rounded-lg shadow text-red-600 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+          title="حذف تصویر"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="bg-[#F9F6EE] dark:bg-[#121411] border border-dashed border-[#D6CFC3] dark:border-[#2D3025] rounded-xl p-6 text-center">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleFileSelect}
+      />
+      <button
+        onClick={() => fileInputRef.current?.click()}
+        disabled={uploading}
+        className="flex flex-col items-center gap-2 mx-auto text-[#8D7F72] hover:text-[#7C8363] transition-colors cursor-pointer disabled:opacity-50"
+      >
+        {uploading ? <Loader2 className="w-6 h-6 animate-spin" /> : <ImagePlus className="w-6 h-6" />}
+        <span className="text-[10px] font-bold">
+          {uploading ? 'در حال آپلود...' : 'کلیک کنید یا تصویر را اینجا رها کنید'}
+        </span>
+      </button>
+      {error && <p className="text-red-500 text-[9px] mt-2">{error}</p>}
+    </div>
+  )
+}
+
+/* ─── Table Block ─── */
+function TableBlock({ block, onUpdateBlock }: { block: Block; onUpdateBlock?: (patch: Partial<Block>) => void }) {
+  const rows: string[][] = block.props?.rows || [
+    ['ستون ۱', 'ستون ۲', 'ستون ۳'],
+    ['مقدار ۱', 'مقدار ۲', 'مقدار ۳'],
+  ]
+
+  const updateCell = (rowIdx: number, colIdx: number, value: string) => {
+    const next = rows.map((r, ri) => r.map((c, ci) => (ri === rowIdx && ci === colIdx ? value : c)))
+    onUpdateBlock?.({ props: { ...block.props, rows: next } })
+  }
+
+  const addRow = () => {
+    const colCount = rows[0]?.length || 3
+    const next = [...rows, Array(colCount).fill('')]
+    onUpdateBlock?.({ props: { ...block.props, rows: next } })
+  }
+
+  const removeRow = (idx: number) => {
+    if (rows.length <= 1) return
+    const next = rows.filter((_, i) => i !== idx)
+    onUpdateBlock?.({ props: { ...block.props, rows: next } })
+  }
+
+  const addCol = () => {
+    const next = rows.map(r => [...r, ''])
+    onUpdateBlock?.({ props: { ...block.props, rows: next } })
+  }
+
+  const removeCol = (idx: number) => {
+    if ((rows[0]?.length || 0) <= 1) return
+    const next = rows.map(r => r.filter((_, i) => i !== idx))
+    onUpdateBlock?.({ props: { ...block.props, rows: next } })
+  }
+
+  return (
+    <div className="border border-[#E6DFD3] dark:border-[#2D3025] rounded-xl overflow-hidden">
+      <table className="w-full text-[10px]">
+        <tbody>
+          {rows.map((row, ri) => (
+            <tr key={ri} className={ri === 0 ? 'border-b border-[#E6DFD3] dark:border-[#2D3025]' : ''}>
+              {row.map((cell, ci) => (
+                <td
+                  key={ci}
+                  className={`px-3 py-2 text-right min-w-[80px] ${
+                    ri === 0
+                      ? 'bg-[#F9F6EE] dark:bg-[#1B1D16] text-[#2D3025] dark:text-[#E8ECE0] font-bold'
+                      : 'text-[#3D3D3D] dark:text-[#D6CFC3]'
+                  }`}
+                >
+                  <div
+                    contentEditable
+                    suppressContentEditableWarning
+                    onBlur={(e) => updateCell(ri, ci, e.currentTarget.innerText)}
+                    className="outline-none empty:before:content-[attr(data-placeholder)] empty:before:text-[#8D7F72]"
+                    data-placeholder={ri === 0 ? 'سرستون' : 'مقدار'}
+                  >
+                    {cell}
+                  </div>
+                </td>
+              ))}
+              {ri === 0 && (
+                <td className="px-1 py-2 bg-[#F9F6EE] dark:bg-[#1B1D16] border-b border-[#E6DFD3] dark:border-[#2D3025]">
+                  <div className="flex items-center gap-0.5">
+                    <button onClick={addCol} className="p-0.5 text-[#7C8363] hover:bg-[#E8ECE0] rounded cursor-pointer" title="افزودن ستون">
+                      <Plus className="w-3 h-3" />
+                    </button>
+                    {row.length > 1 && (
+                      <button onClick={() => removeCol(row.length - 1)} className="p-0.5 text-red-500 hover:bg-red-50 rounded cursor-pointer" title="حذف آخرین ستون">
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+                </td>
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="flex items-center gap-2 px-3 py-1.5 bg-[#F9F6EE]/50 dark:bg-[#1B1D16]/50 border-t border-[#E6DFD3] dark:border-[#2D3025]">
+        <button onClick={addRow} className="flex items-center gap-1 text-[9px] font-bold text-[#7C8363] hover:text-[#5A5A40] cursor-pointer">
+          <Plus className="w-3 h-3" />
+          سطر
+        </button>
+        {rows.length > 1 && (
+          <button onClick={() => removeRow(rows.length - 1)} className="flex items-center gap-1 text-[9px] font-bold text-red-500 hover:text-red-700 cursor-pointer">
+            <Trash2 className="w-3 h-3" />
+            آخرین سطر
+          </button>
+        )}
+      </div>
+    </div>
   )
 }

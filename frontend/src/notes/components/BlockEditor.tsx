@@ -214,6 +214,7 @@ export default function BlockEditor({
               onTurnInto={(type) => onUpdateBlock(block.id, { type })}
               onMove={(dir) => onMoveBlock(block.id, dir)}
               onToggleCollapse={() => onUpdateBlock(block.id, { collapsed: !block.collapsed })}
+              onUpdateBlock={(patch) => onUpdateBlock(block.id, patch)}
               onDragStart={(e) => handleDragStart(e, block.id)}
               onDragOver={(e) => handleDragOver(e, block.id)}
               onDrop={(e) => handleDrop(e, block.id)}

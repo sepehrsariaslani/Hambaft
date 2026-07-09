@@ -3,6 +3,7 @@ import { Goal, GoalCategory, Milestone, Habit } from '../types';
 import { GOAL_CATEGORY_LABELS } from '../initialData';
 import PersianDatePicker from './PersianDatePicker';
 import ViewSwitcher, { type ViewMode } from './ViewSwitcher';
+import GoalKanbanView from './GoalKanbanView';
 import { 
   Target, 
   Calendar, 
@@ -1222,62 +1223,13 @@ export default function GoalDashboard({
         )}
 
         {viewMode === 'kanban' && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start pt-2">
-            {[
-              { id: 'active', label: '🚀 در حال پیگیری', color: 'border-blue-200 bg-blue-50/50 text-blue-800' },
-              { id: 'completed', label: '✅ تکمیل شده', color: 'border-emerald-200 bg-emerald-50/50 text-emerald-800' },
-              { id: 'overdue', label: '⏰ سررسید گذشته', color: 'border-rose-200 bg-rose-50/50 text-rose-800' }
-            ].map(col => {
-              const columnGoals = filteredGoals.filter(g => {
-                if (col.id === 'completed') return g.completed;
-                if (col.id === 'overdue') return !g.completed && g.targetDate < '2026-07-09';
-                return !g.completed && g.targetDate >= '2026-07-09';
-              });
-              return (
-                <div key={col.id} className="bg-[#FDFBF7] rounded-3xl border border-[#E6DFD3] p-4 flex flex-col space-y-3.5 min-h-[400px]">
-                  <div className="flex items-center justify-between pb-2 border-b border-[#E6DFD3]/60">
-                    <span className="text-[11px] font-black text-[#2D3025]">{col.label}</span>
-                    <span className="text-[10px] font-bold px-2 py-0.5 bg-[#E6DFD3]/40 text-[#8D7F72] rounded-md font-mono">
-                      {columnGoals.length}
-                    </span>
-                  </div>
-                  <div className="space-y-3 flex-1 overflow-y-auto max-h-[500px] pr-0.5">
-                    {columnGoals.length > 0 ? columnGoals.map(goal => {
-                      const total = goal.milestones.length;
-                      const done = goal.milestones.filter(m => m.completed).length;
-                      const pct = total > 0 ? Math.round((done / total) * 100) : 0;
-                      return (
-                        <div
-                          key={goal.id}
-                          onClick={() => onSelectGoal(goal.id)}
-                          className="bg-white p-3.5 rounded-2xl border border-[#E6DFD3]/80 hover:border-[#7C8363] transition-all shadow-xs flex flex-col space-y-2 text-right cursor-pointer"
-                        >
-                          <h5 className="text-[11px] font-black text-[#2D3025] leading-tight">{goal.title}</h5>
-                          <div className="space-y-1">
-                            <div className="flex justify-between items-center text-[8px] font-bold text-[#8D7F72]">
-                              <span>پیشرفت: {pct}%</span>
-                              <span>{done}/{total} گام</span>
-                            </div>
-                            <div className="w-full bg-slate-100 h-1 rounded-full overflow-hidden">
-                              <div className="h-full bg-[#E26645]" style={{ width: `${pct}%` }} />
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-1 pt-1">
-                            <span className="text-[8px] text-[#8D7F72] bg-[#F9F6EE] px-1.5 py-0.5 rounded">{goal.targetDate}</span>
-                            <span className="text-[8px] text-[#8D7F72] bg-[#F9F6EE] px-1.5 py-0.5 rounded">{(goal.projects || []).length} پروژه</span>
-                          </div>
-                        </div>
-                      );
-                    }) : (
-                      <div className="text-center py-8 text-[9px] text-[#8D7F72] font-semibold border border-dashed border-[#D6CFC3] rounded-2xl bg-white/40">
-                        هدفی در این ستون نیست
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <GoalKanbanView
+            goals={filteredGoals}
+            onUpdateGoal={onUpdateGoal}
+            onToggleGoalCompletion={onToggleGoalCompletion}
+            onDeleteGoal={onDeleteGoal}
+            onSelectGoal={onSelectGoal}
+          />
         )}
 
         {viewMode === 'tree' && (

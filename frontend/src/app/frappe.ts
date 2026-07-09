@@ -189,6 +189,36 @@ export async function deleteDoc(doctype: string, name: string): Promise<void> {
   }
 }
 
+export async function uploadFile(file: File, options?: { isPrivate?: boolean; folder?: string; doctype?: string; docname?: string }): Promise<{ file_url: string; name: string }> {
+  const formData = new FormData()
+  formData.append('file', file)
+  if (options?.isPrivate !== undefined) formData.append('is_private', options.isPrivate ? '1' : '0')
+  if (options?.folder) formData.append('folder', options.folder)
+  if (options?.doctype) formData.append('doctype', options.doctype)
+  if (options?.docname) formData.append('docname', options.docname)
+
+  const csrfToken = getCsrfToken()
+  const response = await fetch('/api/method/upload_file', {
+    method: 'POST',
+    headers: csrfToken ? { 'X-Frappe-CSRF-Token': csrfToken } : {},
+    credentials: 'same-origin',
+    body: formData,
+  })
+
+  const payload = await parsePayload(response)
+
+  if (!response.ok) {
+    throw new Error(payload?._error_message || payload?.message || `Upload failed: ${response.status}`)
+  }
+
+  const message = payload.message ?? payload
+  if (!message.file_url) {
+    throw new Error('آپلود فایل ناموفق بود: پاسخ سرور فاقد آدرس فایل است')
+  }
+
+  return { file_url: message.file_url, name: message.name }
+}
+
 export async function checkFrappeSession(): Promise<string | null> {
   try {
     const payload = await callGet<{ user?: string; message?: { user?: string } }>('hambaft.hambaft.api.check_session')
