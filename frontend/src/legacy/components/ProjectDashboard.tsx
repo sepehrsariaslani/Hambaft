@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Goal, Project, Task, GoalCategory } from '../types';
 import ProjectTableView from './ProjectTableView';
 import ProjectKanbanView from './ProjectKanbanView';
+import ViewSwitcher, { type ViewMode } from './ViewSwitcher';
 import { 
   FolderKanban, 
   Plus, 
@@ -70,7 +71,7 @@ export default function ProjectDashboard({
   onUpdateProjectDetails
 }: ProjectDashboardProps) {
   // Sub-view Tab state
-  const [viewMode, setViewMode] = useState<'list' | 'table' | 'kanban' | 'tree'>('list');
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
 
   // Navigation & Filter states
   const [searchTerm, setSearchTerm] = useState('');
@@ -335,28 +336,17 @@ export default function ProjectDashboard({
         </div>
       </div>
 
-      {/* SUB-VIEW SELECTOR BUTTONS */}
-      <div className="flex bg-[#F9F6EE] p-1 rounded-2xl border border-[#E6DFD3] max-w-2xl overflow-x-auto scrollbar-none">
-        {[
-          { id: 'list', label: '🗂️ نمای لیست' },
-          { id: 'table', label: '⊞ نمای جدول' },
-          { id: 'kanban', label: '📋 بورد کانبان' },
-          { id: 'tree', label: '🌲 نمای درختی' }
-        ].map(tab => (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => setViewMode(tab.id as any)}
-            className={`flex-1 py-2 px-4 text-[10px] font-black rounded-xl text-center transition-all cursor-pointer whitespace-nowrap ${
-              viewMode === tab.id
-                ? 'bg-[#7C8363] text-white shadow-xs'
-                : 'text-[#8D7F72] hover:text-[#2D3025]'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      {/* SUB-VIEW SELECTOR — reusable ViewSwitcher */}
+      <ViewSwitcher
+        views={[
+          { id: 'list', label: 'لیست', emoji: '🗂️' },
+          { id: 'table', label: 'جدول', emoji: '⊞' },
+          { id: 'kanban', label: 'کانبان', emoji: '📋' },
+          { id: 'tree', label: 'درخت', emoji: '🌲' },
+        ]}
+        activeView={viewMode}
+        onChange={setViewMode}
+      />
 
       {/* 5. Render Selected View */}
       <div className="space-y-4">

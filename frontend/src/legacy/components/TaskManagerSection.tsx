@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback, lazy, Suspense } from 'react'
 import type { Task, Goal } from '../types'
+import ViewSwitcher, { type ViewMode } from './ViewSwitcher'
 
 const TaskTableView = lazy(() => import('./TaskTableView'))
 const TaskKanbanView = lazy(() => import('./TaskKanbanView'))
@@ -15,7 +16,6 @@ interface TaskManagerSectionProps {
   todayDate: string
 }
 
-type ViewMode = 'list' | 'table' | 'kanban'
 type GroupBy = 'none' | 'project' | 'priority' | 'status' | 'category' | 'dueDate'
 type SortBy = 'dueDate' | 'priority' | 'createdAt' | 'title'
 type FilterStatus = 'all' | 'open' | 'completed'
@@ -222,13 +222,16 @@ export default function TaskManagerSection({
         </div>
 
         <div className="flex flex-wrap gap-3 items-center border-t border-[#E6DFD3] pt-3">
-          {/* View Switcher */}
-          <span className="text-xs font-bold text-[#8D7F72]">نمایش:</span>
-          <Segmented value={viewMode} onChange={(v) => setViewMode(v as ViewMode)} options={[
-            { value: 'list', label: 'لیست' },
-            { value: 'table', label: 'جدول' },
-            { value: 'kanban', label: 'کانبان' },
-          ]} />
+          {/* View Switcher — reusable component */}
+          <ViewSwitcher
+            views={[
+              { id: 'list', label: 'لیست', emoji: '🗂️' },
+              { id: 'table', label: 'جدول', emoji: '⊞' },
+              { id: 'kanban', label: 'کانبان', emoji: '📋' },
+            ]}
+            activeView={viewMode}
+            onChange={setViewMode}
+          />
 
           {viewMode === 'kanban' && (
             <>

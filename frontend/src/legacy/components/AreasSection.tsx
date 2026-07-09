@@ -1,9 +1,8 @@
 import { useState, useMemo } from 'react'
 import { motion } from 'motion/react'
 import { Target, FolderKanban, FileText, TrendingUp, ChevronLeft, Layers, Grid3X3, List, TreePine } from 'lucide-react'
+import ViewSwitcher, { type ViewMode } from './ViewSwitcher'
 import type { Area, Goal, Project, Task } from '../types'
-
-type ViewMode = 'list' | 'table' | 'kanban' | 'tree'
 
 interface AreasSectionProps {
   areas: Area[]
@@ -71,25 +70,17 @@ export default function AreasSection({ areas, goals, tasks, onSelectGoal, onSele
             />
             <Grid3X3 className="w-3.5 h-3.5 text-[#8D7F72] absolute right-2.5 top-1/2 -translate-y-1/2" />
           </div>
-          <div className="inline-flex rounded-lg border border-[#E6DFD3] bg-white overflow-hidden">
-            {([
-              { value: 'list', label: 'لیست', icon: List },
-              { value: 'table', label: 'جدول', icon: Grid3X3 },
-              { value: 'kanban', label: 'کانبان', icon: Layers },
-              { value: 'tree', label: 'درخت', icon: TreePine },
-            ] as { value: ViewMode; label: string; icon: any }[]).map((o) => (
-              <button
-                key={o.value}
-                onClick={() => setViewMode(o.value)}
-                className={`px-3 py-1.5 text-[10px] font-bold transition-colors flex items-center gap-1 ${
-                  viewMode === o.value ? 'bg-[#2d3025] text-white' : 'text-[#5f6156] hover:bg-[#f3ebdf]'
-                }`}
-              >
-                <o.icon className="w-3 h-3" />
-                {o.label}
-              </button>
-            ))}
-          </div>
+          <ViewSwitcher
+            views={[
+              { id: 'list', label: 'لیست', emoji: '🗂️' },
+              { id: 'table', label: 'جدول', emoji: '⊞' },
+              { id: 'kanban', label: 'کانبان', emoji: '📋' },
+              { id: 'tree', label: 'درخت', emoji: '🌲' },
+            ]}
+            activeView={viewMode}
+            onChange={setViewMode}
+            size="sm"
+          />
         </div>
       </div>
 
