@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { Goal, Project, Task, GoalCategory } from '../types';
+import ProjectTableView from './ProjectTableView';
+import ProjectKanbanView from './ProjectKanbanView';
 import { 
   FolderKanban, 
   Plus, 
@@ -20,13 +22,7 @@ import {
   ListTodo,
   Sparkles,
   X,
-  ChevronLeft,
-  ChevronRight,
-  GitFork,
-  ArrowLeftRight,
-  Calendar,
-  AlertTriangle,
-  Pin
+  GitFork
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -74,7 +70,7 @@ export default function ProjectDashboard({
   onUpdateProjectDetails
 }: ProjectDashboardProps) {
   // Sub-view Tab state
-  const [viewMode, setViewMode] = useState<'list' | 'kanban' | 'gantt' | 'tree'>('list');
+  const [viewMode, setViewMode] = useState<'list' | 'table' | 'kanban' | 'tree'>('list');
 
   // Navigation & Filter states
   const [searchTerm, setSearchTerm] = useState('');
@@ -142,25 +138,6 @@ export default function ProjectDashboard({
     if (!newTaskTitle.trim()) return;
     onAddTaskToProject(goalId, projectId, newTaskTitle.trim());
     setNewTaskTitle('');
-  };
-
-  const handleMoveStatus = (project: any, direction: 'prev' | 'next') => {
-    const statuses: ('waiting' | 'in_progress' | 'paused' | 'completed')[] = ['waiting', 'in_progress', 'paused', 'completed'];
-    const currentStatus = project.status || (project.completed ? 'completed' : 'in_progress');
-    const currentIndex = statuses.indexOf(currentStatus);
-    const nextIndex = direction === 'next' ? currentIndex + 1 : currentIndex - 1;
-    if (nextIndex >= 0 && nextIndex < statuses.length) {
-      const nextStatus = statuses[nextIndex];
-      if (onUpdateProjectDetails) {
-        onUpdateProjectDetails(project.goalId, project.id, { status: nextStatus, completed: nextStatus === 'completed' });
-      }
-    }
-  };
-
-  const handleSetStatus = (project: any, nextStatus: 'waiting' | 'in_progress' | 'paused' | 'completed') => {
-    if (onUpdateProjectDetails) {
-      onUpdateProjectDetails(project.goalId, project.id, { status: nextStatus, completed: nextStatus === 'completed' });
-    }
   };
 
   return (
@@ -361,10 +338,10 @@ export default function ProjectDashboard({
       {/* SUB-VIEW SELECTOR BUTTONS */}
       <div className="flex bg-[#F9F6EE] p-1 rounded-2xl border border-[#E6DFD3] max-w-2xl overflow-x-auto scrollbar-none">
         {[
-          { id: 'list', label: '🗂️ نمای لیست پروژه‌ها' },
-          { id: 'kanban', label: '📋 بورد کانبان پیشرفته' },
-          { id: 'gantt', label: '📊 نمودار گانت زمان‌بندی' },
-          { id: 'tree', label: '🌲 نمودار درختی ساختار' }
+          { id: 'list', label: '🗂️ نمای لیست' },
+          { id: 'table', label: '⊞ نمای جدول' },
+          { id: 'kanban', label: '📋 بورد کانبان' },
+          { id: 'tree', label: '🌲 نمای درختی' }
         ].map(tab => (
           <button
             key={tab.id}
@@ -589,246 +566,25 @@ export default function ProjectDashboard({
           </div>
         )}
 
-        {/* ==================== VIEW 2: ADVANCED KANBAN BOARD ==================== */}
-        {viewMode === 'kanban' && (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-start pt-2">
-            {[
-              { id: 'waiting', label: '⏳ در انتظار شروع', color: 'border-slate-200 bg-slate-50/50 text-slate-800' },
-              { id: 'in_progress', label: '🚀 در حال اقدام', color: 'border-blue-200 bg-blue-50/50 text-blue-800' },
-              { id: 'paused', label: '⏸️ متوقف شده', color: 'border-amber-200 bg-amber-50/50 text-amber-800' },
-              { id: 'completed', label: '✅ تکمیل شده', color: 'border-emerald-200 bg-emerald-50/50 text-emerald-800' }
-            ].map(col => {
-              const columnProjects = filteredProjects.filter(p => {
-                const currentStatus = p.status || (p.completed ? 'completed' : 'in_progress');
-                return currentStatus === col.id;
-              });
-
-              return (
-                <div key={col.id} className="bg-[#FDFBF7] rounded-3xl border border-[#E6DFD3] p-4 flex flex-col space-y-3.5 min-h-[400px]">
-                  {/* Column Header */}
-                  <div className="flex items-center justify-between pb-2 border-b border-[#E6DFD3]/60">
-                    <span className="text-[11px] font-black text-[#2D3025]">{col.label}</span>
-                    <span className="text-[10px] font-bold px-2 py-0.5 bg-[#E6DFD3]/40 text-[#8D7F72] rounded-md font-mono">
-                      {columnProjects.length}
-                    </span>
-                  </div>
-
-                  {/* Card List */}
-                  <div className="space-y-3 flex-1 overflow-y-auto max-h-[500px] pr-0.5">
-                    {columnProjects.length > 0 ? (
-                      columnProjects.map(proj => {
-                        const tasks = proj.tasks || [];
-                        const completedCount = tasks.filter(t => t.completed).length;
-                        const totalCount = tasks.length;
-                        const progressPct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
-
-                        return (
-                          <div 
-                            key={proj.id} 
-                            className="bg-white p-3.5 rounded-2xl border border-[#E6DFD3]/80 hover:border-[#7C8363] transition-all shadow-xs flex flex-col space-y-3 text-right relative group"
-                          >
-                            <div className="space-y-1">
-                              <span className="text-[8px] font-extrabold text-[#7C8363] bg-[#E8ECE0] px-2 py-0.5 rounded-md">
-                                {proj.goalTitle}
-                              </span>
-                              <h5 className="text-[11px] font-black text-[#2D3025] leading-tight pt-1 group-hover:text-[#7C8363] transition-colors">
-                                {proj.title}
-                              </h5>
-                              {proj.description && (
-                                <p className="text-[9px] text-[#8D7F72] truncate max-w-full">{proj.description}</p>
-                              )}
-                            </div>
-
-                            {/* Task progress inline */}
-                            <div className="space-y-1">
-                              <div className="flex justify-between items-center text-[8px] font-black text-[#8D7F72]">
-                                <span>پیشرفت کارها:</span>
-                                <span>{completedCount} از {totalCount} ({progressPct}%)</span>
-                              </div>
-                              <div className="w-full h-1 bg-slate-100 rounded-full overflow-hidden">
-                                <div className="h-full bg-[#E26645]" style={{ width: `${progressPct}%` }} />
-                              </div>
-                            </div>
-
-                            {/* Responsive Status Changers (Move back & forth) */}
-                            <div className="flex items-center justify-between pt-2 border-t border-[#E6DFD3]/40 gap-1">
-                              <button
-                                type="button"
-                                onClick={() => handleMoveStatus(proj, 'prev')}
-                                className="p-1 bg-[#F9F6EE] hover:bg-[#E6DFD3] text-[#8D7F72] border border-[#E6DFD3] rounded-lg cursor-pointer transition-all active:scale-90 flex items-center justify-center"
-                                title="انتقال به ستون قبلی"
-                              >
-                                <ChevronRight className="w-3.5 h-3.5" />
-                              </button>
-
-                              <select
-                                value={col.id}
-                                onChange={(e) => handleSetStatus(proj, e.target.value as any)}
-                                className="text-[8px] font-bold py-1 px-1 bg-[#F9F6EE] border border-[#D6CFC3] rounded-lg text-[#2D3025] focus:outline-none flex-1 max-w-[90px] text-center cursor-pointer"
-                              >
-                                <option value="waiting">در انتظار</option>
-                                <option value="in_progress">جاری</option>
-                                <option value="paused">متوقف</option>
-                                <option value="completed">تکمیل</option>
-                              </select>
-
-                              <button
-                                type="button"
-                                onClick={() => handleMoveStatus(proj, 'next')}
-                                className="p-1 bg-[#F9F6EE] hover:bg-[#E6DFD3] text-[#8D7F72] border border-[#E6DFD3] rounded-lg cursor-pointer transition-all active:scale-90 flex items-center justify-center"
-                                title="انتقال به ستون بعدی"
-                              >
-                                <ChevronLeft className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })
-                    ) : (
-                      <div className="text-center py-8 text-[9px] text-[#8D7F72] font-semibold border border-dashed border-[#D6CFC3] rounded-2xl bg-white/40">
-                        پروژه‌ای در این ستون نیست
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+        {/* ==================== VIEW 2: TABLE VIEW ==================== */}
+        {viewMode === 'table' && (
+          <ProjectTableView
+            projects={filteredProjects}
+            goals={goals}
+            onUpdateProject={onUpdateProjectDetails || (() => {})}
+            onDeleteProject={onDeleteProjectFromGoal}
+            onViewProjectDetails={onSelectProject}
+          />
         )}
 
-        {/* ==================== VIEW 3: GANTT CHART ==================== */}
-        {viewMode === 'gantt' && (
-          <div className="bg-[#FDFBF7] rounded-3xl border border-[#E6DFD3] p-5 space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-[#E6DFD3]/60">
-              <div className="space-y-0.5">
-                <h4 className="text-xs font-black text-[#2D3025] flex items-center gap-1.5">
-                  <Calendar className="w-4 h-4 text-[#7C8363]" />
-                  <span>زمان‌بندی خطی و بررسی وابستگی‌ها (Gantt Chart)</span>
-                </h4>
-                <p className="text-[9px] text-[#8D7F72] font-semibold">توالی، تداخل، وضعیت دلاین‌ها و قفل‌های پیش‌نیاز را به صورت یکپارچه ببینید</p>
-              </div>
-            </div>
-
-            {/* Visual Timeline Table */}
-            <div className="space-y-4 overflow-x-auto">
-              {filteredProjects.length > 0 ? (
-                filteredProjects.map(proj => {
-                  const tasks = proj.tasks || [];
-                  return (
-                    <div key={proj.id} className="border-b border-[#E6DFD3]/40 pb-4 last:border-0 last:pb-0">
-                      {/* Project Row */}
-                      <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-center">
-                        <div className="md:col-span-1 text-right space-y-1">
-                          <span className="text-[8px] font-black text-[#8D7F72] bg-[#E8ECE0] px-1.5 py-0.5 rounded-md">
-                            {proj.goalTitle}
-                          </span>
-                          <h5 className="text-xs font-black text-[#2D3025]">{proj.title}</h5>
-                        </div>
-
-                        {/* Visual representation / progress block */}
-                        <div className="md:col-span-3 flex items-center gap-4">
-                          <div className="flex-1 bg-slate-100 rounded-full h-4 overflow-hidden relative border border-slate-200">
-                            {/* Inner progress bar */}
-                            <div 
-                              className="h-full bg-gradient-to-l from-[#7C8363] to-[#E26645] rounded-full transition-all duration-500" 
-                              style={{ width: `${tasks.length > 0 ? Math.round((tasks.filter(t => t.completed).length / tasks.length) * 100) : 0}%` }}
-                            />
-                            {/* Visual Timeline Grid Guides */}
-                            <div className="absolute inset-0 flex justify-between pointer-events-none text-[8px] px-3 items-center text-white font-mono font-bold drop-shadow-xs">
-                              <span>شروع</span>
-                              <span>برنامه</span>
-                              <span>دلاین نهایی</span>
-                            </div>
-                          </div>
-
-                          <span className="text-[9px] font-black text-[#7C8363] font-mono">
-                            {tasks.filter(t => t.completed).length}/{tasks.length} تسک
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Tasks timeline nested cards */}
-                      {tasks.length > 0 && (
-                        <div className="mt-2.5 mr-6 space-y-1.5 border-r-2 border-[#E6DFD3] pr-3 text-right">
-                          {tasks.map(task => {
-                            // Find any unresolved dependencies
-                            const dependencies = task.dependencies || [];
-                            const allProjectTasks = filteredProjects.flatMap(p => p.tasks || []);
-                            
-                            const dependencyObjects = dependencies.map(depId => 
-                              allProjectTasks.find(t => t.id === depId)
-                            ).filter(Boolean);
-
-                            const missingDeps = dependencyObjects.filter(d => !d?.completed);
-                            const isBlocked = missingDeps.length > 0;
-
-                            return (
-                              <div 
-                                key={task.id} 
-                                className={`flex flex-col md:flex-row md:items-center justify-between p-2.5 rounded-xl border text-xs gap-3 ${
-                                  task.completed 
-                                    ? 'bg-[#E8ECE0]/20 border-[#DDE2D5] text-[#8D7F72]' 
-                                    : isBlocked 
-                                      ? 'bg-rose-50/40 border-rose-100 text-[#2D3025]' 
-                                      : 'bg-white border-[#E6DFD3] text-[#3D3D3D]'
-                                }`}
-                              >
-                                <div className="flex items-center gap-2 min-w-0">
-                                  <div className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center shrink-0 ${
-                                    task.completed 
-                                      ? 'bg-[#7C8363] border-[#7C8363] text-white' 
-                                      : 'border-[#C6BFA3]'
-                                  }`}>
-                                    {task.completed && <span className="text-[8px] font-black">✓</span>}
-                                  </div>
-                                  <span className={`font-semibold truncate ${task.completed ? 'line-through opacity-70' : ''}`}>
-                                    {task.title}
-                                  </span>
-                                </div>
-
-                                {/* Dependency Flow Visualizer */}
-                                <div className="flex items-center gap-2 self-start md:self-auto shrink-0">
-                                  {dependencies.length > 0 ? (
-                                    isBlocked ? (
-                                      <div className="flex flex-wrap items-center gap-1">
-                                        <span className="px-2 py-0.5 bg-rose-50 border border-rose-200 text-[8px] text-rose-700 font-black rounded-md flex items-center gap-1">
-                                          <AlertTriangle className="w-3 h-3 text-rose-500 shrink-0" />
-                                          <span>مسدود شده توسط:</span>
-                                        </span>
-                                        {missingDeps.map(d => (
-                                          <span key={d?.id} className="px-1.5 py-0.5 bg-slate-100 text-[7px] font-bold rounded-sm border border-slate-200">
-                                            {d?.title}
-                                          </span>
-                                        ))}
-                                      </div>
-                                    ) : (
-                                      <span className="px-2 py-0.5 bg-emerald-50 border border-emerald-100 text-[8px] text-emerald-700 font-bold rounded-md flex items-center gap-1">
-                                        <span>✓ پیش‌نیازها آزاد شد</span>
-                                      </span>
-                                    )
-                                  ) : (
-                                    <span className="text-[8px] text-[#8D7F72] font-semibold">بدون قفل پیش‌نیاز</span>
-                                  )}
-
-                                  {task.dueDate && (
-                                    <span className="text-[8px] font-mono font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded-sm border border-amber-100 shrink-0">
-                                      ⏱️ {task.dueDate}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })
-              ) : (
-                <p className="text-center py-6 text-xs text-[#8D7F72]">پروژه‌ای برای نمایش یافت نشد.</p>
-              )}
-            </div>
-          </div>
+        {/* ==================== VIEW 3: KANBAN BOARD WITH DRAG-AND-DROP ==================== */}
+        {viewMode === 'kanban' && (
+          <ProjectKanbanView
+            projects={filteredProjects}
+            onUpdateProject={onUpdateProjectDetails || (() => {})}
+            onDeleteProject={onDeleteProjectFromGoal}
+            onViewProjectDetails={onSelectProject}
+          />
         )}
 
         {/* ==================== VIEW 4: TREE DIAGRAM ==================== */}
