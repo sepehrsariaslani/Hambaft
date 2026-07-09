@@ -4,6 +4,7 @@ import ViewSwitcher, { type ViewMode } from './ViewSwitcher'
 
 const TaskTableView = lazy(() => import('./TaskTableView'))
 const TaskKanbanView = lazy(() => import('./TaskKanbanView'))
+const TaskTreeView = lazy(() => import('./TaskTreeView'))
 
 interface TaskManagerSectionProps {
   tasks: Task[]
@@ -228,6 +229,7 @@ export default function TaskManagerSection({
               { id: 'list', label: 'لیست', emoji: '🗂️' },
               { id: 'table', label: 'جدول', emoji: '⊞' },
               { id: 'kanban', label: 'کانبان', emoji: '📋' },
+              { id: 'tree', label: 'درخت', emoji: '🌲' },
             ]}
             activeView={viewMode}
             onChange={setViewMode}
@@ -325,6 +327,21 @@ export default function TaskManagerSection({
             onUpdateTask={onUpdateTask}
             onViewTaskDetails={onViewTaskDetails}
             groupBy={kanbanGroup}
+          />
+        </Suspense>
+      )}
+
+      {viewMode === 'tree' && (
+        <Suspense fallback={<div className="text-center py-10 text-sm text-[#9D978B]">در حال بارگذاری درخت...</div>}>
+          <TaskTreeView
+            tasks={filteredTasks}
+            goals={goals}
+            onToggleTask={onToggleTask}
+            onDeleteTask={onDeleteTask}
+            onUpdateTask={onUpdateTask}
+            onAddTask={onAddTask}
+            onViewTaskDetails={onViewTaskDetails}
+            todayDate={todayDate}
           />
         </Suspense>
       )}

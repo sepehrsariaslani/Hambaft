@@ -35,6 +35,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import PersianDatePicker from './PersianDatePicker';
+import ProjectTaskTreeView from './ProjectTaskTreeView';
 import { DateObject } from 'react-multi-date-picker';
 import persian from 'react-date-object/calendars/persian';
 import persian_fa from 'react-date-object/locales/persian_fa';
@@ -105,7 +106,7 @@ export default function ProjectDetailView({
   onUpdateProjectDetails
 }: ProjectDetailViewProps) {
   // Views/Tabs State
-  const [activeTab, setActiveTab] = useState<'tasks' | 'planning' | 'milestones' | 'report' | 'notes'>('tasks');
+  const [activeTab, setActiveTab] = useState<'tasks' | 'planning' | 'milestones' | 'report' | 'notes' | 'task-tree'>('tasks');
   const [selectedTaskForDetails, setSelectedTaskForDetails] = useState<Task | null>(null);
   const [schedulingTaskId, setSchedulingTaskId] = useState<string | null>(null);
   const [calendarDate, setCalendarDate] = useState(() => new Date());
@@ -518,6 +519,18 @@ export default function ProjectDetailView({
           <div className="flex items-center gap-1">
             <FileText className="w-3.5 h-3.5" />
             <span>یادداشت‌ها (Notion)</span>
+          </div>
+        </button>
+
+        <button
+          onClick={() => { setActiveTab('task-tree'); setSchedulingTaskId(null); }}
+          className={`px-4 py-2 text-xs font-black transition-all cursor-pointer ${
+            activeTab === 'task-tree' ? 'border-b-2 border-[#7C8363] text-[#7C8363]' : 'text-[#8D7F72]'
+          }`}
+        >
+          <div className="flex items-center gap-1">
+            <Layers className="w-3.5 h-3.5" />
+            <span>نمای درختی</span>
           </div>
         </button>
       </div>
@@ -1115,6 +1128,21 @@ export default function ProjectDetailView({
               }}
             />
           </div>
+        )}
+
+        {/* TASK TREE VIEW */}
+        {activeTab === 'task-tree' && (
+          <ProjectTaskTreeView
+            tasks={tasksList}
+            onToggleTask={(taskId) => onToggleTaskInProject(project.goalId, project.id, taskId)}
+            onDeleteTask={(taskId) => onDeleteTaskFromProject(project.goalId, project.id, taskId)}
+            onUpdateTask={(task) => handleUpdateSingleTask(task)}
+            onAddTask={(title) => onAddTaskToProject(project.goalId, project.id, title)}
+            onViewTaskDetails={(taskId) => {
+              const t = tasksList.find(x => x.id === taskId)
+              if (t) setSelectedTaskForDetails(t)
+            }}
+          />
         )}
       </div>
 
