@@ -13,7 +13,7 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: resolve(__dirname, '../public/frontend'),
+    outDir: resolve(__dirname, '../hambaft/public/frontend'),
     emptyOutDir: true,
     rollupOptions: {
       output: {
