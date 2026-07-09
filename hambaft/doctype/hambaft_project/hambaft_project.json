@@ -99,6 +99,11 @@
       "label": "آیکون"
     },
     {
+      "fieldname": "note_blocks_json",
+      "fieldtype": "Text",
+      "label": "بلوک‌های یادداشت (JSON)"
+    },
+    {
       "fieldname": "tasks",
       "fieldtype": "Table",
       "label": "وظایف",

@@ -91,6 +91,11 @@
    "options": "سلامت\nمالی\nشغلی\nشخصی\nآموزشی"
   },
   {
+   "fieldname": "note_blocks_json",
+   "fieldtype": "Text",
+   "label": "بلوک‌های یادداشت (JSON)"
+  },
+  {
    "fieldname": "user",
    "fieldtype": "Link",
    "label": "کاربر",

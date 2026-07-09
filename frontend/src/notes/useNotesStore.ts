@@ -1,8 +1,10 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import type { Block, BlockType, NotePage } from './types'
+import { call } from '../app/frappe'
 
 let GLOBAL_PAGES: NotePage[] = []
 let LISTENERS: (() => void)[] = []
+let INITIALIZED = false
 
 function notify() {
   LISTENERS.forEach((fn) => fn())
@@ -26,14 +28,127 @@ export function createDefaultPage(title = 'بدون عنوان'): NotePage {
   }
 }
 
+/* ─── API wrappers ─────────────────────────────────────────────────────── */
+
+async function apiGetPages(): Promise<NotePage[]> {
+  try {
+    const res = await call<{ data?: { pages?: any[] } }>('hambaft.hambaft.api.get_note_pages', { limit: 200 })
+    const rows = res?.data?.pages || []
+    return rows.map((row: any) => ({
+      id: row.name,
+      title: row.title || 'بدون عنوان',
+      icon: row.icon,
+      cover: row.cover,
+      parentId: row.parent_page || undefined,
+      isFavorite: !!row.is_favorite,
+      isArchived: !!row.is_archived,
+      isTrashed: !!row.is_trashed,
+      blocks: Array.isArray(row.blocks) ? row.blocks : [],
+      createdAt: row.creation || new Date().toISOString(),
+      updatedAt: row.modified || new Date().toISOString(),
+    }))
+  } catch (e) {
+    console.error('Failed to load note pages:', e)
+    return []
+  }
+}
+
+async function apiCreatePage(page: NotePage): Promise<NotePage | null> {
+  try {
+    const res = await call<{ data?: { page?: any } }>('hambaft.hambaft.api.create_note_page', {
+      data: {
+        title: page.title,
+        icon: page.icon,
+        cover: page.cover,
+        parentId: page.parentId,
+        isFavorite: page.isFavorite,
+        isArchived: page.isArchived,
+        isTrashed: page.isTrashed,
+        blocks: page.blocks,
+      },
+    })
+    const created = res?.data?.page
+    if (!created) return null
+    return {
+      id: created.name,
+      title: created.title,
+      icon: created.icon,
+      cover: created.cover,
+      parentId: created.parent_page || undefined,
+      isFavorite: !!created.is_favorite,
+      isArchived: !!created.is_archived,
+      isTrashed: !!created.is_trashed,
+      blocks: Array.isArray(created.blocks) ? created.blocks : page.blocks,
+      createdAt: created.creation,
+      updatedAt: created.modified,
+    }
+  } catch (e) {
+    console.error('Failed to create note page:', e)
+    return null
+  }
+}
+
+async function apiUpdatePage(pageId: string, patch: Partial<NotePage>): Promise<boolean> {
+  try {
+    await call('hambaft.hambaft.api.update_note_page', {
+      name: pageId,
+      data: {
+        title: patch.title,
+        icon: patch.icon,
+        cover: patch.cover,
+        parentId: patch.parentId,
+        isFavorite: patch.isFavorite,
+        isArchived: patch.isArchived,
+        isTrashed: patch.isTrashed,
+        blocks: patch.blocks,
+      },
+    })
+    return true
+  } catch (e) {
+    console.error('Failed to update note page:', e)
+    return false
+  }
+}
+
+async function apiDeletePage(pageId: string): Promise<boolean> {
+  try {
+    await call('hambaft.hambaft.api.delete_note_page', { name: pageId })
+    return true
+  } catch (e) {
+    console.error('Failed to delete note page:', e)
+    return false
+  }
+}
+
+/* ─── Store hook ───────────────────────────────────────────────────────── */
+
 export function useNotesStore() {
   const [, forceUpdate] = useState(0)
   const savingRef = useRef<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const saveTimerRef = useRef<any>(null)
+  const initRef = useRef(false)
 
   useEffect(() => {
     const listener = () => forceUpdate((n) => n + 1)
     LISTENERS.push(listener)
+
+    // Lazy-load from backend once
+    if (!INITIALIZED && !initRef.current) {
+      initRef.current = true
+      apiGetPages().then((pages) => {
+        if (pages.length > 0) {
+          GLOBAL_PAGES = pages
+        } else {
+          // Seed with defaults if nothing on server
+          initMockPages()
+          // Persist defaults
+          GLOBAL_PAGES.forEach((p) => apiCreatePage(p))
+        }
+        INITIALIZED = true
+        notify()
+      })
+    }
+
     return () => {
       LISTENERS = LISTENERS.filter((l) => l !== listener)
     }
@@ -41,38 +156,56 @@ export function useNotesStore() {
 
   const getPages = useCallback(() => GLOBAL_PAGES, [])
 
-  const addPage = useCallback((parentId?: string) => {
+  const addPage = useCallback(async (parentId?: string) => {
     const page = createDefaultPage(parentId ? 'صفحه فرعی جدید' : 'یادداشت جدید')
     if (parentId) page.parentId = parentId
-    GLOBAL_PAGES = [page, ...GLOBAL_PAGES]
+
+    const created = await apiCreatePage(page)
+    if (created) {
+      GLOBAL_PAGES = [created, ...GLOBAL_PAGES]
+    } else {
+      GLOBAL_PAGES = [page, ...GLOBAL_PAGES]
+    }
     savingRef.current = 'saved'
     notify()
-    return page
+    return created || page
   }, [])
 
-  const updatePage = useCallback((pageId: string, patch: Partial<NotePage>) => {
-    GLOBAL_PAGES = GLOBAL_PAGES.map((p) => (p.id === pageId ? { ...p, ...patch, updatedAt: new Date().toISOString() } : p))
+  const updatePage = useCallback(async (pageId: string, patch: Partial<NotePage>) => {
+    const page = GLOBAL_PAGES.find((p) => p.id === pageId)
+    if (!page) return
+
+    const updated = { ...page, ...patch, updatedAt: new Date().toISOString() }
+    GLOBAL_PAGES = GLOBAL_PAGES.map((p) => (p.id === pageId ? updated : p))
     savingRef.current = 'saving'
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
-    saveTimerRef.current = setTimeout(() => {
-      savingRef.current = 'saved'
-      notify()
-    }, 800)
     notify()
+
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(async () => {
+      const ok = await apiUpdatePage(pageId, patch)
+      savingRef.current = ok ? 'saved' : 'error'
+      notify()
+    }, 600)
   }, [])
 
-  const deletePage = useCallback((pageId: string) => {
+  const deletePage = useCallback(async (pageId: string) => {
     const idsToDelete = new Set<string>()
     const collect = (id: string) => {
       idsToDelete.add(id)
       GLOBAL_PAGES.filter((p) => p.parentId === id).forEach((p) => collect(p.id))
     }
     collect(pageId)
+
+    // Delete from backend first
+    for (const id of idsToDelete) {
+      await apiDeletePage(id)
+    }
+
     GLOBAL_PAGES = GLOBAL_PAGES.filter((p) => !idsToDelete.has(p.id))
     notify()
   }, [])
 
-  const duplicatePage = useCallback((pageId: string) => {
+  const duplicatePage = useCallback(async (pageId: string) => {
     const page = GLOBAL_PAGES.find((p) => p.id === pageId)
     if (!page) return
     const clone: NotePage = {
@@ -82,14 +215,20 @@ export function useNotesStore() {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     }
-    GLOBAL_PAGES = [clone, ...GLOBAL_PAGES]
+    const created = await apiCreatePage(clone)
+    if (created) {
+      GLOBAL_PAGES = [created, ...GLOBAL_PAGES]
+    } else {
+      GLOBAL_PAGES = [clone, ...GLOBAL_PAGES]
+    }
     notify()
-    return clone
+    return created || clone
   }, [])
 
-  const movePage = useCallback((pageId: string, newParentId?: string) => {
+  const movePage = useCallback(async (pageId: string, newParentId?: string) => {
     GLOBAL_PAGES = GLOBAL_PAGES.map((p) => (p.id === pageId ? { ...p, parentId: newParentId } : p))
     notify()
+    await apiUpdatePage(pageId, { parentId: newParentId })
   }, [])
 
   const addBlock = useCallback((pageId: string, afterBlockId?: string, type?: BlockType) => {

@@ -232,6 +232,7 @@ export function toTaskPayload(task: Task): Record<string, unknown> {
     category: taskCategoryToBackend[task.category || 'other'] || 'شخصی',
     status: task.completed ? 'انجام‌شده' : 'انجام‌نشده',
     project: task.projectId || null,
+    noteBlocks: task.noteBlocks || [],
   }
 }
 
@@ -248,6 +249,7 @@ export function toGoalPayload(goal: Goal): Record<string, unknown> {
     current_value: metric?.currentValue ?? null,
     unit: metric?.unit ?? null,
     notes: goal.visionAffirmation || '',
+    noteBlocks: goal.noteBlocks || [],
   }
 }
 
@@ -508,6 +510,7 @@ export function toProjectPayload(project: Project, goalId?: string | null) {
     start_date: project.createdAt || undefined,
     target_date: undefined,
     progress: project.tasks?.length ? Math.round((project.tasks.filter((task) => task.completed).length / project.tasks.length) * 100) : 0,
+    noteBlocks: project.noteBlocks || [],
     tasks: (project.tasks || []).map((task) => ({
       id: task.id,
       title: task.title,

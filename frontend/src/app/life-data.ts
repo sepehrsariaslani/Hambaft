@@ -49,6 +49,17 @@ type BootstrapState = {
   settings: Record<string, any>
 }
 
+function parseNoteBlocks(raw: any): any[] | undefined {
+  if (!raw) return undefined
+  if (Array.isArray(raw)) return raw
+  try {
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed : undefined
+  } catch {
+    return undefined
+  }
+}
+
 function mapTasks(items: any[]): Task[] {
   return items.map((item) => ({
     id: item.name,
@@ -60,6 +71,7 @@ function mapTasks(items: any[]): Task[] {
     priority: mapBackendTaskPriority(item.priority),
     category: mapBackendTaskCategory(item.category),
     projectId: item.project || undefined,
+    noteBlocks: parseNoteBlocks(item.note_blocks_json),
   }))
 }
 
@@ -85,6 +97,7 @@ function mapGoals(items: any[]): Goal[] {
             logs: [],
           }
         : undefined,
+    noteBlocks: parseNoteBlocks(item.note_blocks_json),
   }))
 }
 
@@ -211,6 +224,7 @@ function mapProjects(items: any[]): Project[] {
             : item.status === 'تکمیل‌شده'
               ? 'completed'
               : 'in_progress',
+    noteBlocks: parseNoteBlocks(item.note_blocks_json),
   }))
 }
 

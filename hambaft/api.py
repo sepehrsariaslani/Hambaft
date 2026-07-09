@@ -332,6 +332,22 @@ def _ensure_hambaft_user_role(user_name):
         user_doc.save(ignore_permissions=True)
 
 
+def _extract_note_blocks(doc):
+    """Parse note_blocks_json from a doc into noteBlocks list for frontend."""
+    raw = getattr(doc, "note_blocks_json", None) if hasattr(doc, "note_blocks_json") else None
+    return _loads_json(raw, [])
+
+
+def _inject_note_blocks(data):
+    """Convert frontend noteBlocks array into note_blocks_json string for DB."""
+    if not isinstance(data, dict):
+        return data
+    blocks = data.pop("noteBlocks", None)
+    if blocks is not None:
+        data["note_blocks_json"] = json.dumps(blocks, ensure_ascii=False)
+    return data
+
+
 def _project_to_frontend(doc):
     task_rows = []
     for row in doc.get("tasks") or []:
@@ -361,6 +377,7 @@ def _project_to_frontend(doc):
         "icon": doc.icon,
         "tasks": task_rows,
         "creation": str(doc.creation) if getattr(doc, "creation", None) else None,
+        "noteBlocks": _extract_note_blocks(doc),
     }
 
 
@@ -625,12 +642,15 @@ def create_goal(data):
         frappe.throw("Authentication required", frappe.AuthenticationError)
     if isinstance(data, str):
         data = json.loads(data)
+    data = _inject_note_blocks(data)
     doc = frappe.new_doc("Goal")
     doc.update(data)
     doc.user = frappe.session.user
     doc.insert()
     frappe.db.commit()
-    return _api_response({"goal": doc.as_dict()})
+    result = doc.as_dict()
+    result["noteBlocks"] = _extract_note_blocks(doc)
+    return _api_response({"goal": result})
 
 
 @frappe.whitelist()
@@ -639,11 +659,14 @@ def update_goal(name, data):
         frappe.throw("Authentication required", frappe.AuthenticationError)
     if isinstance(data, str):
         data = json.loads(data)
+    data = _inject_note_blocks(data)
     doc = frappe.get_doc("Goal", name)
     doc.update(data)
     doc.save()
     frappe.db.commit()
-    return _api_response({"goal": doc.as_dict()})
+    result = doc.as_dict()
+    result["noteBlocks"] = _extract_note_blocks(doc)
+    return _api_response({"goal": result})
 
 
 @frappe.whitelist()
@@ -710,12 +733,15 @@ def create_task(data):
         frappe.throw("Authentication required", frappe.AuthenticationError)
     if isinstance(data, str):
         data = json.loads(data)
+    data = _inject_note_blocks(data)
     doc = frappe.new_doc("Task")
     doc.update(data)
     doc.user = frappe.session.user
     doc.insert()
     frappe.db.commit()
-    return _api_response({"task": doc.as_dict()})
+    result = doc.as_dict()
+    result["noteBlocks"] = _extract_note_blocks(doc)
+    return _api_response({"task": result})
 
 
 @frappe.whitelist()
@@ -724,11 +750,14 @@ def update_task(name, data):
         frappe.throw("Authentication required", frappe.AuthenticationError)
     if isinstance(data, str):
         data = json.loads(data)
+    data = _inject_note_blocks(data)
     doc = frappe.get_doc("Task", name)
     doc.update(data)
     doc.save()
     frappe.db.commit()
-    return _api_response({"task": doc.as_dict()})
+    result = doc.as_dict()
+    result["noteBlocks"] = _extract_note_blocks(doc)
+    return _api_response({"task": result})
 
 
 @frappe.whitelist()
@@ -1675,6 +1704,7 @@ def create_project(data):
     if isinstance(data, str):
         data = json.loads(data)
     data = data or {}
+    data = _inject_note_blocks(data)
     doc = frappe.new_doc("Hambaft Project")
     doc.user = frappe.session.user
     doc.title = data.get("title")
@@ -1688,6 +1718,8 @@ def create_project(data):
     doc.progress = flt(data.get("progress") or 0)
     doc.color = data.get("color")
     doc.icon = data.get("icon")
+    if data.get("note_blocks_json"):
+        doc.note_blocks_json = data.get("note_blocks_json")
     for task in data.get("tasks") or []:
         doc.append("tasks", {
             "title": task.get("title"),
@@ -1710,6 +1742,7 @@ def update_project(name, data):
     if isinstance(data, str):
         data = json.loads(data)
     data = data or {}
+    data = _inject_note_blocks(data)
     doc = frappe.get_doc("Hambaft Project", name)
     doc.title = data.get("title", doc.title)
     doc.description = data.get("description", doc.description)
@@ -1722,6 +1755,8 @@ def update_project(name, data):
     doc.progress = flt(data.get("progress", doc.progress or 0))
     doc.color = data.get("color", doc.color)
     doc.icon = data.get("icon", doc.icon)
+    if data.get("note_blocks_json"):
+        doc.note_blocks_json = data.get("note_blocks_json")
     if "tasks" in data:
         doc.set("tasks", [])
         for task in data.get("tasks") or []:
