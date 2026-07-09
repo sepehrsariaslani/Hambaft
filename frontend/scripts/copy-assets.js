@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 const src = path.resolve(__dirname, '../../hambaft/public/frontend')
-const dst = path.resolve(__dirname, '../../../sites/assets/hambaft/frontend')
+const dst = path.resolve(__dirname, '../../../../sites/assets/hambaft/frontend')
 
 function copyDir(srcDir, dstDir) {
   fs.mkdirSync(dstDir, { recursive: true })
