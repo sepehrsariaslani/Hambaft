@@ -86,6 +86,7 @@ function mapTasks(items: any[]): Task[] {
     blockedBy: item.blocked_by_json ? JSON.parse(item.blocked_by_json) : [],
     blocking: item.blocking_json ? JSON.parse(item.blocking_json) : [],
     isDailyHighlight: !!item.is_daily_highlight,
+    importance: item.importance === 'کلیدی' ? 'key' : item.importance === 'نقطه‌عطف' ? 'milestone' : item.importance === 'عادی' ? 'normal' : undefined,
     actualMinutes: item.actual_minutes || undefined,
     estimatedMinutes: item.estimated_minutes || undefined,
     areaId: item.area || undefined,
@@ -146,11 +147,37 @@ function mapGoals(items: any[]): Goal[] {
       notes: f.notes,
     }))
 
+    const contribTypeMap: Record<string, 'mandatory' | 'recommended' | 'supporting'> = {
+      'اجباری': 'mandatory', 'پیشنهادی': 'recommended', 'پشتیبان': 'supporting',
+    }
+    const healthStateMap: Record<string, 'on_track' | 'at_risk' | 'off_track' | 'needs_review'> = {
+      'در_مسیر': 'on_track', 'در_خطر': 'at_risk', 'خارج_از_مسیر': 'off_track', 'نیاز_به_بررسی': 'needs_review',
+    }
+    const completionPolicyMap: Record<string, 'threshold' | 'threshold_plus_mandatory' | 'metric_plus_mandatory' | 'all_projects' | 'threshold_plus_milestones'> = {
+      'آستانه_پیشرفت': 'threshold', 'آستانه_به_علاوه_پروژه‌های_اجباری': 'threshold_plus_mandatory',
+      'سنجه_به_علاوه_پروژه‌های_اجباری': 'metric_plus_mandatory', 'همه_پروژه‌ها_تکمیل': 'all_projects',
+      'آستانه_به_علاوه_نقاط_عطف': 'threshold_plus_milestones',
+    }
+
     const linkedProjects: GoalLinkedProject[] = (item.linked_projects || []).map((p: any) => ({
-      name: p.name,
+      project: p.project || p.name,
       title: p.title,
       status: p.status,
       progress: p.progress,
+      effortType: p.effort_type,
+      estimatedHours: p.estimated_hours,
+      actualMinutes: p.actual_minutes,
+      totalTasks: p.total_tasks,
+      doneTasks: p.done_tasks,
+      milestoneTotal: p.milestone_total,
+      milestoneDone: p.milestone_done,
+      keyTotal: p.key_total,
+      keyDone: p.key_done,
+      weight: p.weight,
+      contributionType: contribTypeMap[p.contribution_type] || undefined,
+      isMandatory: !!p.is_mandatory,
+      sortOrder: p.sort_order,
+      notes: p.notes,
     }))
 
     const goal: Goal = {
@@ -191,6 +218,27 @@ function mapGoals(items: any[]): Goal[] {
       linkedHabits,
       linkedFinanceAccounts,
       linkedProjects,
+      projectProgressWeight: item.project_progress_weight ?? undefined,
+      milestoneWeight: item.milestone_weight ?? undefined,
+      keyTaskWeight: item.key_task_weight ?? undefined,
+      trackedTimeWeight: item.tracked_time_weight ?? undefined,
+      metricWeight: item.metric_weight ?? undefined,
+      healthState: healthStateMap[item.health_state] || undefined,
+      healthDetail: item.health_detail ?? undefined,
+      completionPolicy: completionPolicyMap[item.completion_policy] || undefined,
+      completionThreshold: item.completion_threshold ?? undefined,
+      lastSnapshot: item.last_snapshot_json ? (() => {
+        try {
+          const s = typeof item.last_snapshot_json === 'string' ? JSON.parse(item.last_snapshot_json) : item.last_snapshot_json
+          return {
+            progressPct: s.progress_percent ?? s.progressPct ?? 0,
+            healthState: healthStateMap[s.health_state] || 'on_track',
+            detail: s.detail,
+            healthDetail: s.health_detail,
+          }
+        } catch { return undefined }
+      })() : undefined,
+      lastSnapshotAt: item.last_snapshot_at ? String(item.last_snapshot_at).slice(0, 19) : undefined,
       noteBlocks: parseNoteBlocks(item.note_blocks_json),
     }
     return goal

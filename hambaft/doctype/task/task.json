@@ -137,6 +137,14 @@
    "default": 0
   },
   {
+   "fieldname": "importance",
+   "fieldtype": "Select",
+   "label": "اهمیت",
+   "options": "عادی\nکلیدی\nنقطه‌عطف",
+   "default": "عادی",
+   "description": "نقطه‌عطف=مارکر مهم پروژه، کلیدی=تسک با اهمیت بالا، عادی=معمولی"
+  },
+  {
    "fieldname": "note_blocks_json",
    "fieldtype": "Text",
    "label": "بلوک‌های یادداشت (JSON)"

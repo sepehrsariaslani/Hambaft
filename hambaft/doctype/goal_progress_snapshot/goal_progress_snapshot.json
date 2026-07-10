@@ -1,0 +1,74 @@
+{
+ "name": "Goal Progress Snapshot",
+ "doctype": "DocType",
+ "module": "Hambaft",
+ "autoname": "format:GPS-{#####}",
+ "custom": 0,
+ "istable": 0,
+ "issingle": 0,
+ "track_changes": 0,
+ "fields": [
+  {
+   "fieldname": "goal",
+   "fieldtype": "Link",
+   "label": "هدف",
+   "options": "Goal",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "label": "کاربر",
+   "options": "User",
+   "reqd": 1
+  },
+  {
+   "fieldname": "progress_percent",
+   "fieldtype": "Percent",
+   "label": "درصد پیشرفت"
+  },
+  {
+   "fieldname": "health_state",
+   "fieldtype": "Select",
+   "label": "وضعیت سلامت",
+   "options": "در_مسیر\nدر_خطر\nخارج_از_مسیر\nنیاز_به_بررسی"
+  },
+  {
+   "fieldname": "detail_json",
+   "fieldtype": "Code",
+   "label": "جزئیات محاسبه (JSON)"
+  },
+  {
+   "fieldname": "snapshot_date",
+   "fieldtype": "Date",
+   "label": "تاریخ اسنپ‌شات",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "trigger_type",
+   "fieldtype": "Select",
+   "label": "نوع تحریک",
+   "options": "hand\ntask_done\nhabit_log\nproject_update\nscheduled\napi_call",
+   "default": "api_call"
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1
+  },
+  {
+   "role": "Hambaft User",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "if_owner": 1
+  }
+ ]
+}

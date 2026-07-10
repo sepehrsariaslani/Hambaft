@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Goal, Project, Task, GoalCategory, BankAccount, Transaction, Milestone } from '../types';
+import { Goal, Project, Task, GoalCategory, GoalLinkedProject, BankAccount, Transaction, Milestone } from '../types';
 import EntityNoteEditor from '../../notes/components/EntityNoteEditor';
 import ViewSwitcher, { type ViewMode } from './ViewSwitcher';
 import { 
@@ -32,7 +32,8 @@ import {
   CalendarDays,
   Activity,
   Layers,
-  Edit2
+  Edit2,
+  Target
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import PersianDatePicker from './PersianDatePicker';
@@ -89,7 +90,7 @@ interface ProjectDetailViewProps {
   onToggleTaskInProject: (goalId: string, projectId: string, taskId: string) => void;
   onDeleteTaskFromProject: (goalId: string, projectId: string, taskId: string) => void;
   onToggleProjectCompletion: (goalId: string, projectId: string) => void;
-  onUpdateProjectDetails?: (goalId: string, projectId: string, updates: { title?: string; description?: string; notes?: string; milestones?: Milestone[]; tasks?: Task[] }) => void;
+  onUpdateProjectDetails?: (goalId: string, projectId: string, updates: { title?: string; description?: string; notes?: string; milestones?: Milestone[]; tasks?: Task[]; noteBlocks?: any[] }) => void;
 }
 
 export default function ProjectDetailView({
@@ -461,6 +462,29 @@ export default function ProjectDetailView({
           </div>
         </div>
       </div>
+
+      {/* GOAL CONTRIBUTION CONTEXT */}
+      {project.goalId && project.goalTitle && (() => {
+        // Try to find this project's contribution data from the goal's linkedProjects
+        // This would come from the parent Goal's linkedProjects if passed down
+        // For now, show basic goal context
+        return (
+          <div className="bg-[#E8ECE0]/20 p-3 rounded-2xl border border-[#DDE2D5] flex items-center gap-3 text-right">
+            <div className="p-1.5 bg-[#7C8363]/10 rounded-lg">
+              <Target className="w-4 h-4 text-[#7C8363]" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <span className="text-[9px] text-[#8D7F72] block">مشارکت در هدف:</span>
+              <span className="text-xs font-bold text-[#2D3025] truncate block">{project.goalTitle}</span>
+            </div>
+            <div className="flex items-center gap-2 text-[9px] font-bold">
+              <span className="bg-[#F9F1D8] text-[#5A5A40] px-2 py-0.5 rounded-md border border-[#EBE3C8]">
+                پیشرفت پروژه: {progressPercent}%
+              </span>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* THREE VIEW SWITCHER (TABS) */}
       <div className="flex border-b border-[#E6DFD3] dark:border-[#3D4133]/60">

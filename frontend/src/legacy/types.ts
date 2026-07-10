@@ -114,11 +114,45 @@ export interface GoalFinanceLink {
   notes?: string;
 }
 
+export type ProjectContributionType = 'mandatory' | 'recommended' | 'supporting';
+
 export interface GoalLinkedProject {
-  name: string;
+  project: string;
   title: string;
   status?: string;
   progress?: number;
+  effortType?: string;
+  estimatedHours?: number;
+  actualMinutes?: number;
+  totalTasks?: number;
+  doneTasks?: number;
+  milestoneTotal?: number;
+  milestoneDone?: number;
+  keyTotal?: number;
+  keyDone?: number;
+  weight?: number;
+  contributionType?: ProjectContributionType;
+  isMandatory?: boolean;
+  sortOrder?: number;
+  notes?: string;
+}
+
+export type GoalHealthState = 'on_track' | 'at_risk' | 'off_track' | 'needs_review';
+export type CompletionPolicy = 'threshold' | 'threshold_plus_mandatory' | 'metric_plus_mandatory' | 'all_projects' | 'threshold_plus_milestones';
+
+export interface GoalSignalWeights {
+  projectProgressWeight: number;
+  milestoneWeight: number;
+  keyTaskWeight: number;
+  trackedTimeWeight: number;
+  metricWeight: number;
+}
+
+export interface GoalSnapshot {
+  progressPct: number;
+  healthState: GoalHealthState;
+  detail?: any;
+  healthDetail?: any;
 }
 
 export interface MetricLog {
@@ -189,10 +223,29 @@ export interface Goal {
   // Finance links
   linkedFinanceAccounts?: GoalFinanceLink[];
   
-  // Linked projects (from backend)
+  // Linked projects (from backend) — rich with weights
   linkedProjects?: GoalLinkedProject[];
   
-  keyResults?: KeyResult[];
+  // Project signal weights
+  projectProgressWeight?: number;
+  milestoneWeight?: number;
+  keyTaskWeight?: number;
+  trackedTimeWeight?: number;
+  metricWeight?: number;
+  
+  // Health
+  healthState?: GoalHealthState;
+  healthDetail?: any;
+  
+  // Completion policy
+  completionPolicy?: CompletionPolicy;
+  completionThreshold?: number;
+  
+  // Snapshot
+  lastSnapshot?: GoalSnapshot;
+  lastSnapshotAt?: string;
+  
+  keyResults?: { id: string; title: string; completed: boolean; targetValue?: number; currentValue?: number }[];
   visionImages?: string[];
   visionAffirmation?: string;
   noteBlocks?: import('../notes/types').Block[];
@@ -231,6 +284,7 @@ export interface Task {
   blocking?: string[]; // شناسه تسک‌هایی که این تسک مانع آنهاست
   isBlocked?: boolean; // derived
   isDailyHighlight?: boolean; // تسک برجسته روزانه
+  importance?: 'normal' | 'key' | 'milestone'; // اهمیت تسک (عادی/کلیدی/نقطه‌عطف)
   noteBlocks?: import('../notes/types').Block[]; // Notion-like rich text blocks
   
   // Session tracking

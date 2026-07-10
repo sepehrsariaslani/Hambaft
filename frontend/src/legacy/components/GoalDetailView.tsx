@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Goal, GoalCategory, GoalType, ProgressMode, ContributionType, ContributionPeriod, GoalHabitLink, GoalFinanceLink, GoalLinkedProject, Milestone, Habit, BankAccount, Project, Task, MetricLog, GoalMetric, WorkoutLog, SleepLog, MindfulnessSession, JournalEntry } from '../types';
+import { Goal, GoalCategory, GoalType, ProgressMode, ContributionType, ContributionPeriod, GoalHabitLink, GoalFinanceLink, GoalLinkedProject, GoalHealthState, CompletionPolicy, GoalSignalWeights, Milestone, Habit, BankAccount, Project, Task, MetricLog, GoalMetric, WorkoutLog, SleepLog, MindfulnessSession, JournalEntry } from '../types';
 import { GOAL_CATEGORY_LABELS } from '../initialData';
 import { 
   getGoalDetail, 
@@ -9,7 +9,12 @@ import {
   linkGoalFinance, 
   unlinkGoalFinance, 
   linkGoalProject, 
-  unlinkGoalProject 
+  unlinkGoalProject,
+  updateGoalSignalWeights,
+  updateGoalCompletionPolicy,
+  getGoalSnapshots,
+  getGoalTrend,
+  updateGoalProjectWeights
 } from '../../app/hambaft-api';
 import PersianDatePicker from './PersianDatePicker';
 import EntityNoteEditor from '../../notes/components/EntityNoteEditor';
@@ -54,7 +59,15 @@ import {
   HelpCircle,
   Check,
   LineChart as LucideLineChart,
-  FileText
+  FileText,
+  ShieldCheck,
+  ShieldAlert,
+  ShieldX,
+  Eye,
+  BarChart3,
+  Scale,
+  Flag,
+  Clock
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -177,6 +190,24 @@ export default function GoalDetailView({
   const [editTargetValue, setEditTargetValue] = useState(String(goal.targetValue || ''));
   const [editCurrentValue, setEditCurrentValue] = useState(String(goal.currentValue || ''));
   const [editUnit, setEditUnit] = useState(goal.unit || '');
+  
+  // Signal weight states
+  const [editProjectProgressWeight, setEditProjectProgressWeight] = useState(String(goal.projectProgressWeight ?? 40));
+  const [editMilestoneWeight, setEditMilestoneWeight] = useState(String(goal.milestoneWeight ?? 25));
+  const [editKeyTaskWeight, setEditKeyTaskWeight] = useState(String(goal.keyTaskWeight ?? 20));
+  const [editTrackedTimeWeight, setEditTrackedTimeWeight] = useState(String(goal.trackedTimeWeight ?? 10));
+  const [editMetricWeight, setEditMetricWeight] = useState(String(goal.metricWeight ?? 5));
+  const [isSavingWeights, setIsSavingWeights] = useState(false);
+  
+  // Completion policy states
+  const [editCompletionPolicy, setEditCompletionPolicy] = useState<CompletionPolicy>(goal.completionPolicy || 'threshold');
+  const [editCompletionThreshold, setEditCompletionThreshold] = useState(String(goal.completionThreshold ?? 80));
+  const [isSavingPolicy, setIsSavingPolicy] = useState(false);
+  
+  // Snapshot/trend states
+  const [goalSnapshots, setGoalSnapshots] = useState<any[]>([]);
+  const [goalTrend, setGoalTrend] = useState<any[]>([]);
+  const [isLoadingSnapshots, setIsLoadingSnapshots] = useState(false);
   
   // Goal habit link states
   const [linkHabitId, setLinkHabitId] = useState('');
@@ -870,6 +901,128 @@ export default function GoalDetailView({
     setNewTaskTitles(prev => ({ ...prev, [projectId]: '' }));
   };
 
+  // Save signal weights
+  const handleSaveSignalWeights = async () => {
+    if (goal.id.startsWith('synthetic-') || goal.id.startsWith('goal-')) return;
+    setIsSavingWeights(true);
+    try {
+      await updateGoalSignalWeights(goal.id, {
+        projectProgressWeight: Number(editProjectProgressWeight) || 40,
+        milestoneWeight: Number(editMilestoneWeight) || 25,
+        keyTaskWeight: Number(editKeyTaskWeight) || 20,
+        trackedTimeWeight: Number(editTrackedTimeWeight) || 10,
+        metricWeight: Number(editMetricWeight) || 5,
+      });
+      onUpdateGoal({
+        ...goal,
+        projectProgressWeight: Number(editProjectProgressWeight) || 40,
+        milestoneWeight: Number(editMilestoneWeight) || 25,
+        keyTaskWeight: Number(editKeyTaskWeight) || 20,
+        trackedTimeWeight: Number(editTrackedTimeWeight) || 10,
+        metricWeight: Number(editMetricWeight) || 5,
+      });
+    } catch (err) {
+      console.error('Failed to save signal weights:', err);
+    } finally {
+      setIsSavingWeights(false);
+    }
+  };
+
+  // Save completion policy
+  const handleSaveCompletionPolicy = async () => {
+    if (goal.id.startsWith('synthetic-') || goal.id.startsWith('goal-')) return;
+    setIsSavingPolicy(true);
+    try {
+      const policyMap: Record<string, string> = {
+        threshold: 'آستانه_پیشرفت', threshold_plus_mandatory: 'آستانه_به_علاوه_پروژه‌های_اجباری',
+        metric_plus_mandatory: 'سنجه_به_علاوه_پروژه‌های_اجباری', all_projects: 'همه_پروژه‌ها_تکمیل',
+        threshold_plus_milestones: 'آستانه_به_علاوه_نقاط_عطف',
+      };
+      await updateGoalCompletionPolicy(
+        goal.id,
+        policyMap[editCompletionPolicy] || 'آستانه_پیشرفت',
+        Number(editCompletionThreshold) || 80
+      );
+      onUpdateGoal({
+        ...goal,
+        completionPolicy: editCompletionPolicy,
+        completionThreshold: Number(editCompletionThreshold) || 80,
+      });
+    } catch (err) {
+      console.error('Failed to save completion policy:', err);
+    } finally {
+      setIsSavingPolicy(false);
+    }
+  };
+
+  // Load snapshots
+  const handleLoadSnapshots = async () => {
+    if (goal.id.startsWith('synthetic-') || goal.id.startsWith('goal-')) return;
+    setIsLoadingSnapshots(true);
+    try {
+      const [snapRes, trendRes] = await Promise.all([
+        getGoalSnapshots(goal.id, 30),
+        getGoalTrend(goal.id, 30),
+      ]);
+      setGoalSnapshots(snapRes?.data?.snapshots || []);
+      setGoalTrend(trendRes?.data?.trend || []);
+    } catch (err) {
+      console.error('Failed to load snapshots:', err);
+    } finally {
+      setIsLoadingSnapshots(false);
+    }
+  };
+
+  // Health state helpers
+  const getHealthStateLabel = (state?: GoalHealthState) => {
+    switch (state) {
+      case 'on_track': return 'در مسیر ✓';
+      case 'at_risk': return 'در خطر ⚠';
+      case 'off_track': return 'خارج از مسیر ✗';
+      case 'needs_review': return 'نیاز به بررسی 🔍';
+      default: return 'نامشخص';
+    }
+  };
+
+  const getHealthStateColor = (state?: GoalHealthState) => {
+    switch (state) {
+      case 'on_track': return 'bg-emerald-50 border-emerald-200 text-emerald-700';
+      case 'at_risk': return 'bg-amber-50 border-amber-200 text-amber-700';
+      case 'off_track': return 'bg-red-50 border-red-200 text-red-700';
+      case 'needs_review': return 'bg-slate-50 border-slate-200 text-slate-700';
+      default: return 'bg-gray-50 border-gray-200 text-gray-600';
+    }
+  };
+
+  const getCompletionPolicyLabel = (policy?: CompletionPolicy) => {
+    switch (policy) {
+      case 'threshold': return 'آستانه پیشرفت';
+      case 'threshold_plus_mandatory': return 'آستانه + پروژه‌های اجباری';
+      case 'metric_plus_mandatory': return 'سنجه + پروژه‌های اجباری';
+      case 'all_projects': return 'همه پروژه‌ها تکمیل';
+      case 'threshold_plus_milestones': return 'آستانه + نقاط عطف';
+      default: return 'آستانه پیشرفت';
+    }
+  };
+
+  const getContributionTypeLabel = (type?: string) => {
+    switch (type) {
+      case 'mandatory': return 'اجباری';
+      case 'recommended': return 'پیشنهادی';
+      case 'supporting': return 'پشتیبان';
+      default: return 'نامشخص';
+    }
+  };
+
+  const getContributionTypeBadge = (type?: string) => {
+    switch (type) {
+      case 'mandatory': return 'bg-red-50 border-red-200 text-red-700';
+      case 'recommended': return 'bg-blue-50 border-blue-200 text-blue-700';
+      case 'supporting': return 'bg-gray-50 border-gray-200 text-gray-600';
+      default: return 'bg-gray-50 border-gray-200 text-gray-500';
+    }
+  };
+
   const categoryDetails = GOAL_CATEGORY_LABELS[goal.category] || GOAL_CATEGORY_LABELS.other;
   const badgeStyle = CATEGORY_COLORS[goal.category] || CATEGORY_COLORS.other;
 
@@ -1096,6 +1249,34 @@ export default function GoalDetailView({
         </div>
       )}
 
+      {/* HEALTH STATE + SNAPSHOT BANNER */}
+      {(goal.healthState || goal.completionPolicy) && (
+        <div className="bg-white p-4 rounded-3xl border border-[#E6DFD3] shadow-xs flex flex-wrap items-center gap-3 text-right">
+          {goal.healthState && (
+            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[10px] font-bold ${getHealthStateColor(goal.healthState)}`}>
+              {goal.healthState === 'on_track' && <ShieldCheck className="w-4 h-4" />}
+              {goal.healthState === 'at_risk' && <ShieldAlert className="w-4 h-4" />}
+              {goal.healthState === 'off_track' && <ShieldX className="w-4 h-4" />}
+              {goal.healthState === 'needs_review' && <Eye className="w-4 h-4" />}
+              <span>وضعیت سلامت هدف: {getHealthStateLabel(goal.healthState)}</span>
+            </div>
+          )}
+          {goal.completionPolicy && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border bg-[#F9F6EE] border-[#D6CFC3] text-[10px] font-bold text-[#5A5A40]">
+              <Scale className="w-4 h-4" />
+              <span>سیاست تکمیل: {getCompletionPolicyLabel(goal.completionPolicy)}</span>
+              {goal.completionThreshold && <span className="text-[8px] text-[#8D7F72] mr-1">({goal.completionThreshold}%)</span>}
+            </div>
+          )}
+          {goal.lastSnapshot && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border bg-[#E8ECE0]/40 border-[#DDE2D5] text-[9px] font-bold text-[#7C8363]">
+              <BarChart3 className="w-3.5 h-3.5" />
+              <span>آخرین اسنپ‌شات: {goal.lastSnapshot.progressPct?.toFixed(0)}% در {goal.lastSnapshotAt?.slice(0, 10) || '—'}</span>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* CORE WORKSPACE TABS */}
       <div className="space-y-4" id="detail-workspace-tabs">
         
@@ -1201,6 +1382,53 @@ export default function GoalDetailView({
         {/* WORKSPACE CONTENT: PROJECTS & TASKS */}
         {activeTab === 'projects' && (
           <div className="space-y-4">
+            {/* Rich linked projects from backend (if available) */}
+            {(goal.linkedProjects || []).length > 0 && (
+              <div className="bg-[#E8ECE0]/20 p-4 rounded-3xl border border-[#DDE2D5] space-y-3">
+                <h5 className="text-xs font-black text-[#2D3025] flex items-center gap-1.5">
+                  <FolderKanban className="w-4 h-4 text-[#7C8363]" />
+                  <span>پروژه‌های پیوندی با تجزیه مشارکت ({goal.linkedProjects!.length})</span>
+                </h5>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {goal.linkedProjects!.map((lp, idx) => (
+                    <div key={idx} className="bg-white p-3 rounded-2xl border border-[#E6DFD3] space-y-2 text-right">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-xs font-bold text-[#2D3025]">{lp.title}</span>
+                          {lp.contributionType && (
+                            <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-md border ${getContributionTypeBadge(lp.contributionType)}`}>
+                              {getContributionTypeLabel(lp.contributionType)}
+                            </span>
+                          )}
+                          {lp.isMandatory && (
+                            <span className="text-[7px] font-bold bg-red-50 border border-red-100 text-red-600 px-1 py-0.5 rounded">اجباری</span>
+                          )}
+                        </div>
+                        {lp.weight != null && (
+                          <span className="text-[8px] font-bold bg-[#F9F1D8] text-[#5A5A40] px-1.5 py-0.5 rounded-md">وزن: {lp.weight}%</span>
+                        )}
+                      </div>
+                      {/* Stats */}
+                      <div className="flex flex-wrap gap-2 text-[9px] text-[#8D7F72] font-semibold">
+                        {lp.progress != null && <span>پیشرفت: {lp.progress}%</span>}
+                        {lp.totalTasks != null && <span>تسک: {lp.doneTasks ?? 0}/{lp.totalTasks}</span>}
+                        {lp.milestoneTotal != null && <span>نقطه‌عطف: {lp.milestoneDone ?? 0}/{lp.milestoneTotal}</span>}
+                        {lp.keyTotal != null && <span>کلیدی: {lp.keyDone ?? 0}/{lp.keyTotal}</span>}
+                        {lp.actualMinutes != null && <span>زمان: {lp.actualMinutes}د</span>}
+                        {lp.estimatedHours != null && <span>برآورد: {lp.estimatedHours}س</span>}
+                      </div>
+                      {/* Progress bar */}
+                      {lp.progress != null && (
+                        <div className="w-full bg-[#E6DFD3]/40 h-1.5 rounded-full overflow-hidden">
+                          <div className="bg-[#9B6B61] h-full rounded-full transition-all" style={{ width: `${Math.min(100, lp.progress)}%` }} />
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {goal.projects && goal.projects.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {goal.projects.map((project) => {
@@ -1208,6 +1436,8 @@ export default function GoalDetailView({
                   const pDone = projectTasks.filter(t => t.completed).length;
                   const pTotal = projectTasks.length;
                   const pPct = pTotal > 0 ? Math.round((pDone / pTotal) * 100) : 0;
+                  // Find matching linked project for contribution data
+                  const linkedMatch = (goal.linkedProjects || []).find(lp => lp.project === project.id || lp.title === project.title);
 
                   return (
                     <div key={project.id} className="bg-[#FDFBF7] p-4 rounded-3xl border border-[#E6DFD3] space-y-3 text-right">
@@ -1216,6 +1446,11 @@ export default function GoalDetailView({
                           <h5 className="text-xs font-extrabold text-[#2D3025] flex items-center gap-1.5">
                             <span className="w-2 h-2 rounded-full bg-[#7C8363]"></span>
                             <span>{project.title}</span>
+                            {linkedMatch?.contributionType && (
+                              <span className={`text-[7px] font-bold px-1 py-0.5 rounded border ${getContributionTypeBadge(linkedMatch.contributionType)}`}>
+                                {getContributionTypeLabel(linkedMatch.contributionType)}
+                              </span>
+                            )}
                           </h5>
                           {project.description && (
                             <p className="text-[10px] text-[#8D7F72] mt-0.5 pr-3.5 leading-relaxed">{project.description}</p>
@@ -2844,6 +3079,169 @@ export default function GoalDetailView({
               </button>
             </div>
 
+            {/* SIGNAL WEIGHTS CONFIG */}
+            <div className="bg-[#FDFBF7] p-5 rounded-3xl border border-[#E6DFD3] space-y-4">
+              <h4 className="text-xs font-black text-[#2D3025] flex items-center gap-1.5">
+                <Scale className="w-4 h-4 text-[#7C8363]" />
+                <span>وزن‌دهی سیگنال‌های پیشرفت (مرکب وزنی)</span>
+              </h4>
+              <p className="text-[10px] text-[#8D7F72] leading-relaxed">
+                وقتی حالت پیشرفت «ترکیب وزنی» باشد، این وزن‌ها تعیین می‌کنند هر سیگنال چقدر در درصد پیشرفت نهایی تأثیر داشته باشد. مجموع وزن‌ها ترجیحاً ۱۰۰ باشد.
+              </p>
+              <div className="space-y-3">
+                {[
+                  { label: 'پیشرفت پروژه‌ها', icon: FolderKanban, value: editProjectProgressWeight, setter: setEditProjectProgressWeight, color: 'text-[#7C8363]', default: 40 },
+                  { label: 'نقاط عطف (مایلستون)', icon: Flag, value: editMilestoneWeight, setter: setEditMilestoneWeight, color: 'text-emerald-600', default: 25 },
+                  { label: 'تسک‌های کلیدی', icon: CheckSquare, value: editKeyTaskWeight, setter: setEditKeyTaskWeight, color: 'text-amber-600', default: 20 },
+                  { label: 'زمان ردیابی‌شده', icon: Clock, value: editTrackedTimeWeight, setter: setEditTrackedTimeWeight, color: 'text-blue-600', default: 10 },
+                  { label: 'سنجه عددی', icon: Activity, value: editMetricWeight, setter: setEditMetricWeight, color: 'text-purple-600', default: 5 },
+                ].map((item) => (
+                  <div key={item.label} className="flex items-center gap-3">
+                    <item.icon className={`w-4 h-4 ${item.color} shrink-0`} />
+                    <span className="text-[10px] font-bold text-[#2D3025] w-32 shrink-0">{item.label}</span>
+                    <input
+                      type="range"
+                      min={0}
+                      max={100}
+                      value={Number(item.value) || item.default}
+                      onChange={e => item.setter(e.target.value)}
+                      className="flex-1 h-1.5 accent-[#7C8363]"
+                    />
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={item.value}
+                      onChange={e => item.setter(e.target.value)}
+                      className="w-14 px-2 py-1 text-xs bg-white border border-[#D6CFC3] rounded-lg text-center font-mono"
+                    />
+                    <span className="text-[9px] text-[#8D7F72] font-bold w-4">%</span>
+                  </div>
+                ))}
+              </div>
+              <div className="flex items-center justify-between pt-2 border-t border-[#E6DFD3]/40">
+                <span className="text-[10px] font-bold text-[#8D7F72]">
+                  مجموع: {(Number(editProjectProgressWeight) || 0) + (Number(editMilestoneWeight) || 0) + (Number(editKeyTaskWeight) || 0) + (Number(editTrackedTimeWeight) || 0) + (Number(editMetricWeight) || 0)}%
+                </span>
+                <button
+                  onClick={handleSaveSignalWeights}
+                  disabled={isSavingWeights}
+                  className={`px-4 py-1.5 text-xs font-bold text-white rounded-xl cursor-pointer transition-all ${isSavingWeights ? 'bg-[#D6CFC3]' : 'bg-[#7C8363] hover:bg-[#5A5A40]'}`}
+                >
+                  {isSavingWeights ? 'در حال ذخیره...' : 'ذخیره وزن‌ها'}
+                </button>
+              </div>
+            </div>
+
+            {/* COMPLETION POLICY CONFIG */}
+            <div className="bg-[#F9F1D8]/20 p-5 rounded-3xl border border-[#EBE3C8] space-y-4">
+              <h4 className="text-xs font-black text-[#2D3025] flex items-center gap-1.5">
+                <CheckCircle className="w-4 h-4 text-[#5A5A40]" />
+                <span>سیاست تکمیل هدف</span>
+              </h4>
+              <p className="text-[10px] text-[#8D7F72] leading-relaxed">
+                تعیین کنید در چه شرایطی این هدف «تکمیل‌شده» محسوب می‌شود. هر سیاست معیار متفاوتی دارد.
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1.5 text-right">
+                  <label className="text-[10px] font-bold text-[#8D7F72] block">سیاست تکمیل</label>
+                  <select
+                    value={editCompletionPolicy}
+                    onChange={e => setEditCompletionPolicy(e.target.value as CompletionPolicy)}
+                    className="w-full px-3 py-2 text-xs bg-white border border-[#D6CFC3] rounded-xl focus:outline-none focus:border-[#7C8363]"
+                  >
+                    <option value="threshold">آستانه پیشرفت (فقط درصد)</option>
+                    <option value="threshold_plus_mandatory">آستانه + پروژه‌های اجباری</option>
+                    <option value="metric_plus_mandatory">سنجه عددی + پروژه‌های اجباری</option>
+                    <option value="all_projects">همه پروژه‌ها تکمیل شوند</option>
+                    <option value="threshold_plus_milestones">آستانه + نقاط عطف پروژه</option>
+                  </select>
+                </div>
+                <div className="space-y-1.5 text-right">
+                  <label className="text-[10px] font-bold text-[#8D7F72] block">آستانه پیشرفت (درصد)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={editCompletionThreshold}
+                    onChange={e => setEditCompletionThreshold(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-white border border-[#D6CFC3] rounded-xl focus:outline-none focus:border-[#7C8363] font-mono text-left"
+                  />
+                </div>
+              </div>
+              <button
+                onClick={handleSaveCompletionPolicy}
+                disabled={isSavingPolicy}
+                className={`w-full py-2 text-xs font-bold text-white rounded-xl cursor-pointer transition-all ${isSavingPolicy ? 'bg-[#D6CFC3]' : 'bg-[#5A5A40] hover:bg-[#3D3D28]'}`}
+              >
+                {isSavingPolicy ? 'در حال ذخیره...' : 'ذخیره سیاست تکمیل'}
+              </button>
+            </div>
+
+            {/* GOAL TREND & SNAPSHOTS */}
+            <div className="bg-[#E8ECE0]/30 p-5 rounded-3xl border border-[#DDE2D5] space-y-4">
+              <div className="flex justify-between items-center">
+                <h4 className="text-xs font-black text-[#2D3025] flex items-center gap-1.5">
+                  <BarChart3 className="w-4 h-4 text-[#7C8363]" />
+                  <span>تاریخچه و روند پیشرفت هدف</span>
+                </h4>
+                <button
+                  onClick={handleLoadSnapshots}
+                  disabled={isLoadingSnapshots}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-xl cursor-pointer transition-all ${isLoadingSnapshots ? 'bg-[#D6CFC3] text-[#8D7F72]' : 'bg-[#7C8363] text-white hover:bg-[#5A5A40]'}`}
+                >
+                  {isLoadingSnapshots ? 'در حال بارگذاری...' : 'بارگذاری اسنپ‌شات‌ها'}
+                </button>
+              </div>
+
+              {goalTrend.length > 0 && (
+                <div className="bg-white p-3 rounded-2xl border border-[#E6DFD3]">
+                  <div className="flex items-center gap-1 mb-2">
+                    <TrendingUp className="w-3.5 h-3.5 text-[#7C8363]" />
+                    <span className="text-[10px] font-bold text-[#2D3025]">روند ۳۰ روز اخیر</span>
+                  </div>
+                  <div className="h-24 flex items-end gap-1" dir="ltr">
+                    {goalTrend.slice(-30).map((t, i) => {
+                      const pct = t.progress_percent ?? t.progressPct ?? 0;
+                      return (
+                        <div
+                          key={i}
+                          className="flex-1 bg-[#7C8363]/60 hover:bg-[#7C8363] rounded-t transition-all min-w-[3px]"
+                          style={{ height: `${Math.max(2, pct)}%` }}
+                          title={`${t.snapshot_date || t.date}: ${pct}%`}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {goalSnapshots.length > 0 && (
+                <div className="bg-white rounded-2xl border border-[#E6DFD3] overflow-hidden">
+                  <div className="bg-[#F9F6EE] px-3 py-2 border-b border-[#E6DFD3] flex justify-between items-center">
+                    <span className="text-[10px] font-black text-[#2D3025]">اسنپ‌شات‌های اخیر</span>
+                    <span className="text-[8px] text-[#8D7F72] font-bold">{goalSnapshots.length} ثبت</span>
+                  </div>
+                  <div className="divide-y divide-[#E6DFD3]/40 max-h-40 overflow-y-auto">
+                    {goalSnapshots.map((s, i) => (
+                      <div key={i} className="px-3 py-2 flex items-center justify-between text-right">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-black text-[#7C8363] font-mono">{(s.progress_percent ?? s.progressPct ?? 0).toFixed(0)}%</span>
+                          <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-md border ${getHealthStateColor(s.health_state ? ({'در_مسیر':'on_track','در_خطر':'at_risk','خارج_از_مسیر':'off_track','نیاز_به_بررسی':'needs_review'}[s.health_state] as GoalHealthState) : undefined)}`}>
+                            {s.health_state || '—'}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[9px] text-[#8D7F72]">{s.trigger_type || ''}</span>
+                          <span className="text-[9px] text-[#8D7F72] font-mono">{(s.snapshot_date || '').slice(0, 10)}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Computed Progress Section */}
             <div className="bg-[#E8ECE0]/30 p-5 rounded-3xl border border-[#DDE2D5] space-y-4">
               <div className="flex justify-between items-center">
@@ -2925,23 +3323,52 @@ export default function GoalDetailView({
                 </div>
               )}
 
-              {/* Linked Projects from backend */}
+              {/* Linked Projects from backend — Rich with weights & contribution data */}
               {(goal.linkedProjects || []).length > 0 && (
                 <div className="space-y-2">
                   <h5 className="text-[11px] font-black text-[#2D3025] flex items-center gap-1">
                     <FolderKanban className="w-3.5 h-3.5 text-[#9B6B61]" />
-                    <span>پروژه‌های پیوندی ({goal.linkedProjects!.length})</span>
+                    <span>پروژه‌های پیوندی ({goal.linkedProjects!.length}) — تجزیه مشارکت</span>
                   </h5>
                   <div className="grid grid-cols-1 gap-2">
                     {goal.linkedProjects!.map((lp, idx) => (
-                      <div key={idx} className="bg-white p-3 rounded-xl border border-[#E6DFD3] flex items-center justify-between gap-3">
-                        <div>
-                          <span className="text-xs font-bold text-[#2D3025]">{lp.title}</span>
-                          {lp.progress != null && (
-                            <span className="text-[9px] text-[#8D7F72] mr-2">پیشرفت: {lp.progress}%</span>
-                          )}
+                      <div key={idx} className="bg-white p-3 rounded-xl border border-[#E6DFD3] space-y-2">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs font-bold text-[#2D3025]">{lp.title}</span>
+                            {lp.contributionType && (
+                              <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-md border ${getContributionTypeBadge(lp.contributionType)}`}>
+                                {getContributionTypeLabel(lp.contributionType)}
+                              </span>
+                            )}
+                            {lp.isMandatory && (
+                              <span className="text-[8px] font-bold bg-red-50 border border-red-100 text-red-600 px-1.5 py-0.5 rounded-md">اجباری</span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {lp.progress != null && (
+                              <span className="text-[9px] text-[#8D7F72]">پیشرفت: {lp.progress}%</span>
+                            )}
+                            {lp.weight != null && (
+                              <span className="text-[8px] font-bold bg-[#F9F1D8] text-[#5A5A40] px-1.5 py-0.5 rounded-md">وزن: {lp.weight}%</span>
+                            )}
+                          </div>
                         </div>
-                        <span className="text-[8px] font-bold bg-[#E8ECE0] text-[#7C8363] px-1.5 py-0.5 rounded-md">{lp.status || 'نامشخص'}</span>
+                        {/* Project stats row */}
+                        <div className="flex flex-wrap gap-3 text-[9px] text-[#8D7F72] font-semibold">
+                          {lp.totalTasks != null && <span>تسک: {lp.doneTasks ?? 0}/{lp.totalTasks}</span>}
+                          {lp.milestoneTotal != null && <span>نقطه‌عطف: {lp.milestoneDone ?? 0}/{lp.milestoneTotal}</span>}
+                          {lp.keyTotal != null && <span>کلیدی: {lp.keyDone ?? 0}/{lp.keyTotal}</span>}
+                          {lp.actualMinutes != null && <span>زمان واقعی: {lp.actualMinutes} دقیقه</span>}
+                          {lp.estimatedHours != null && <span>برآورد: {lp.estimatedHours} ساعت</span>}
+                          {lp.effortType && <span>نوع: {lp.effortType === 'fixed' ? 'ثابت' : 'متغیر'}</span>}
+                        </div>
+                        {/* Progress bar */}
+                        {lp.progress != null && (
+                          <div className="w-full bg-[#E6DFD3]/40 h-1.5 rounded-full overflow-hidden">
+                            <div className="bg-[#9B6B61] h-full rounded-full transition-all" style={{ width: `${Math.min(100, lp.progress)}%` }} />
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>

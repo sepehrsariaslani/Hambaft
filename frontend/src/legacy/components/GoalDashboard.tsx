@@ -71,6 +71,7 @@ const CATEGORY_COLORS: Record<GoalCategory, string> = {
   career: 'bg-[#F4E9E4] border-[#EDDDD7] text-[#9B6B61]',
   learning: 'bg-[#E6DFD3] border-[#D6CFC3] text-[#8D7F72]',
   personal: 'bg-[#F9F1D8] border-[#EBE3C8] text-[#5A5A40]',
+  relationship: 'bg-[#F4E9E4] border-[#EDDDD7] text-[#9B6B61]',
   other: 'bg-[#FDFBF7] border-[#D6CFC3] text-[#3D3D3D]'
 };
 
@@ -485,6 +486,18 @@ export default function GoalDashboard({
             const isExpanded = activeGoalId === goal.id;
             const subTab = activeSubTabs[goal.id] || 'projects';
 
+            // Health state helpers
+            const getHealthBadge = (state?: string) => {
+              switch (state) {
+                case 'on_track': return { label: 'در مسیر', color: 'bg-emerald-50 border-emerald-200 text-emerald-700' };
+                case 'at_risk': return { label: 'در خطر', color: 'bg-amber-50 border-amber-200 text-amber-700' };
+                case 'off_track': return { label: 'خارج از مسیر', color: 'bg-red-50 border-red-200 text-red-700' };
+                case 'needs_review': return { label: 'نیاز به بررسی', color: 'bg-slate-50 border-slate-200 text-slate-600' };
+                default: return null;
+              }
+            };
+            const healthBadge = getHealthBadge(goal.healthState);
+
             return (
               <div 
                 key={goal.id} 
@@ -544,6 +557,12 @@ export default function GoalDashboard({
                         {getCategoryIcon(goal.category, "w-2.5 h-2.5")}
                         <span>{categoryDetails.label}</span>
                       </span>
+
+                      {healthBadge && (
+                        <span className={`px-2 py-0.5 rounded-full text-[8px] font-bold border ${healthBadge.color}`}>
+                          {healthBadge.label}
+                        </span>
+                      )}
 
                       <span className="text-[9px] text-[#8D7F72] font-semibold flex items-center gap-0.5 font-mono">
                         <Calendar className="w-2.5 h-2.5 text-[#8D7F72]" />

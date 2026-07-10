@@ -670,6 +670,7 @@ def create_goal(data):
     # Extract child table data before update
     habits_data = data.pop("linked_habits", None) or data.pop("linkedHabits", None) or []
     finance_data = data.pop("linked_finance_accounts", None) or data.pop("linkedFinanceAccounts", None) or []
+    projects_data = data.pop("linked_projects", None) or data.pop("linkedProjects", None) or []
     doc = frappe.new_doc("Goal")
     doc.update(data)
     doc.user = frappe.session.user
@@ -697,6 +698,19 @@ def create_goal(data):
                 "weight": flt(f.get("weight") or 100),
                 "notes": f.get("notes") or "",
             })
+    # Add linked projects
+    for p in projects_data:
+        proj_name = p.get("project") if isinstance(p, dict) else p
+        if not proj_name:
+            continue
+        doc.append("linked_projects", {
+            "project": proj_name,
+            "contribution_type": (p.get("contribution_type") if isinstance(p, dict) else None) or "اجباری",
+            "weight": flt(p.get("weight") if isinstance(p, dict) else 100 or 100),
+            "is_mandatory": cint(p.get("is_mandatory") if isinstance(p, dict) else 1 or 1),
+            "sort_order": cint(p.get("sort_order") if isinstance(p, dict) else 0 or 0),
+            "notes": (p.get("notes") if isinstance(p, dict) else None) or "",
+        })
     doc.insert()
     frappe.db.commit()
     return _api_response({"goal": _goal_to_frontend(doc)})
@@ -712,6 +726,7 @@ def update_goal(name, data):
     # Extract child table data
     habits_data = data.pop("linked_habits", None) or data.pop("linkedHabits", None)
     finance_data = data.pop("linked_finance_accounts", None) or data.pop("linkedFinanceAccounts", None)
+    projects_data = data.pop("linked_projects", None) or data.pop("linkedProjects", None)
     doc = frappe.get_doc("Goal", name)
     doc.update(data)
     # Replace linked habits if provided
@@ -742,6 +757,21 @@ def update_goal(name, data):
                     "weight": flt(f.get("weight") or 100),
                     "notes": f.get("notes") or "",
                 })
+    # Replace linked projects if provided
+    if projects_data is not None:
+        doc.set("linked_projects", [])
+        for p in projects_data:
+            proj_name = p.get("project") if isinstance(p, dict) else p
+            if not proj_name:
+                continue
+            doc.append("linked_projects", {
+                "project": proj_name,
+                "contribution_type": (p.get("contribution_type") if isinstance(p, dict) else None) or "اجباری",
+                "weight": flt(p.get("weight") if isinstance(p, dict) else 100 or 100),
+                "is_mandatory": cint(p.get("is_mandatory") if isinstance(p, dict) else 1 or 1),
+                "sort_order": cint(p.get("sort_order") if isinstance(p, dict) else 0 or 0),
+                "notes": (p.get("notes") if isinstance(p, dict) else None) or "",
+            })
     doc.save()
     frappe.db.commit()
     return _api_response({"goal": _goal_to_frontend(doc)})
@@ -3424,12 +3454,24 @@ def _goal_to_frontend(doc):
             "notes": row.notes or "",
         })
 
-    # Get linked projects
-    projects = frappe.get_all(
-        "Hambaft Project",
-        filters={"goal": doc.name, "user": doc.user},
-        fields=["name", "title", "status", "progress"],
-    )
+    # Get linked projects — rich detail from Goal Project Link + project data
+    linked_projects = _get_goal_linked_projects(doc)
+
+    # Parse health_detail if available
+    health_detail_parsed = None
+    if getattr(doc, "health_detail", None):
+        try:
+            health_detail_parsed = json.loads(doc.health_detail)
+        except Exception:
+            health_detail_parsed = None
+
+    # Parse last_snapshot if available
+    last_snapshot_parsed = None
+    if getattr(doc, "last_snapshot_json", None):
+        try:
+            last_snapshot_parsed = json.loads(doc.last_snapshot_json)
+        except Exception:
+            last_snapshot_parsed = None
 
     return {
         "name": doc.name,
@@ -3455,30 +3497,170 @@ def _goal_to_frontend(doc):
         "color": doc.color,
         "icon": doc.icon,
         "user": doc.user,
+        # Project weight buckets
+        "project_progress_weight": doc.project_progress_weight or 40,
+        "milestone_weight": doc.milestone_weight or 25,
+        "key_task_weight": doc.key_task_weight or 20,
+        "tracked_time_weight": doc.tracked_time_weight or 10,
+        "metric_weight": doc.metric_weight or 5,
+        # Health
+        "health_state": getattr(doc, "health_state", None) or None,
+        "health_detail": health_detail_parsed,
+        # Completion policy
+        "completion_policy": getattr(doc, "completion_policy", None) or "آستانه_پیشرفت",
+        "completion_threshold": getattr(doc, "completion_threshold", None) or 100,
+        # Snapshot
+        "last_snapshot": last_snapshot_parsed,
+        "last_snapshot_at": str(doc.last_snapshot_at) if getattr(doc, "last_snapshot_at", None) else None,
+        # Child tables
         "linked_habits": linked_habits,
         "linked_finance_accounts": linked_finance,
-        "linked_projects": projects,
+        "linked_projects": linked_projects,
         "noteBlocks": _extract_note_blocks(doc),
         "creation": str(doc.creation) if getattr(doc, "creation", None) else None,
     }
 
 
+def _get_goal_linked_projects(doc):
+    """Get rich linked project data for a goal."""
+    result = []
+    seen = set()
+
+    # From Goal Project Link child table
+    for row in doc.get("linked_projects") or []:
+        if not row.project:
+            continue
+        seen.add(row.project)
+        proj_data = _load_project_for_goal(row.project)
+        result.append({
+            "project": row.project,
+            "title": proj_data.get("title", ""),
+            "status": proj_data.get("status", ""),
+            "progress": proj_data.get("progress", 0),
+            "effort_type": proj_data.get("effort_type", ""),
+            "estimated_hours": proj_data.get("estimated_hours", 0),
+            "actual_minutes": proj_data.get("actual_minutes", 0),
+            "total_tasks": proj_data.get("total_tasks", 0),
+            "done_tasks": proj_data.get("done_tasks", 0),
+            "milestone_total": proj_data.get("milestone_total", 0),
+            "milestone_done": proj_data.get("milestone_done", 0),
+            "key_total": proj_data.get("key_total", 0),
+            "key_done": proj_data.get("key_done", 0),
+            # Link metadata
+            "weight": row.weight or 100,
+            "contribution_type": row.contribution_type or "اجباری",
+            "is_mandatory": cint(row.is_mandatory),
+            "sort_order": cint(row.sort_order or 0),
+            "notes": row.notes or "",
+        })
+
+    # Fallback: projects with goal field pointing to this goal
+    fallback = frappe.get_all(
+        "Hambaft Project",
+        filters={"goal": doc.name, "user": doc.user},
+        fields=["name"],
+    )
+    for p in fallback:
+        if p.name not in seen:
+            proj_data = _load_project_for_goal(p.name)
+            result.append({
+                "project": p.name,
+                "title": proj_data.get("title", ""),
+                "status": proj_data.get("status", ""),
+                "progress": proj_data.get("progress", 0),
+                "effort_type": proj_data.get("effort_type", ""),
+                "estimated_hours": proj_data.get("estimated_hours", 0),
+                "actual_minutes": proj_data.get("actual_minutes", 0),
+                "total_tasks": proj_data.get("total_tasks", 0),
+                "done_tasks": proj_data.get("done_tasks", 0),
+                "milestone_total": proj_data.get("milestone_total", 0),
+                "milestone_done": proj_data.get("milestone_done", 0),
+                "key_total": proj_data.get("key_total", 0),
+                "key_done": proj_data.get("key_done", 0),
+                "weight": 100,
+                "contribution_type": "اجباری",
+                "is_mandatory": 1,
+                "sort_order": 0,
+                "notes": "",
+            })
+
+    result.sort(key=lambda x: x.get("sort_order", 0))
+    return result
+
+
+def _load_project_for_goal(project_name):
+    """Load a project's current state for goal serialization."""
+    try:
+        p = frappe.get_all(
+            "Hambaft Project",
+            filters={"name": project_name},
+            fields=["name", "title", "status", "progress", "effort_type",
+                     "estimated_hours", "actual_minutes"],
+            limit=1,
+        )
+        if not p:
+            return {}
+        p = p[0]
+        tasks = frappe.get_all(
+            "Task",
+            filters={"project": project_name},
+            fields=["name", "status", "importance"],
+        )
+        total = len(tasks)
+        done = sum(1 for t in tasks if t.status == "done")
+        milestones = [t for t in tasks if (t.importance or "عادی") == "نقطه‌عطف"]
+        key_tasks = [t for t in tasks if (t.importance or "عادی") == "کلیدی"]
+
+        return {
+            "title": p.title,
+            "status": p.status,
+            "progress": flt(p.progress or 0),
+            "effort_type": p.effort_type,
+            "estimated_hours": flt(p.estimated_hours or 0),
+            "actual_minutes": cint(p.actual_minutes or 0),
+            "total_tasks": total,
+            "done_tasks": done,
+            "milestone_total": len(milestones),
+            "milestone_done": sum(1 for t in milestones if t.status == "done"),
+            "key_total": len(key_tasks),
+            "key_done": sum(1 for t in key_tasks if t.status == "done"),
+        }
+    except Exception:
+        return {}
+
+
 @frappe.whitelist()
 def compute_goal_progress(name):
-    """Recompute and save goal progress. Returns the updated progress."""
+    """Recompute and save goal progress, health, and snapshot. Returns the updated progress."""
     _check_auth()
     _require_owner("Goal", name)
     doc = frappe.get_doc("Goal", name)
     pct, detail = doc.compute_progress()
     doc.progress_percent = pct
     doc.derived_progress_detail = json.dumps(detail, ensure_ascii=False)
-    if pct >= 100:
+
+    # Compute health
+    health_state, health_detail = doc.compute_health(pct, detail)
+    doc.health_state = health_state
+    doc.health_detail = json.dumps(health_detail, ensure_ascii=False)
+
+    # Check completion policy
+    if doc.check_completion(pct, detail):
         doc.status = "تکمیل‌شده"
+    elif pct >= 100:
+        doc.status = "تکمیل‌شده"
+
     doc.save(ignore_permissions=True)
+
+    # Save snapshot
+    doc.save_snapshot(pct, detail, health_state, health_detail, trigger="api_call")
+
     frappe.db.commit()
     return _api_response({
         "progress_percent": pct,
         "detail": detail,
+        "health_state": health_state,
+        "health_detail": health_detail,
         "goal": _goal_to_frontend(doc),
     })
 
@@ -3567,26 +3749,51 @@ def unlink_goal_finance(goal_name, finance_account):
 
 
 @frappe.whitelist()
-def link_goal_project(goal_name, project_name):
-    """Link a project to a goal by setting the project's goal field."""
+def link_goal_project(goal_name, project_name, contribution_type="اجباری", weight=100, is_mandatory=1, sort_order=0, notes=None):
+    """Link a project to a goal with rich metadata. Also sets project.goal as back-link."""
     _check_auth()
     _require_owner("Goal", goal_name)
     _require_owner("Hambaft Project", project_name)
+
+    doc = frappe.get_doc("Goal", goal_name)
+
+    # Check for duplicate
+    for row in doc.get("linked_projects") or []:
+        if row.project == project_name:
+            return _api_response({"ok": False, "message": "project_already_linked"})
+
+    doc.append("linked_projects", {
+        "project": project_name,
+        "contribution_type": contribution_type,
+        "weight": flt(weight or 100),
+        "is_mandatory": cint(is_mandatory),
+        "sort_order": cint(sort_order or 0),
+        "notes": notes or "",
+    })
+    doc.save(ignore_permissions=True)
+
+    # Also set back-link on project
     frappe.db.set_value("Hambaft Project", project_name, "goal", goal_name, update_modified=True)
     frappe.db.commit()
-    return _api_response({"ok": True})
+    return _api_response({"goal": _goal_to_frontend(doc)})
 
 
 @frappe.whitelist()
 def unlink_goal_project(goal_name, project_name):
-    """Unlink a project from a goal."""
+    """Unlink a project from a goal (removes from child table + clears project.goal)."""
     _check_auth()
+    _require_owner("Goal", goal_name)
+
+    doc = frappe.get_doc("Goal", goal_name)
+    doc.set("linked_projects", [row for row in doc.get("linked_projects") or [] if row.project != project_name])
+    doc.save(ignore_permissions=True)
+
+    # Clear back-link if it still points to this goal
     proj_goal = frappe.db.get_value("Hambaft Project", project_name, "goal")
-    if proj_goal != goal_name:
-        return _api_response({"ok": False, "message": "not_linked"})
-    frappe.db.set_value("Hambaft Project", project_name, "goal", None, update_modified=True)
+    if proj_goal == goal_name:
+        frappe.db.set_value("Hambaft Project", project_name, "goal", None, update_modified=True)
     frappe.db.commit()
-    return _api_response({"ok": True})
+    return _api_response({"goal": _goal_to_frontend(doc)})
 
 
 @frappe.whitelist()
@@ -3647,3 +3854,108 @@ def get_area_detail(name):
     )
     summary["goals"] = goals
     return _api_response(summary)
+
+
+# ─── Goal Progress Snapshots ──────────────────────────────
+
+@frappe.whitelist()
+def get_goal_snapshots(goal_name, limit=30):
+    """Get recent snapshots for a goal."""
+    _check_auth()
+    _require_owner("Goal", goal_name)
+    rows = frappe.get_all(
+        "Goal Progress Snapshot",
+        filters={"goal": goal_name, "user": frappe.session.user},
+        fields=["name", "progress_percent", "health_state", "snapshot_date", "trigger_type"],
+        limit_page_length=cint(limit),
+        order_by="snapshot_date desc",
+    )
+    return _api_response({"snapshots": rows})
+
+
+@frappe.whitelist()
+def get_goal_trend(goal_name, days=30):
+    """Get progress trend for a goal over the last N days."""
+    _check_auth()
+    _require_owner("Goal", goal_name)
+    from datetime import timedelta
+    start = (getdate() - timedelta(days=cint(days))).isoformat()
+    rows = frappe.get_all(
+        "Goal Progress Snapshot",
+        filters={"goal": goal_name, "user": frappe.session.user, "snapshot_date": [">=", start]},
+        fields=["progress_percent", "health_state", "snapshot_date", "trigger_type"],
+        order_by="snapshot_date asc",
+    )
+    return _api_response({"trend": rows, "days": days})
+
+
+@frappe.whitelist()
+def update_goal_project_weights(goal_name, weights):
+    """Update project weight configuration for a goal.
+
+    weights = list of {project, weight, is_mandatory, contribution_type, sort_order}
+    """
+    _check_auth()
+    _require_owner("Goal", goal_name)
+    if isinstance(weights, str):
+        weights = json.loads(weights)
+
+    doc = frappe.get_doc("Goal", goal_name)
+    current = {row.project: row for row in doc.get("linked_projects") or []}
+
+    for w in weights:
+        proj = w.get("project")
+        if not proj or proj not in current:
+            continue
+        row = current[proj]
+        if "weight" in w:
+            row.weight = flt(w["weight"])
+        if "is_mandatory" in w:
+            row.is_mandatory = cint(w["is_mandatory"])
+        if "contribution_type" in w:
+            row.contribution_type = w["contribution_type"]
+        if "sort_order" in w:
+            row.sort_order = cint(w["sort_order"])
+        if "notes" in w:
+            row.notes = w["notes"]
+
+    doc.save(ignore_permissions=True)
+    frappe.db.commit()
+    return _api_response({"goal": _goal_to_frontend(doc)})
+
+
+@frappe.whitelist()
+def update_goal_signal_weights(goal_name, project_progress_weight=None, milestone_weight=None,
+                                key_task_weight=None, tracked_time_weight=None, metric_weight=None):
+    """Update the 5 signal weights for project-driven goal progress."""
+    _check_auth()
+    _require_owner("Goal", goal_name)
+    doc = frappe.get_doc("Goal", goal_name)
+    if project_progress_weight is not None:
+        doc.project_progress_weight = flt(project_progress_weight)
+    if milestone_weight is not None:
+        doc.milestone_weight = flt(milestone_weight)
+    if key_task_weight is not None:
+        doc.key_task_weight = flt(key_task_weight)
+    if tracked_time_weight is not None:
+        doc.tracked_time_weight = flt(tracked_time_weight)
+    if metric_weight is not None:
+        doc.metric_weight = flt(metric_weight)
+    doc.save(ignore_permissions=True)
+    frappe.db.commit()
+    return _api_response({"goal": _goal_to_frontend(doc)})
+
+
+@frappe.whitelist()
+def update_goal_completion_policy(goal_name, completion_policy=None, completion_threshold=None):
+    """Update completion policy for a goal."""
+    _check_auth()
+    _require_owner("Goal", goal_name)
+    doc = frappe.get_doc("Goal", goal_name)
+    if completion_policy:
+        doc.completion_policy = completion_policy
+    if completion_threshold is not None:
+        doc.completion_threshold = flt(completion_threshold)
+    doc.save(ignore_permissions=True)
+    frappe.db.commit()
+    return _api_response({"goal": _goal_to_frontend(doc)})

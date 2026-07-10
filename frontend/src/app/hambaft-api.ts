@@ -273,6 +273,15 @@ export function toGoalPayload(goal: Goal): Record<string, unknown> {
     balance: 'موجودی_حساب', savings: 'پس‌انداز', debt: 'بدهی', investment: 'سرمایه‌گذاری', income_accumulated: 'درآمد_انباشته',
   }
 
+  const contribTypeProjectMap: Record<string, string> = {
+    mandatory: 'اجباری', recommended: 'پیشنهادی', supporting: 'پشتیبان',
+  }
+  const completionPolicyMap: Record<string, string> = {
+    threshold: 'آستانه_پیشرفت', threshold_plus_mandatory: 'آستانه_به_علاوه_پروژه‌های_اجباری',
+    metric_plus_mandatory: 'سنجه_به_علاوه_پروژه‌های_اجباری', all_projects: 'همه_پروژه‌ها_تکمیل',
+    threshold_plus_milestones: 'آستانه_به_علاوه_نقاط_عطف',
+  }
+
   return {
     title: goal.title,
     description: goal.description || '',
@@ -293,6 +302,13 @@ export function toGoalPayload(goal: Goal): Record<string, unknown> {
     icon: goal.icon || undefined,
     notes: goal.visionAffirmation || '',
     noteBlocks: goal.noteBlocks || [],
+    project_progress_weight: goal.projectProgressWeight ?? undefined,
+    milestone_weight: goal.milestoneWeight ?? undefined,
+    key_task_weight: goal.keyTaskWeight ?? undefined,
+    tracked_time_weight: goal.trackedTimeWeight ?? undefined,
+    metric_weight: goal.metricWeight ?? undefined,
+    completion_policy: goal.completionPolicy ? (completionPolicyMap[goal.completionPolicy] || undefined) : undefined,
+    completion_threshold: goal.completionThreshold ?? undefined,
     linked_habits: (goal.linkedHabits || []).map(h => ({
       habit: h.habit,
       contribution_type: contribTypeMap[h.contributionType] || 'تعداد_انجام',
@@ -310,6 +326,14 @@ export function toGoalPayload(goal: Goal): Record<string, unknown> {
       target_amount: f.targetAmount ?? null,
       weight: f.weight ?? 100,
       notes: f.notes || '',
+    })),
+    linked_projects: (goal.linkedProjects || []).map(p => ({
+      project: p.project,
+      contribution_type: contribTypeProjectMap[p.contributionType || 'mandatory'] || 'اجباری',
+      weight: p.weight ?? 100,
+      is_mandatory: p.isMandatory ? 1 : 0,
+      sort_order: p.sortOrder ?? 0,
+      notes: p.notes || '',
     })),
   }
 }
@@ -1153,12 +1177,68 @@ export async function unlinkGoalFinance(goalName: string, financeAccount: string
   return call<{ data?: { goal?: any } }>('hambaft.hambaft.api.unlink_goal_finance', { goal_name: goalName, finance_account: financeAccount })
 }
 
-export async function linkGoalProject(goalName: string, projectName: string) {
-  return call<{ data?: { ok?: boolean } }>('hambaft.hambaft.api.link_goal_project', { goal_name: goalName, project_name: projectName })
+export async function linkGoalProject(
+  goalName: string,
+  projectName: string,
+  contributionType: string = 'اجباری',
+  weight: number = 100,
+  isMandatory: boolean = true,
+  sortOrder: number = 0,
+  notes?: string,
+) {
+  return call<{ data?: { goal?: any } }>('hambaft.hambaft.api.link_goal_project', {
+    goal_name: goalName,
+    project_name: projectName,
+    contribution_type: contributionType,
+    weight,
+    is_mandatory: isMandatory ? 1 : 0,
+    sort_order: sortOrder,
+    notes,
+  })
 }
 
 export async function unlinkGoalProject(goalName: string, projectName: string) {
-  return call<{ data?: { ok?: boolean } }>('hambaft.hambaft.api.unlink_goal_project', { goal_name: goalName, project_name: projectName })
+  return call<{ data?: { goal?: any } }>('hambaft.hambaft.api.unlink_goal_project', { goal_name: goalName, project_name: projectName })
+}
+
+export async function updateGoalProjectWeights(goalName: string, weights: Array<{ project: string; weight?: number; is_mandatory?: number; contribution_type?: string; sort_order?: number; notes?: string }>) {
+  return call<{ data?: { goal?: any } }>('hambaft.hambaft.api.update_goal_project_weights', { goal_name: goalName, weights })
+}
+
+export async function updateGoalSignalWeights(
+  goalName: string,
+  opts: {
+    projectProgressWeight?: number
+    milestoneWeight?: number
+    keyTaskWeight?: number
+    trackedTimeWeight?: number
+    metricWeight?: number
+  }
+) {
+  return call<{ data?: { goal?: any } }>('hambaft.hambaft.api.update_goal_signal_weights', {
+    goal_name: goalName,
+    project_progress_weight: opts.projectProgressWeight,
+    milestone_weight: opts.milestoneWeight,
+    key_task_weight: opts.keyTaskWeight,
+    tracked_time_weight: opts.trackedTimeWeight,
+    metric_weight: opts.metricWeight,
+  })
+}
+
+export async function updateGoalCompletionPolicy(goalName: string, completionPolicy?: string, completionThreshold?: number) {
+  return call<{ data?: { goal?: any } }>('hambaft.hambaft.api.update_goal_completion_policy', {
+    goal_name: goalName,
+    completion_policy: completionPolicy,
+    completion_threshold: completionThreshold,
+  })
+}
+
+export async function getGoalSnapshots(goalName: string, limit = 30) {
+  return callGet<{ data?: { snapshots?: any[] } }>(`hambaft.hambaft.api.get_goal_snapshots?goal_name=${encodeURIComponent(goalName)}&limit=${limit}`)
+}
+
+export async function getGoalTrend(goalName: string, days = 30) {
+  return callGet<{ data?: { trend?: any[]; days?: number } }>(`hambaft.hambaft.api.get_goal_trend?goal_name=${encodeURIComponent(goalName)}&days=${days}`)
 }
 
 export async function getGoalsWithDetails(limit = 100) {

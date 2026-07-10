@@ -183,6 +183,112 @@
    "reqd": 1,
    "in_list_view": 1,
    "in_standard_filter": 1
+  },
+  {
+   "fieldname": "linked_projects_section",
+   "fieldtype": "Section Break",
+   "label": "پروژه‌های مرتبط"
+  },
+  {
+   "fieldname": "linked_projects",
+   "fieldtype": "Table",
+   "label": "پیوند پروژه‌ها",
+   "options": "Goal Project Link"
+  },
+  {
+   "fieldname": "project_weights_section",
+   "fieldtype": "Section Break",
+   "label": "وزن‌دهی سیگنال‌های پروژه"
+  },
+  {
+   "fieldname": "project_progress_weight",
+   "fieldtype": "Percent",
+   "label": "وزن پیشرفت پروژه",
+   "default": 40,
+   "description": "سهم پیشرفت کلی پروژه در محاسبه هدف"
+  },
+  {
+   "fieldname": "milestone_weight",
+   "fieldtype": "Percent",
+   "label": "وزن تکمیل نقطه‌عطف",
+   "default": 25,
+   "description": "سهم تسک‌های نقطه‌عطف و کلیدی در محاسبه هدف"
+  },
+  {
+   "fieldname": "key_task_weight",
+   "fieldtype": "Percent",
+   "label": "وزن تسک‌های کلیدی",
+   "default": 20,
+   "description": "سهم تسک‌های کلیدی پروژه در محاسبه هدف"
+  },
+  {
+   "fieldname": "tracked_time_weight",
+   "fieldtype": "Percent",
+   "label": "وزن زمان صرف‌شده",
+   "default": 10,
+   "description": "سهم نسبت زمان واقعی به تخمینی (نرمال‌شده)"
+  },
+  {
+   "fieldname": "metric_weight",
+   "fieldtype": "Percent",
+   "label": "وزن سنجه/KPI",
+   "default": 5,
+   "description": "سهم مقدار سنجه (current_value / target_value)"
+  },
+  {
+   "fieldname": "health_section",
+   "fieldtype": "Section Break",
+   "label": "سلامت هدف"
+  },
+  {
+   "fieldname": "health_state",
+   "fieldtype": "Select",
+   "label": "وضعیت سلامت",
+   "options": "در_مسیر\nدر_خطر\nخارج_از_مسیر\nنیاز_به_بررسی",
+   "read_only": 1
+  },
+  {
+   "fieldname": "health_detail",
+   "fieldtype": "Code",
+   "label": "جزئیات سلامت (JSON)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "completion_section",
+   "fieldtype": "Section Break",
+   "label": "سیاست تکمیل"
+  },
+  {
+   "fieldname": "completion_policy",
+   "fieldtype": "Select",
+   "label": "سیاست تکمیل هدف",
+   "options": "آستانه_پیشرفت\nآستانه_به_علاوه_پروژه‌های_اجباری\nسنجه_به_علاوه_پروژه‌های_اجباری\nهمه_پروژه‌ها_تکمیل\nآستانه_به_علاوه_نقاط_عطف",
+   "default": "آستانه_پیشرفت",
+   "description": "شرط تکمیل خودکار هدف"
+  },
+  {
+   "fieldname": "completion_threshold",
+   "fieldtype": "Percent",
+   "label": "آستانه تکمیل",
+   "default": 100,
+   "description": "درصد پیشرفت مورد نیاز برای تکمیل (در سیاست‌های آستانه‌ای)"
+  },
+  {
+   "fieldname": "snapshot_section",
+   "fieldtype": "Section Break",
+   "label": "آخرین اسنپ‌شات"
+  },
+  {
+   "fieldname": "last_snapshot_json",
+   "fieldtype": "Code",
+   "label": "اسنپ‌شات آخرین محاسبه (JSON)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_snapshot_at",
+   "fieldtype": "Datetime",
+   "label": "زمان آخرین اسنپ‌شات",
+   "read_only": 1
   }
  ],
  "permissions": [
