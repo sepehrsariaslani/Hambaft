@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Goal, GoalCategory, GoalType, ProgressMode, ContributionType, ContributionPeriod, GoalHabitLink, GoalFinanceLink, GoalLinkedProject, GoalHealthState, CompletionPolicy, GoalSignalWeights, Milestone, Habit, BankAccount, Project, Task, MetricLog, GoalMetric, WorkoutLog, SleepLog, MindfulnessSession, JournalEntry } from '../types';
+import { Goal, GoalCategory, GoalType, ProgressMode, ContributionType, ContributionPeriod, GoalHabitLink, GoalFinanceLink, GoalLinkedProject, GoalHealthState, CompletionPolicy, GoalSignalWeights, ProjectContributionType, Milestone, Habit, BankAccount, Project, Task, MetricLog, GoalMetric, WorkoutLog, SleepLog, MindfulnessSession, JournalEntry } from '../types';
 import { GOAL_CATEGORY_LABELS } from '../initialData';
 import { 
   getGoalDetail, 
@@ -138,6 +138,121 @@ function getCategoryIcon(category: GoalCategory, className = "w-4 h-4") {
     default:
       return <Target className={className} />;
   }
+}
+
+// ─── Inline editor for a linked project's contribution settings ───
+function LinkedProjectEditor({ goalId, lp, onUpdate }: {
+  goalId: string
+  lp: GoalLinkedProject
+  onUpdate: (updated: GoalLinkedProject) => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [weight, setWeight] = useState(String(lp.weight ?? 100))
+  const [contributionType, setContributionType] = useState<ProjectContributionType>(lp.contributionType || 'mandatory')
+  const [isMandatory, setIsMandatory] = useState(!!lp.isMandatory)
+  const [saving, setSaving] = useState(false)
+
+  const handleSave = async () => {
+    if (goalId.startsWith('synthetic-') || goalId.startsWith('goal-')) { setEditing(false); return }
+    setSaving(true)
+    try {
+      const contribTypeBackend: Record<string, string> = { mandatory: 'اجباری', recommended: 'پیشنهادی', supporting: 'پشتیبان' }
+      await updateGoalProjectWeights(goalId, [{
+        project: lp.project,
+        weight: Number(weight) || 100,
+        is_mandatory: isMandatory ? 1 : 0,
+        contribution_type: contribTypeBackend[contributionType] || 'اجباری',
+        sort_order: lp.sortOrder ?? 0,
+        notes: lp.notes || '',
+      }])
+      onUpdate({
+        ...lp,
+        weight: Number(weight) || 100,
+        contributionType,
+        isMandatory,
+      })
+      setEditing(false)
+    } catch (err) {
+      console.error('Failed to update project weights:', err)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const contribBadge = (() => {
+    switch (contributionType) {
+      case 'mandatory': return 'bg-red-50 border-red-200 text-red-700'
+      case 'recommended': return 'bg-blue-50 border-blue-200 text-blue-700'
+      case 'supporting': return 'bg-gray-50 border-gray-200 text-gray-600'
+      default: return 'bg-gray-50 border-gray-200 text-gray-500'
+    }
+  })()
+
+  return (
+    <div className="bg-white p-3 rounded-2xl border border-[#E6DFD3] space-y-2 text-right">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-xs font-bold text-[#2D3025]">{lp.title}</span>
+          {editing ? (
+            <select value={contributionType} onChange={e => setContributionType(e.target.value as any)}
+              className="text-[9px] px-1.5 py-0.5 border border-[#D6CFC3] rounded-lg bg-white">
+              <option value="mandatory">اجباری</option>
+              <option value="recommended">پیشنهادی</option>
+              <option value="supporting">پشتیبان</option>
+            </select>
+          ) : (
+            <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-md border ${contribBadge}`}>
+              {contributionType === 'mandatory' ? 'اجباری' : contributionType === 'recommended' ? 'پیشنهادی' : 'پشتیبان'}
+            </span>
+          )}
+          {editing ? (
+            <label className="flex items-center gap-1 text-[9px] text-[#8D7F72]">
+              <input type="checkbox" checked={isMandatory} onChange={e => setIsMandatory(e.target.checked)} className="w-3 h-3" />
+              اجباری
+            </label>
+          ) : isMandatory && (
+            <span className="text-[7px] font-bold bg-red-50 border border-red-100 text-red-600 px-1 py-0.5 rounded">اجباری</span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {editing ? (
+            <div className="flex items-center gap-1">
+              <input type="number" min={0} max={100} value={weight} onChange={e => setWeight(e.target.value)}
+                className="w-12 px-1 py-0.5 text-[9px] border border-[#D6CFC3] rounded text-center font-mono" />
+              <span className="text-[8px] text-[#8D7F72]">%</span>
+            </div>
+          ) : lp.weight != null && (
+            <span className="text-[8px] font-bold bg-[#F9F1D8] text-[#5A5A40] px-1.5 py-0.5 rounded-md">وزن: {lp.weight}%</span>
+          )}
+          <button onClick={() => editing ? handleSave() : setEditing(true)}
+            disabled={saving}
+            className={`text-[9px] px-2 py-0.5 rounded-lg font-bold border cursor-pointer transition-all ${
+              editing ? 'bg-[#7C8363] text-white border-transparent' : 'bg-[#F9F6EE] border-[#D6CFC3] text-[#8D7F72] hover:bg-[#E6DFD3]/40'
+            }`}>
+            {saving ? '...' : editing ? 'ذخیره' : 'ویرایش'}
+          </button>
+          {editing && (
+            <button onClick={() => { setEditing(false); setWeight(String(lp.weight ?? 100)); setContributionType(lp.contributionType || 'mandatory'); setIsMandatory(!!lp.isMandatory) }}
+              className="text-[9px] px-2 py-0.5 rounded-lg border border-[#D6CFC3] text-[#8D7F72] cursor-pointer">لغو</button>
+          )}
+        </div>
+      </div>
+      {/* Stats */}
+      <div className="flex flex-wrap gap-2 text-[9px] text-[#8D7F72] font-semibold">
+        {lp.progress != null && <span>پیشرفت: {lp.progress}%</span>}
+        {lp.totalTasks != null && <span>تسک: {lp.doneTasks ?? 0}/{lp.totalTasks}</span>}
+        {lp.milestoneTotal != null && <span>نقطه‌عطف: {lp.milestoneDone ?? 0}/{lp.milestoneTotal}</span>}
+        {lp.keyTotal != null && <span>کلیدی: {lp.keyDone ?? 0}/{lp.keyTotal}</span>}
+        {lp.actualMinutes != null && <span>زمان: {lp.actualMinutes}د</span>}
+        {lp.estimatedHours != null && <span>برآورد: {lp.estimatedHours}س</span>}
+      </div>
+      {lp.progress != null && (
+        <div className="w-full bg-[#E6DFD3]/40 h-1.5 rounded-full overflow-hidden">
+          <div className="bg-[#9B6B61] h-full rounded-full transition-all" style={{ width: `${Math.min(100, lp.progress)}%` }} />
+        </div>
+      )}
+    </div>
+  )
 }
 
 export default function GoalDetailView({
@@ -313,12 +428,37 @@ export default function GoalDetailView({
             }));
           }
           if (data.goal.linked_projects) {
+            const contribTypeMap: Record<string, 'mandatory' | 'recommended' | 'supporting'> = {
+              'اجباری': 'mandatory', 'پیشنهادی': 'recommended', 'پشتیبان': 'supporting',
+            }
             updatedGoal.linkedProjects = data.goal.linked_projects.map((p: any) => ({
-              name: p.name,
+              project: p.project || p.name,
               title: p.title,
               status: p.status,
               progress: p.progress,
+              effortType: p.effort_type,
+              estimatedHours: p.estimated_hours,
+              actualMinutes: p.actual_minutes,
+              totalTasks: p.total_tasks,
+              doneTasks: p.done_tasks,
+              milestoneTotal: p.milestone_total,
+              milestoneDone: p.milestone_done,
+              keyTotal: p.key_total,
+              keyDone: p.key_done,
+              weight: p.weight,
+              contributionType: contribTypeMap[p.contribution_type] || undefined,
+              isMandatory: !!p.is_mandatory,
+              sortOrder: p.sort_order,
+              notes: p.notes,
             }));
+          }
+          // Preserve health/completion from compute result
+          if (data.goal.health_state != null) {
+            const healthStateMap: Record<string, 'on_track' | 'at_risk' | 'off_track' | 'needs_review'> = {
+              'در_مسیر': 'on_track', 'در_خطر': 'at_risk', 'خارج_از_مسیر': 'off_track', 'نیاز_به_بررسی': 'needs_review',
+            }
+            updatedGoal.healthState = healthStateMap[data.goal.health_state] || undefined;
+            updatedGoal.healthDetail = data.goal.health_detail;
           }
         }
         onUpdateGoal(updatedGoal);
@@ -1389,41 +1529,18 @@ export default function GoalDetailView({
                   <FolderKanban className="w-4 h-4 text-[#7C8363]" />
                   <span>پروژه‌های پیوندی با تجزیه مشارکت ({goal.linkedProjects!.length})</span>
                 </h5>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="space-y-2">
                   {goal.linkedProjects!.map((lp, idx) => (
-                    <div key={idx} className="bg-white p-3 rounded-2xl border border-[#E6DFD3] space-y-2 text-right">
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="text-xs font-bold text-[#2D3025]">{lp.title}</span>
-                          {lp.contributionType && (
-                            <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-md border ${getContributionTypeBadge(lp.contributionType)}`}>
-                              {getContributionTypeLabel(lp.contributionType)}
-                            </span>
-                          )}
-                          {lp.isMandatory && (
-                            <span className="text-[7px] font-bold bg-red-50 border border-red-100 text-red-600 px-1 py-0.5 rounded">اجباری</span>
-                          )}
-                        </div>
-                        {lp.weight != null && (
-                          <span className="text-[8px] font-bold bg-[#F9F1D8] text-[#5A5A40] px-1.5 py-0.5 rounded-md">وزن: {lp.weight}%</span>
-                        )}
-                      </div>
-                      {/* Stats */}
-                      <div className="flex flex-wrap gap-2 text-[9px] text-[#8D7F72] font-semibold">
-                        {lp.progress != null && <span>پیشرفت: {lp.progress}%</span>}
-                        {lp.totalTasks != null && <span>تسک: {lp.doneTasks ?? 0}/{lp.totalTasks}</span>}
-                        {lp.milestoneTotal != null && <span>نقطه‌عطف: {lp.milestoneDone ?? 0}/{lp.milestoneTotal}</span>}
-                        {lp.keyTotal != null && <span>کلیدی: {lp.keyDone ?? 0}/{lp.keyTotal}</span>}
-                        {lp.actualMinutes != null && <span>زمان: {lp.actualMinutes}د</span>}
-                        {lp.estimatedHours != null && <span>برآورد: {lp.estimatedHours}س</span>}
-                      </div>
-                      {/* Progress bar */}
-                      {lp.progress != null && (
-                        <div className="w-full bg-[#E6DFD3]/40 h-1.5 rounded-full overflow-hidden">
-                          <div className="bg-[#9B6B61] h-full rounded-full transition-all" style={{ width: `${Math.min(100, lp.progress)}%` }} />
-                        </div>
-                      )}
-                    </div>
+                    <LinkedProjectEditor
+                      key={lp.project || idx}
+                      goalId={goal.id}
+                      lp={lp}
+                      onUpdate={(updatedLp) => {
+                        const newLinked = [...(goal.linkedProjects || [])];
+                        newLinked[idx] = updatedLp;
+                        onUpdateGoal({ ...goal, linkedProjects: newLinked });
+                      }}
+                    />
                   ))}
                 </div>
               </div>

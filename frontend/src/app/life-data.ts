@@ -227,9 +227,9 @@ function mapGoals(items: any[]): Goal[] {
       healthDetail: item.health_detail ?? undefined,
       completionPolicy: completionPolicyMap[item.completion_policy] || undefined,
       completionThreshold: item.completion_threshold ?? undefined,
-      lastSnapshot: item.last_snapshot_json ? (() => {
+      lastSnapshot: item.last_snapshot ? (() => {
         try {
-          const s = typeof item.last_snapshot_json === 'string' ? JSON.parse(item.last_snapshot_json) : item.last_snapshot_json
+          const s = typeof item.last_snapshot === 'string' ? JSON.parse(item.last_snapshot) : item.last_snapshot
           return {
             progressPct: s.progress_percent ?? s.progressPct ?? 0,
             healthState: healthStateMap[s.health_state] || 'on_track',

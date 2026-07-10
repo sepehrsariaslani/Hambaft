@@ -12,6 +12,16 @@ from frappe.utils import today, getdate, flt, cint, now_datetime
 
 
 class Goal(Document):
+    CONTRIBUTION_TYPE_MULTIPLIERS = {
+        "اجباری": 1.0,
+        "پیشنهادی": 0.7,
+        "پشتیبان": 0.4,
+    }
+
+    def _ct_multiplier(self, contrib_type):
+        """Return contribution_type multiplier: mandatory=1.0, recommended=0.7, supporting=0.4."""
+        return self.CONTRIBUTION_TYPE_MULTIPLIERS.get(contrib_type or "اجباری", 1.0)
+
     def before_save(self):
         if not self.user:
             self.user = frappe.session.user
@@ -396,20 +406,34 @@ class Goal(Document):
     # ─── Five Signals ───────────────────────────────────────
 
     def _signal_project_progress(self, project_links):
-        """Weighted average of project progress."""
+        """Weighted average of project progress, scaled by contribution_type.
+
+        contribution_type multipliers:
+          اجباری (mandatory)   → 1.0
+          پیشنهادی (recommended) → 0.7
+          پشتیبان (supporting)   → 0.4
+        Effective weight = per-project weight × contribution_type multiplier.
+        """
+
         total_weighted = 0
         total_weight = 0
         details = []
         for pl in project_links:
             w = flt(pl.get("weight", 100))
+            contrib_type = pl.get("contribution_type", "اجباری")
+            ct_mult = self._ct_multiplier(contrib_type)
+            effective_w = w * ct_mult
             prog = flt(pl.get("progress", 0))
-            total_weighted += prog * w
-            total_weight += w
+            total_weighted += prog * effective_w
+            total_weight += effective_w
             details.append({
                 "project": pl["project"],
                 "title": pl["title"],
                 "progress": prog,
                 "weight": w,
+                "contribution_type": contrib_type,
+                "contribution_type_multiplier": ct_mult,
+                "effective_weight": round(effective_w, 1),
                 "is_mandatory": pl.get("is_mandatory", 1),
             })
 
@@ -420,64 +444,182 @@ class Goal(Document):
         return pct, details
 
     def _signal_milestone(self, project_links):
-        """% of milestone tasks completed across all linked projects."""
-        total = sum(pl.get("milestone_total", 0) for pl in project_links)
-        done = sum(pl.get("milestone_done", 0) for pl in project_links)
-        if total <= 0:
-            # Fall back to overall task completion
-            total = sum(pl.get("total_tasks", 0) for pl in project_links)
-            done = sum(pl.get("done_tasks", 0) for pl in project_links)
-        if total <= 0:
-            return 0, {"milestone_total": 0, "milestone_done": 0}
-        pct = min(100, (done / total) * 100)
-        return pct, {"milestone_total": total, "milestone_done": done}
+        """% of milestone tasks completed across all linked projects, weighted by contribution_type.
+
+        contribution_type multipliers:
+          اجباری (mandatory)   → 1.0
+          پیشنهادی (recommended) → 0.7
+          پشتیبان (supporting)   → 0.4
+        Each project's milestone done/total ratio is weighted by its effective weight.
+        """
+
+        total_weighted_done = 0
+        total_weighted_count = 0
+        details_by_project = []
+
+        for pl in project_links:
+            contrib_type = pl.get("contribution_type", "اجباری")
+            ct_mult = self._ct_multiplier(contrib_type)
+            w = flt(pl.get("weight", 100))
+            effective_w = w * ct_mult
+
+            m_total = pl.get("milestone_total", 0)
+            m_done = pl.get("milestone_done", 0)
+
+            if m_total > 0:
+                ratio = m_done / m_total
+            else:
+                # Fall back to overall task completion for this project
+                t_total = pl.get("total_tasks", 0)
+                t_done = pl.get("done_tasks", 0)
+                ratio = (t_done / t_total) if t_total > 0 else 0
+
+            total_weighted_done += ratio * effective_w
+            total_weighted_count += effective_w
+            details_by_project.append({
+                "project": pl.get("project", ""),
+                "contribution_type": contrib_type,
+                "effective_weight": round(effective_w, 1),
+                "milestone_total": m_total,
+                "milestone_done": m_done,
+                "milestone_ratio": round(ratio, 3),
+            })
+
+        if total_weighted_count <= 0:
+            return 0, {"milestone_total": 0, "milestone_done": 0, "projects": details_by_project}
+
+        pct = min(100, (total_weighted_done / total_weighted_count) * 100)
+        # Also provide raw totals for display
+        raw_total = sum(pl.get("milestone_total", 0) for pl in project_links)
+        raw_done = sum(pl.get("milestone_done", 0) for pl in project_links)
+        return pct, {
+            "milestone_total": raw_total,
+            "milestone_done": raw_done,
+            "weighted_pct": round(pct, 1),
+            "projects": details_by_project,
+        }
 
     def _signal_key_task(self, project_links):
-        """% of key tasks completed, falling back to normal task completion."""
-        key_total = sum(pl.get("key_total", 0) for pl in project_links)
-        key_done = sum(pl.get("key_done", 0) for pl in project_links)
-        if key_total > 0:
-            pct = min(100, (key_done / key_total) * 100)
-            return pct, {"key_total": key_total, "key_done": key_done}
+        """% of key tasks completed, weighted by contribution_type.
 
-        # No key tasks — use all non-milestone task completion
-        normal_total = sum(pl.get("normal_total", 0) for pl in project_links)
-        normal_done = sum(pl.get("normal_done", 0) for pl in project_links)
-        if normal_total <= 0:
-            return 0, {"key_total": 0, "key_done": 0, "normal_fallback": True}
-        pct = min(100, (normal_done / normal_total) * 100)
-        return pct, {"key_total": key_total, "key_done": key_done,
-                      "normal_total": normal_total, "normal_done": normal_done,
-                      "normal_fallback": True}
+        contribution_type multipliers:
+          اجباری (mandatory)   → 1.0
+          پیشنهادی (recommended) → 0.7
+          پشتیبان (supporting)   → 0.4
+        Each project's key task done/total ratio is weighted by its effective weight.
+        """
+
+        total_weighted_done = 0
+        total_weighted_count = 0
+        has_key_tasks = False
+        details_by_project = []
+
+        for pl in project_links:
+            contrib_type = pl.get("contribution_type", "اجباری")
+            ct_mult = self._ct_multiplier(contrib_type)
+            w = flt(pl.get("weight", 100))
+            effective_w = w * ct_mult
+
+            key_total = pl.get("key_total", 0)
+            key_done = pl.get("key_done", 0)
+
+            if key_total > 0:
+                has_key_tasks = True
+                ratio = key_done / key_total
+                total_weighted_done += ratio * effective_w
+                total_weighted_count += effective_w
+                details_by_project.append({
+                    "project": pl.get("project", ""),
+                    "contribution_type": contrib_type,
+                    "effective_weight": round(effective_w, 1),
+                    "key_total": key_total,
+                    "key_done": key_done,
+                    "key_ratio": round(ratio, 3),
+                    "used_fallback": False,
+                })
+
+        # If no key tasks anywhere, fall back to normal task completion
+        if not has_key_tasks:
+            for pl in project_links:
+                contrib_type = pl.get("contribution_type", "اجباری")
+                ct_mult = self._ct_multiplier(contrib_type)
+                w = flt(pl.get("weight", 100))
+                effective_w = w * ct_mult
+
+                normal_total = pl.get("normal_total", 0)
+                normal_done = pl.get("normal_done", 0)
+                ratio = (normal_done / normal_total) if normal_total > 0 else 0
+                total_weighted_done += ratio * effective_w
+                total_weighted_count += effective_w
+                details_by_project.append({
+                    "project": pl.get("project", ""),
+                    "contribution_type": contrib_type,
+                    "effective_weight": round(effective_w, 1),
+                    "normal_total": normal_total,
+                    "normal_done": normal_done,
+                    "normal_ratio": round(ratio, 3),
+                    "used_fallback": True,
+                })
+
+        if total_weighted_count <= 0:
+            return 0, {"key_total": 0, "key_done": 0, "projects": details_by_project}
+
+        pct = min(100, (total_weighted_done / total_weighted_count) * 100)
+        # Also provide raw totals for display
+        raw_key_total = sum(pl.get("key_total", 0) for pl in project_links)
+        raw_key_done = sum(pl.get("key_done", 0) for pl in project_links)
+        raw_normal_total = sum(pl.get("normal_total", 0) for pl in project_links) if not has_key_tasks else 0
+        raw_normal_done = sum(pl.get("normal_done", 0) for pl in project_links) if not has_key_tasks else 0
+        result = {
+            "key_total": raw_key_total,
+            "key_done": raw_key_done,
+            "weighted_pct": round(pct, 1),
+            "projects": details_by_project,
+        }
+        if not has_key_tasks:
+            result["normal_total"] = raw_normal_total
+            result["normal_done"] = raw_normal_done
+            result["normal_fallback"] = True
+        return pct, result
 
     def _signal_tracked_time(self, project_links):
-        """Normalised tracked time: actual vs estimated, capped at 100%."""
-        total_estimated_hrs = 0
-        total_actual_hrs = 0
+        """Normalised tracked time: actual vs estimated, capped at 100%.
+
+        contribution_type scaling applied: mandatory projects' time counts fully,
+        supporting projects' time counts less toward the overall signal.
+        """
+
+        total_weighted_estimated = 0
+        total_weighted_actual = 0
         details = []
 
         for pl in project_links:
             est = flt(pl.get("estimated_hours", 0))
             act_min = cint(pl.get("actual_minutes", 0))
             act_hrs = act_min / 60.0
-            total_estimated_hrs += est
-            total_actual_hrs += act_hrs
+            contrib_type = pl.get("contribution_type", "اجباری")
+            ct_mult = self._ct_multiplier(contrib_type)
+
+            total_weighted_estimated += est * ct_mult
+            total_weighted_actual += act_hrs * ct_mult
             details.append({
                 "project": pl["project"],
                 "estimated_hours": est,
                 "actual_minutes": act_min,
                 "actual_hours": round(act_hrs, 1),
+                "contribution_type": contrib_type,
+                "contribution_type_multiplier": ct_mult,
             })
 
-        if total_estimated_hrs <= 0:
+        if total_weighted_estimated <= 0:
             # No estimates — time signal is neutral, don't inflate
             return 50, {"note": "no_estimates_neutral", "details": details}
 
         # Ratio with cap: logging more than 1.5x estimated should not give >100%
-        ratio = min(1.0, total_actual_hrs / total_estimated_hrs)
+        ratio = min(1.0, total_weighted_actual / total_weighted_estimated)
         pct = ratio * 100
-        return pct, {"ratio": round(ratio, 2), "estimated_hours": total_estimated_hrs,
-                      "actual_hours": round(total_actual_hrs, 1), "details": details}
+        return pct, {"ratio": round(ratio, 2), "weighted_estimated_hours": round(total_weighted_estimated, 1),
+                      "weighted_actual_hours": round(total_weighted_actual, 1), "details": details}
 
     def _signal_metric(self):
         """KPI metric: current_value / target_value."""

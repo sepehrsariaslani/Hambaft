@@ -236,7 +236,7 @@ export function toTaskPayload(task: Task): Record<string, unknown> {
     scheduled_time: task.scheduledTime || null,
     priority: taskPriorityToBackend[task.priority || 'medium'] || 'متوسط',
     category: taskCategoryToBackend[task.category || 'other'] || 'شخصی',
-    status: task.status || (task.completed ? 'done' : 'inbox'),
+    status: task.status || (task.completed ? 'انجام‌شده' : 'inbox'),
     project: task.projectId || null,
     parent_task: task.parentTaskId || null,
     blocked_by_json: JSON.stringify(task.blockedBy || []),
