@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { LifeData, Transaction, Habit, Goal, Task, JournalEntry, GoalCategory, TransactionCategory, MoodType, Subscription, CategoryDef, Project, BankAccount, UserProfile, SleepLog, BudgetSettings, Document as LifeDocument, Occasion, MindfulnessSession, RecurringTransaction, Debt, AssetInvestment, MealLog, DietSetting, WeightLog, WorkoutLog, BodyMeasurementLog, Installment, Milestone } from './types';
-import { MOOD_LABELS, DEFAULT_CATEGORIES, TODAY_DATE as SEED_TODAY_DATE } from './initialData';
+import { MOOD_LABELS, DEFAULT_CATEGORIES } from './initialData';
 import { createEmptyLifeData, derivePrimaryPriority } from '../app/workspace-defaults';
 import { useToday } from '../app/use-today';
 import { subscribeAction } from '../app/navigation-bus';
@@ -76,7 +76,7 @@ import DashboardOverview from './components/DashboardOverview';
 import CalendarSection, { ScheduleItem } from './components/CalendarSection';
 import TaskManagerSection from './components/TaskManagerSection';
 import NotionNotesSection from './components/NotionNotesSection';
-import { useNotesStore, initMockPages } from '../notes/useNotesStore';
+import { useNotesStore, initOnboardingPages } from '../notes/useNotesStore';
 
 // Lazy-loaded secondary sections — reduces initial bundle ~68%
 const FinanceSection = React.lazy(() => import('./components/FinanceSection'));
@@ -324,7 +324,7 @@ export default function App({
   const [lifeData, setLifeData] = useState<LifeData>(() => seedLifeData || createEmptyLifeData());
 
   // Notes store
-  initMockPages();
+  initOnboardingPages();
   const notesStore = useNotesStore();
 
   useEffect(() => {

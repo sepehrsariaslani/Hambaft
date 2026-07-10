@@ -156,7 +156,7 @@ export function useNotesStore() {
           GLOBAL_PAGES = pages
         } else {
           // Seed with defaults if nothing on server
-          initMockPages()
+          initOnboardingPages()
           await seedMockPages()
         }
         INITIALIZED = true
@@ -318,28 +318,14 @@ export function useNotesStore() {
   }
 }
 
-export function initMockPages() {
+export function initOnboardingPages() {
   if (GLOBAL_PAGES.length > 0) return
-  const p1 = createDefaultPage('ژورنال روزانه')
+  // Create a single empty onboarding page so the user doesn't stare at
+  // a blank screen.  Real data comes from the backend on next visit.
+  const p1 = createDefaultPage('یادداشت اول من')
   p1.blocks = [
-    { id: generateId(), type: 'heading_1', content: [{ text: 'ژورنال روزانه من' }] },
-    { id: generateId(), type: 'paragraph', content: [{ text: 'امروز روز خوبی بود. کارهای زیادی انجام دادم و حس مثبتی دارم.' }] },
-    { id: generateId(), type: 'todo', content: [{ text: 'ورزش صبحگاهی' }], props: { checked: true } },
-    { id: generateId(), type: 'todo', content: [{ text: 'مطالعه ۳۰ دقیقه‌ای' }], props: { checked: false } },
-    { id: generateId(), type: 'callout', content: [{ text: 'یادآوری: فردا جلسه مهم با تیم داریم!' }], props: { icon: '💡' } },
+    { id: generateId(), type: 'heading_1', content: [{ text: 'به یادداشت‌های همبافت خوش آمدید!' }] },
+    { id: generateId(), type: 'paragraph', content: [{ text: 'از اینجا می‌تونید یادداشت‌ها، ایده‌ها و برنامه‌هاتون رو بنویسید.' }] },
   ]
-  const p2 = createDefaultPage('برنامه هفتگی')
-  p2.blocks = [
-    { id: generateId(), type: 'heading_2', content: [{ text: 'اهداف این هفته' }] },
-    { id: generateId(), type: 'bullet_list', content: [{ text: 'تکمیل پروژه همبافت' }] },
-    { id: generateId(), type: 'bullet_list', content: [{ text: 'رفتن به باشگاه ۳ بار' }] },
-    { id: generateId(), type: 'bullet_list', content: [{ text: 'خواندن ۵۰ صفحه کتاب' }] },
-  ]
-  const p3 = createDefaultPage('ایده‌های محتوا')
-  p3.parentId = p1.id
-  p3.blocks = [
-    { id: generateId(), type: 'heading_3', content: [{ text: 'پست اینستاگرام' }] },
-    { id: generateId(), type: 'paragraph', content: [{ text: 'ایده اول: معرفی اپلیکیشن همبافت و ویژگی‌های جدید' }] },
-  ]
-  GLOBAL_PAGES = [p1, p2, p3]
+  GLOBAL_PAGES = [p1]
 }
