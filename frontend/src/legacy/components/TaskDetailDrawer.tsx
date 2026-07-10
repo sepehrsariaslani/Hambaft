@@ -4,7 +4,7 @@
  * Progressive disclosure: most-used controls in Overview,
  * deeper context in other tabs.
  */
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import {
   X, CheckCircle, Circle, Edit2, Trash2, Calendar, Clock, Flag, Zap,
@@ -786,8 +786,61 @@ function TimeTab({ task, isActiveSession, activeTimerSeconds, isTimerRunning, on
 
 // ─── Notes ───────────────────────────────────────────────────
 function NotesTab({ task, onUpdateTask }: { task: Task; onUpdateTask: (t: Task) => void }) {
+  // Derive a simple activity trail from task fields
+  const activityTrail = useMemo(() => {
+    const entries: Array<{ label: string; value: string; icon: string; time?: string }> = []
+
+    if (task.status) {
+      const statusLabels: Record<string, string> = {
+        inbox: 'صندوق ورودی', today: 'امروز', next: 'بعدی',
+        in_progress: 'در حال انجام', done: 'انجام‌شده', on_hold: 'متوقف',
+        someday: 'شاید', not_started: 'شروع‌نشده',
+      }
+      entries.push({ label: 'وضعیت', value: statusLabels[task.status] || task.status, icon: '📋' })
+    }
+    if (task.priority) {
+      const pLabels: Record<string, string> = { low: 'پایین', medium: 'متوسط', high: 'بالا', urgent: 'فوری' }
+      entries.push({ label: 'اولویت', value: pLabels[task.priority] || task.priority, icon: '🚩' })
+    }
+    if (task.importance && task.importance !== 'normal') {
+      const iLabels: Record<string, string> = { milestone: 'نقطه‌عطف', key: 'کلیدی' }
+      entries.push({ label: 'اهمیت', value: iLabels[task.importance] || task.importance, icon: '⭐' })
+    }
+    if (task.scheduledDate) {
+      entries.push({ label: 'برنامه‌ریزی', value: task.scheduledDate, icon: '📅' })
+    }
+    if (task.dueDate) {
+      entries.push({ label: 'سررسید', value: task.dueDate, icon: '⏰' })
+    }
+    if (task.estimatedMinutes) {
+      entries.push({ label: 'زمان تخمینی', value: `${task.estimatedMinutes} دقیقه`, icon: '⏱' })
+    }
+    if (task.actualMinutes) {
+      entries.push({ label: 'زمان صرف‌شده', value: `${task.actualMinutes} دقیقه`, icon: '⏳' })
+    }
+    if (task.projectId) {
+      entries.push({ label: 'پروژه', value: task.projectId, icon: '📁' })
+    }
+    if (task.areaId) {
+      entries.push({ label: 'حوزه', value: task.areaId, icon: '🎯' })
+    }
+    if (task.goalId) {
+      entries.push({ label: 'هدف', value: task.goalId, icon: '🏆' })
+    }
+    if (task.isDailyHighlight) {
+      entries.push({ label: 'برجسته', value: 'بله', icon: '📌' })
+    }
+    if ((task.blockedBy || []).length > 0) {
+      entries.push({ label: 'پیش‌نیاز', value: `${task.blockedBy!.length} تسک`, icon: '🔗' })
+    }
+    if (task.createdAt) {
+      entries.push({ label: 'ایجاد', value: task.createdAt, icon: '🆕' })
+    }
+    return entries
+  }, [task])
+
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <EntityNoteEditor
         entityId={task.id}
         entityType="task"
@@ -795,6 +848,23 @@ function NotesTab({ task, onUpdateTask }: { task: Task; onUpdateTask: (t: Task) 
         initialBlocks={task.noteBlocks}
         onSave={(blocks) => onUpdateTask({ ...task, noteBlocks: blocks })}
       />
+
+      {/* Activity Trail — simple field-level snapshot */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-1.5">
+          <History className="w-3.5 h-3.5 text-[#7C8363]" />
+          <span className="text-[10px] font-black text-[#8D7F72]">ردپای فعالیت</span>
+        </div>
+        <div className="bg-[#F9F6EE] rounded-xl border border-[#E6DFD3]/60 divide-y divide-[#E6DFD3]/40">
+          {activityTrail.map((entry, idx) => (
+            <div key={idx} className="flex items-center gap-2 px-3 py-2">
+              <span className="text-xs">{entry.icon}</span>
+              <span className="text-[10px] font-bold text-[#8D7F72]">{entry.label}:</span>
+              <span className="text-[10px] font-semibold text-[#2D3025] truncate">{entry.value}</span>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }
