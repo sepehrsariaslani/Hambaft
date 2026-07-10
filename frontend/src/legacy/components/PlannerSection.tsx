@@ -41,7 +41,7 @@ import {
   updateTaskImportance,
   resolveBlockedTasks,
 } from '../../app/hambaft-api'
-import { ImportanceBadge, ImportanceSelector, BlockedTaskIndicator, TaskImpactBanner } from './TaskV2Shared'
+import { ImportanceBadge, ImportanceSelector, BlockedTaskIndicator, TaskImpactBanner, ImpactScoreBadge, TaskImpactExplanation } from './TaskV2Shared'
 import type { ImportanceLevel } from './TaskV2Shared'
 
 type PlannerBucket = 'inbox' | 'today' | 'next' | 'scheduled' | 'someday'
@@ -358,6 +358,9 @@ export default function PlannerSection() {
             {task.importance && task.importance !== 'normal' && (
               <ImportanceBadge importance={task.importance} size="xs" />
             )}
+            {task.impactScore != null && task.impactScore >= 30 && task.status !== 'done' && (
+              <ImpactScoreBadge score={task.impactScore} />
+            )}
           </div>
           {!compact && (
             <div className="flex items-center gap-2 mt-1 flex-wrap">
@@ -451,6 +454,8 @@ export default function PlannerSection() {
               {(task.impactGoalTitle || task.impactProjectTitle) && task.status !== 'done' && (
                 <TaskImpactBanner task={task} />
               )}
+              {/* Impact explanation */}
+              <TaskImpactExplanation task={task} />
               {/* Blocked indicator */}
               {(task.blockedBy || []).length > 0 && task.status !== 'done' && (
                 <BlockedTaskIndicator task={task} />
@@ -952,6 +957,7 @@ function mapBackendTask(row: any): Task {
     impactProjectTitle: row.impact_project_title || undefined,
     impactProjectContributionType: row.impact_project_contribution_type || undefined,
     impactProjectProgress: row.impact_project_progress || undefined,
+    impactScore: row.impact_score || undefined,
     blockedByTitles: row.blocked_by_titles || undefined,
     blockedByStatuses: row.blocked_by_statuses || undefined,
   }

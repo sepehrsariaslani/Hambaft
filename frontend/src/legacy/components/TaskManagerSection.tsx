@@ -1,8 +1,9 @@
 import { useState, useMemo, useCallback, lazy, Suspense } from 'react'
 import type { Task, Goal } from '../types'
 import ViewSwitcher, { type ViewMode } from './ViewSwitcher'
-import { ImportanceBadge, ImportanceSelector, BlockedTaskIndicator, TaskImpactBanner, sortTasksByImpact } from './TaskV2Shared'
+import { ImportanceBadge, ImportanceSelector, BlockedTaskIndicator, TaskImpactBanner, ImpactScoreBadge, sortTasksByImpact } from './TaskV2Shared'
 import type { ImportanceLevel } from './TaskV2Shared'
+import { updateTaskImportance } from '../../app/hambaft-api'
 
 const TaskTableView = lazy(() => import('./TaskTableView'))
 const TaskKanbanView = lazy(() => import('./TaskKanbanView'))
@@ -493,6 +494,9 @@ function TaskRow({
           </span>
           {task.importance && task.importance !== 'normal' && (
             <ImportanceBadge importance={task.importance} size="xs" />
+          )}
+          {task.impactScore != null && task.impactScore >= 30 && !task.completed && (
+            <ImpactScoreBadge score={task.impactScore} />
           )}
           {task.isDailyHighlight && (
             <span className="text-[10px] font-bold bg-[#d4a017]/15 text-[#b8860b] px-1.5 py-0.5 rounded">⭐ برجسته</span>

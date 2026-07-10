@@ -312,6 +312,9 @@ export interface Task {
   // Blocked resolution
   blockedByTitles?: string[]; // titles of blocking tasks (for UX display)
   blockedByStatuses?: Record<string, string>; // task_id → status of blockers
+  
+  // Impact score — derived by backend, used for prioritization
+  impactScore?: number; // 0-100, higher = more impactful
 }
 
 export interface TaskSession {

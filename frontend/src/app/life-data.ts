@@ -97,6 +97,7 @@ function mapTasks(items: any[]): Task[] {
     impactGoalTitle: item.impact_goal_title || undefined,
     impactGoalHealth: item.impact_goal_health || undefined,
     impactGoalProgress: item.impact_goal_progress || undefined,
+    impactScore: item.impact_score || undefined,
     impactProjectTitle: item.impact_project_title || undefined,
     impactProjectContributionType: item.impact_project_contribution_type || undefined,
     impactProjectProgress: item.impact_project_progress || undefined,

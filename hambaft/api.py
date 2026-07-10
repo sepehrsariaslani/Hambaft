@@ -238,8 +238,12 @@ def _enrich_task_with_impact(task_dict):
     task_dict["impact_project_progress"] = None
     task_dict["blocked_by_titles"] = []
     task_dict["blocked_by_statuses"] = {}
+    task_dict["impact_score"] = 0
 
     project_name = task_dict.get("project")
+    has_active_goal = False
+    project_contribution_weight = 0
+    goal_health_penalty = 0
     if project_name:
         proj = frappe.db.get_value(
             "Hambaft Project", project_name,
@@ -280,8 +284,6 @@ def _enrich_task_with_impact(task_dict):
             task_dict["impact_goal_title"] = goal.title
             task_dict["impact_goal_health"] = goal.health_state
             task_dict["impact_goal_progress"] = goal.progress_percent or 0
-
-    # Blocked-by enrichment
     blocked_raw = task_dict.get("blocked_by_json")
     blocked = _loads_json(blocked_raw, [])
     if blocked:
@@ -295,6 +297,69 @@ def _enrich_task_with_impact(task_dict):
         task_dict["blocked_by_titles"] = titles
         task_dict["blocked_by_statuses"] = statuses
 
+    # ─── Impact Score Computation ────────────────────────────
+    # Combines multiple signals into a single actionable score (0-100):
+    #   - importance weight: milestone=30, key=20, normal=5
+    #   - linked goal bonus: +15 if task belongs to a project linked to an active goal
+    #   - contribution type bonus: mandatory=+15, recommended=+8, supporting=+3
+    #   - goal health urgency: at_risk=+10, off_track=+15
+    #   - unblocking leverage: +10 if this task blocks other tasks
+    #   - blocked penalty: -10 if this task is currently blocked
+    #   - due urgency: +5 if overdue, +3 if due within 3 days
+    importance = task_dict.get("importance", "عادی")
+    imp_score = {"نقطه‌عطف": 30, "کلیدی": 20}.get(importance, 5)
+    
+    goal_score = 0
+    if task_dict.get("impact_goal_title"):
+        goal_score = 15  # linked to an active goal
+        # Health urgency
+        health = task_dict.get("impact_goal_health", "")
+        if health == "خارج_از_مسیر":
+            goal_score += 15
+        elif health == "در_خطر":
+            goal_score += 10
+        elif health == "نیاز_به_بررسی":
+            goal_score += 5
+
+    contrib_score = 0
+    ct = task_dict.get("impact_project_contribution_type", "")
+    if ct == "اجباری":
+        contrib_score = 15
+    elif ct == "پیشنهادی":
+        contrib_score = 8
+    elif ct == "پشتیبان":
+        contrib_score = 3
+
+    # Unblocking leverage: does this task block others?
+    unblock_score = 0
+    blocking_raw = task_dict.get("blocking_json")
+    blocking_list = _loads_json(blocking_raw, [])
+    if blocking_list:
+        unblock_score = min(10, len(blocking_list) * 5)  # cap at 10
+
+    # Blocked penalty
+    blocked_raw = task_dict.get("blocked_by_json")
+    blocked_list = _loads_json(blocked_raw, [])
+    blocked_penalty = -10 if blocked_list else 0
+
+    # Due urgency
+    due_score = 0
+    due_date_str = task_dict.get("due_date")
+    if due_date_str:
+        try:
+            due_d = getdate(due_date_str)
+            today_d = getdate(today())
+            days_left = (due_d - today_d).days
+            if days_left < 0:
+                due_score = 5  # overdue
+            elif days_left <= 3:
+                due_score = 3  # due soon
+        except Exception:
+            pass
+
+    total_score = min(100, max(0, imp_score + goal_score + contrib_score + unblock_score + blocked_penalty + due_score))
+    task_dict["impact_score"] = total_score
+
     return task_dict
 
 
@@ -303,12 +368,14 @@ _PRIORITY_ORDER = {"فوری": 0, "بالا": 1, "متوسط": 2, "پایین": 
 
 
 def _impact_sort_key(task_dict):
-    """Sort key: importance desc → priority desc → due_date asc → creation desc."""
+    """Sort key: impact_score desc → importance desc → priority desc → due_date asc."""
+    # Primary: impact_score descending (negate for ascending sort)
+    impact = -task_dict.get("impact_score", 0)
+    # Fallback: importance → priority → due_date
     imp = _IMPORTANCE_ORDER.get(task_dict.get("importance", "عادی"), 2)
     pri = _PRIORITY_ORDER.get(task_dict.get("priority", "متوسط"), 2)
     due = task_dict.get("due_date") or "9999-12-31"
-    created = task_dict.get("creation") or ""
-    return (imp, pri, due, created)
+    return (impact, imp, pri, due)
 
 
 def _save_doc(doc):
@@ -3869,7 +3936,8 @@ def _load_project_for_goal(project_name):
             fields=["name", "status", "importance"],
         )
         total = len(tasks)
-        done = sum(1 for t in tasks if t.status == "done")
+        done_statuses = {"done", "completed", "انجام‌شده", "انجام شده"}
+        done = sum(1 for t in tasks if t.status in done_statuses)
         milestones = [t for t in tasks if (t.importance or "عادی") == "نقطه‌عطف"]
         key_tasks = [t for t in tasks if (t.importance or "عادی") == "کلیدی"]
 
@@ -3883,9 +3951,9 @@ def _load_project_for_goal(project_name):
             "total_tasks": total,
             "done_tasks": done,
             "milestone_total": len(milestones),
-            "milestone_done": sum(1 for t in milestones if t.status == "done"),
+            "milestone_done": sum(1 for t in milestones if t.status in done_statuses),
             "key_total": len(key_tasks),
-            "key_done": sum(1 for t in key_tasks if t.status == "done"),
+            "key_done": sum(1 for t in key_tasks if t.status in done_statuses),
         }
     except Exception:
         return {}

@@ -188,7 +188,8 @@ export function BlockedTaskIndicator({ task }: { task: Task }) {
     return (
       <div className="flex items-center gap-1.5 rounded-md bg-emerald-50 border border-emerald-200 px-2 py-1 text-[11px] text-emerald-800">
         <span>✓</span>
-        <span>پیش‌نیازها تکمیل شده — آماده انجام</span>
+        <span className="font-semibold">پیش‌نیازها تکمیل شده</span>
+        <span>— آماده انجام</span>
       </div>
     )
   }
@@ -197,17 +198,59 @@ export function BlockedTaskIndicator({ task }: { task: Task }) {
     const s = statuses[id]
     return s !== 'done' && s !== 'completed' && s !== 'انجام‌شده' && s !== 'انجام شده'
   })
+  const doneBlockers = blockedBy.filter((id) => {
+    const s = statuses[id]
+    return s === 'done' || s === 'completed' || s === 'انجام‌شده' || s === 'انجام شده'
+  })
 
   return (
-    <div className="flex items-center gap-1.5 rounded-md bg-red-50 border border-red-200 px-2 py-1 text-[11px] text-red-800">
-      <span>⊘</span>
-      <span>مسدود توسط {incompleteBlockers.length} تسک:</span>
+    <div className="space-y-0.5">
+      <div className="flex items-center gap-1.5 rounded-md bg-red-50 border border-red-200 px-2 py-1 text-[11px] text-red-800">
+        <span>⊘</span>
+        <span>مسدود — {incompleteBlockers.length} پیش‌نیاز ناتمام</span>
+        {doneBlockers.length > 0 && (
+          <span className="text-emerald-700">({doneBlockers.length} تکمیل‌شده)</span>
+        )}
+      </div>
       {titles.length > 0 && (
-        <span className="font-medium truncate max-w-[150px]" title={titles.join('، ')}>
-          {titles.slice(0, 2).join('، ')}{titles.length > 2 ? '...' : ''}
-        </span>
+        <div className="flex flex-wrap gap-1 px-2">
+          {blockedBy.map((id, i) => {
+            const s = statuses[id]
+            const isDone = s === 'done' || s === 'completed' || s === 'انجام‌شده' || s === 'انجام شده'
+            return (
+              <span key={id} className={`text-[9px] px-1 py-0.5 rounded ${isDone ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+                {titles[i] || id} {isDone ? '✓' : '⊘'}
+              </span>
+            )
+          })}
+        </div>
       )}
     </div>
+  )
+}
+
+// ─── Impact Score Badge ────────────────────────────────────────
+
+export function ImpactScoreBadge({ score }: { score?: number }) {
+  if (score == null) return null
+  let color: string
+  let label: string
+  if (score >= 60) {
+    color = 'bg-amber-100 text-amber-800 border-amber-300'
+    label = 'تأثیر بالا'
+  } else if (score >= 30) {
+    color = 'bg-blue-100 text-blue-800 border-blue-300'
+    label = 'تأثیر متوسط'
+  } else {
+    color = 'bg-gray-100 text-gray-600 border-gray-300'
+    label = ''
+  }
+  return (
+    <span className={`inline-flex items-center gap-0.5 rounded-full border text-[9px] font-bold px-1.5 py-0.5 ${color}`}>
+      <span>⚡</span>
+      {label && <span>{label}</span>}
+      <span className="font-mono">{score}</span>
+    </span>
   )
 }
 
@@ -220,6 +263,8 @@ export function getImportanceSortValue(importance?: ImportanceLevel): number {
 }
 
 export function sortTasksByImpact(a: Task, b: Task): number {
+  // impact score desc (primary)
+  if ((a.impactScore || 0) !== (b.impactScore || 0)) return (b.impactScore || 0) - (a.impactScore || 0)
   // importance desc
   const ia = getImportanceSortValue(a.importance)
   const ib = getImportanceSortValue(b.importance)
@@ -232,4 +277,57 @@ export function sortTasksByImpact(a: Task, b: Task): number {
   const da = a.dueDate || '9999-12-31'
   const db = b.dueDate || '9999-12-31'
   return da.localeCompare(db)
+}
+
+// ─── Task Impact Explanation ───────────────────────────────────
+
+export function TaskImpactExplanation({ task }: { task: Task }) {
+  const reasons: string[] = []
+
+  if (task.importance === 'milestone') {
+    reasons.push('نقطه‌عطف پروژه — تکمیلش مستقیم روی پیشرفت هدف اثر دارد')
+  } else if (task.importance === 'key') {
+    reasons.push('تسک کلیدی — در سیگنال کلیدی هدف حساب می‌شود')
+  }
+
+  if (task.impactGoalTitle) {
+    const healthLabels: Record<string, string> = {
+      off_track: 'خارج از مسیر',
+      at_risk: 'در خطر',
+      needs_review: 'نیاز به بررسی',
+      on_track: 'در مسیر',
+    }
+    const h = task.impactGoalHealth ? healthLabels[task.impactGoalHealth] || task.impactGoalHealth : ''
+    reasons.push(`مرتبط با هدف «${task.impactGoalTitle}»${h ? ` (${h})` : ''}`)
+  }
+
+  if (task.impactProjectContributionType) {
+    const ctLabels: Record<string, string> = { mandatory: 'اجباری', recommended: 'پیشنهادی', supporting: 'پشتیبان' }
+    const ct = ctLabels[task.impactProjectContributionType] || task.impactProjectContributionType
+    if (ct === 'اجباری') {
+      reasons.push('پروژه اجباری — تکمیلش برای تکمیل هدف الزامی است')
+    }
+  }
+
+  const blockedBy = task.blockedBy || []
+  const allBlockersDone = blockedBy.length > 0 && blockedBy.every((id) => {
+    const s = task.blockedByStatuses?.[id]
+    return s === 'done' || s === 'completed' || s === 'انجام‌شده' || s === 'انجام شده'
+  })
+  if (allBlockersDone) {
+    reasons.push('پیش‌نیازها تکمیل شده — همین الان می‌تونی شروع کنی')
+  }
+
+  if (reasons.length === 0) return null
+
+  return (
+    <div className="text-[10px] text-[#8D7F72] space-y-0.5 mt-1">
+      {reasons.map((r, i) => (
+        <div key={i} className="flex items-start gap-1">
+          <span className="text-[#7C8363] shrink-0">•</span>
+          <span>{r}</span>
+        </div>
+      ))}
+    </div>
+  )
 }

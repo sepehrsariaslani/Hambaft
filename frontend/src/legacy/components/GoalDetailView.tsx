@@ -150,6 +150,8 @@ function LinkedProjectEditor({ goalId, lp, onUpdate }: {
   const [weight, setWeight] = useState(String(lp.weight ?? 100))
   const [contributionType, setContributionType] = useState<ProjectContributionType>(lp.contributionType || 'mandatory')
   const [isMandatory, setIsMandatory] = useState(!!lp.isMandatory)
+  const [sortOrder, setSortOrder] = useState(String(lp.sortOrder ?? 0))
+  const [notes, setNotes] = useState(lp.notes || '')
   const [saving, setSaving] = useState(false)
 
   const handleSave = async () => {
@@ -162,14 +164,16 @@ function LinkedProjectEditor({ goalId, lp, onUpdate }: {
         weight: Number(weight) || 100,
         is_mandatory: isMandatory ? 1 : 0,
         contribution_type: contribTypeBackend[contributionType] || 'اجباری',
-        sort_order: lp.sortOrder ?? 0,
-        notes: lp.notes || '',
+        sort_order: Number(sortOrder) || 0,
+        notes: notes,
       }])
       onUpdate({
         ...lp,
         weight: Number(weight) || 100,
         contributionType,
         isMandatory,
+        sortOrder: Number(sortOrder) || 0,
+        notes,
       })
       setEditing(false)
     } catch (err) {
@@ -177,6 +181,15 @@ function LinkedProjectEditor({ goalId, lp, onUpdate }: {
     } finally {
       setSaving(false)
     }
+  }
+
+  const resetAndCancel = () => {
+    setEditing(false)
+    setWeight(String(lp.weight ?? 100))
+    setContributionType(lp.contributionType || 'mandatory')
+    setIsMandatory(!!lp.isMandatory)
+    setSortOrder(String(lp.sortOrder ?? 0))
+    setNotes(lp.notes || '')
   }
 
   const contribBadge = (() => {
@@ -232,7 +245,7 @@ function LinkedProjectEditor({ goalId, lp, onUpdate }: {
             {saving ? '...' : editing ? 'ذخیره' : 'ویرایش'}
           </button>
           {editing && (
-            <button onClick={() => { setEditing(false); setWeight(String(lp.weight ?? 100)); setContributionType(lp.contributionType || 'mandatory'); setIsMandatory(!!lp.isMandatory) }}
+            <button onClick={resetAndCancel}
               className="text-[9px] px-2 py-0.5 rounded-lg border border-[#D6CFC3] text-[#8D7F72] cursor-pointer">لغو</button>
           )}
         </div>
@@ -245,7 +258,26 @@ function LinkedProjectEditor({ goalId, lp, onUpdate }: {
         {lp.keyTotal != null && <span>کلیدی: {lp.keyDone ?? 0}/{lp.keyTotal}</span>}
         {lp.actualMinutes != null && <span>زمان: {lp.actualMinutes}د</span>}
         {lp.estimatedHours != null && <span>برآورد: {lp.estimatedHours}س</span>}
+        {lp.sortOrder != null && lp.sortOrder > 0 && !editing && <span>ترتیب: {lp.sortOrder}</span>}
       </div>
+      {/* Editable sort order and notes */}
+      {editing && (
+        <div className="flex flex-wrap gap-2 items-center">
+          <label className="flex items-center gap-1 text-[9px] text-[#8D7F72]">
+            <span>ترتیب:</span>
+            <input type="number" min={0} value={sortOrder} onChange={e => setSortOrder(e.target.value)}
+              className="w-10 px-1 py-0.5 text-[9px] border border-[#D6CFC3] rounded text-center font-mono" />
+          </label>
+          <label className="flex items-center gap-1 text-[9px] text-[#8D7F72] flex-1 min-w-[120px]">
+            <span>یادداشت:</span>
+            <input type="text" value={notes} onChange={e => setNotes(e.target.value)} placeholder="توضیحات..."
+              className="flex-1 px-1.5 py-0.5 text-[9px] border border-[#D6CFC3] rounded" />
+          </label>
+        </div>
+      )}
+      {!editing && lp.notes && (
+        <div className="text-[8px] text-[#9D978B] italic">📝 {lp.notes}</div>
+      )}
       {lp.progress != null && (
         <div className="w-full bg-[#E6DFD3]/40 h-1.5 rounded-full overflow-hidden">
           <div className="bg-[#9B6B61] h-full rounded-full transition-all" style={{ width: `${Math.min(100, lp.progress)}%` }} />

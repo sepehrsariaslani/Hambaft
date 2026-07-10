@@ -380,7 +380,8 @@ class Goal(Document):
                 fields=["name", "status", "importance"],
             )
             total = len(tasks)
-            done = sum(1 for t in tasks if t.status == "done")
+            _done = {"done", "completed", "انجام‌شده", "انجام شده"}
+            done = sum(1 for t in tasks if t.status in _done)
             milestones = [t for t in tasks if (t.importance or "عادی") == "نقطه‌عطف"]
             key_tasks = [t for t in tasks if (t.importance or "عادی") == "کلیدی"]
             normal_tasks = [t for t in tasks if (t.importance or "عادی") == "عادی"]
@@ -394,11 +395,11 @@ class Goal(Document):
                 "total_tasks": total,
                 "done_tasks": done,
                 "milestone_total": len(milestones),
-                "milestone_done": sum(1 for t in milestones if t.status == "done"),
+                "milestone_done": sum(1 for t in milestones if t.status in _done),
                 "key_total": len(key_tasks),
-                "key_done": sum(1 for t in key_tasks if t.status == "done"),
+                "key_done": sum(1 for t in key_tasks if t.status in _done),
                 "normal_total": len(normal_tasks),
-                "normal_done": sum(1 for t in normal_tasks if t.status == "done"),
+                "normal_done": sum(1 for t in normal_tasks if t.status in _done),
             }
         except Exception:
             return None
@@ -677,6 +678,23 @@ class Goal(Document):
                 "message": "سنجه محقق شده اما پروژه‌های اجباری ناتمام‌اند",
                 "metric_pct": metric_pct,
                 "incomplete_mandatory": len(mandatory_incomplete),
+            })
+
+        # Contradiction 4: supporting projects ahead of mandatory ones
+        supporting_projects = [
+            p for p in project_detail
+            if isinstance(p, dict) and p.get("contribution_type") == "پشتیبان" and p.get("progress", 0) > 60
+        ]
+        mandatory_lagging = [
+            p for p in project_detail
+            if isinstance(p, dict) and p.get("contribution_type") == "اجباری" and p.get("progress", 0) < 30
+        ]
+        if supporting_projects and mandatory_lagging:
+            warnings.append({
+                "type": "supporting_ahead_mandatory_lagging",
+                "message": "پروژه‌های پشتیبان پیشرفته اما اجباری‌ها عقب‌مانده‌اند — اولویت‌بندی بررسی شود",
+                "supporting_ahead": len(supporting_projects),
+                "mandatory_lagging": len(mandatory_lagging),
             })
 
         # Warning: very low time with decent progress (might be stale)

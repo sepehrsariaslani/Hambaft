@@ -12,8 +12,12 @@ export default defineConfig({
       '@': resolve(__dirname, 'src'),
     },
   },
+  // Disable Vite's automatic publicDir copy — post-build.js handles this explicitly
+  publicDir: false,
   build: {
     outDir: resolve(__dirname, '../hambaft/public'),
+    // Clean output dir before build to avoid stale assets
+    emptyOutDir: true,
     rollupOptions: {
       output: {
         entryFileNames: 'assets/[name].[hash].js',
