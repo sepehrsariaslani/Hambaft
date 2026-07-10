@@ -151,45 +151,45 @@ import { motion, AnimatePresence } from 'motion/react';
 
 const NAVIGATION_GROUPS = [
   {
-    title: 'عمومی و خانه',
+    title: 'خانه',
     items: [
-      { id: 'dashboard', label: 'داشبورد خانه', icon: LayoutDashboard },
-      { id: 'coach', label: 'مربی هوش مصنوعی (کوچ)', icon: Sparkles },
-      { id: 'contacts', label: 'مخاطبان و صمیمیت (CRM)', icon: Users }
+      { id: 'dashboard', label: 'داشبورد', icon: LayoutDashboard },
+      { id: 'coach', label: 'کوچ هوشمند', icon: Sparkles },
+      { id: 'contacts', label: 'مخاطبان', icon: Users }
     ]
   },
     {
-    title: 'برنامه‌ریزی و زمان',
+    title: 'برنامه‌ریزی',
     items: [
-      { id: 'journal', label: 'دفترچه یادداشت‌ها', icon: BookOpen },
-      { id: 'planner', label: 'برنامه‌ریز شخصی', icon: Layers },
-      { id: 'tasks', label: 'مدیریت تسک‌ها', icon: FileText },
-      { id: 'calendar', label: 'تقویم توازن زندگی', icon: Calendar },
-      { id: 'occasions', label: 'تقویم مناسبت‌ها', icon: Gift },
-      { id: 'balance_report', label: 'گزارش توازن زندگی', icon: Activity }
+      { id: 'journal', label: 'یادداشت‌ها', icon: BookOpen },
+      { id: 'planner', label: 'برنامه‌ریز', icon: Layers },
+      { id: 'tasks', label: 'تسک‌ها', icon: FileText },
+      { id: 'calendar', label: 'تقویم', icon: Calendar },
+      { id: 'occasions', label: 'مناسبت‌ها', icon: Gift },
+      { id: 'balance_report', label: 'گزارش توازن', icon: Activity }
     ]
   },
   {
-    title: 'توازن و تندرستی',
+    title: 'تندرستی',
     items: [
-      { id: 'sleep', label: 'ریتم خواب و بیوریتم', icon: Moon },
-      { id: 'mindfulness', label: 'تمرین ذهن‌آگاهی', icon: Wind },
-      { id: 'mood', label: 'ارزیابی احساسات و مود', icon: Smile },
-      { id: 'habits', label: 'عادت‌های طلایی', icon: Flame },
-      { id: 'nutrition', label: 'تغذیه و رژیم غذایی', icon: Apple },
-      { id: 'fitness', label: 'ورزش و باشگاه بدنسازی', icon: Dumbbell }
+      { id: 'sleep', label: 'خواب', icon: Moon },
+      { id: 'mindfulness', label: 'ذهن‌آگاهی', icon: Wind },
+      { id: 'mood', label: 'احساسات', icon: Smile },
+      { id: 'habits', label: 'عادت‌ها', icon: Flame },
+      { id: 'nutrition', label: 'تغذیه', icon: Apple },
+      { id: 'fitness', label: 'ورزش', icon: Dumbbell }
     ]
   },
   {
-    title: 'رشد و کارآمدی',
+    title: 'رشد',
     items: [
-      { id: 'goals', label: 'اهداف بلندمدت', icon: Target },
-      { id: 'projects', label: 'مدیریت پروژه‌ها', icon: FolderKanban },
-      { id: 'areas', label: 'حوزه‌های زندگی', icon: Layers },
-      { id: 'notes', label: 'یادداشت‌ها (Notion)', icon: FileText },
-      { id: 'finance', label: 'امور مالی و مخارج', icon: Wallet },
-      { id: 'documents', label: 'مدیریت اسناد', icon: FolderOpen },
-      { id: 'profile', label: 'پروفایل و تنظیمات', icon: User }
+      { id: 'goals', label: 'اهداف', icon: Target },
+      { id: 'projects', label: 'پروژه‌ها', icon: FolderKanban },
+      { id: 'areas', label: 'حوزه‌ها', icon: Layers },
+      { id: 'notes', label: 'یادداشت‌Notion', icon: FileText },
+      { id: 'finance', label: 'مالی', icon: Wallet },
+      { id: 'documents', label: 'اسناد', icon: FolderOpen },
+      { id: 'profile', label: 'تنظیمات', icon: User }
     ]
   }
 ];
@@ -3663,21 +3663,21 @@ export default function App({
               <div>
                 <h2 className="text-base font-black text-[#2D3025] dark:text-[#E8ECE0] font-serif-elegant flex items-center gap-2">
                   <span>{
-                    activeTab === 'dashboard' || activeTab === 'home' ? 'داشبورد جامع همبافت' :
+                    activeTab === 'dashboard' || activeTab === 'home' ? 'داشبورد' :
                     activeTab === 'journal' ? 'دفترچه یادداشت‌ها' :
-                    activeTab === 'tasks' ? 'مدیریت تسک‌ها' :
-                    activeTab === 'mood' ? 'ارزیابی احساسات و مود' :
-                    activeTab === 'calendar' ? 'تقویم زندگی و زمان‌بندی توازن' :
+                    activeTab === 'tasks' ? 'تسک‌ها' :
+                    activeTab === 'mood' ? 'احساسات' :
+                    activeTab === 'calendar' ? 'تقویم' :
                     activeTab === 'occasions' ? 'تقویم مناسبت‌ها و یادآورهای مهم' :
                     activeTab === 'sleep' ? 'تنظیم بیوریتم بدنی و ردیاب علمی خواب' :
                     activeTab === 'mindfulness' ? 'تمرین ذهن‌آگاهی، مدیتیشن و تنفس' :
-                    activeTab === 'finance' ? 'امور مالی، اشتراک‌ها و هزینه‌ها' :
+                    activeTab === 'finance' ? 'امور مالی' :
                     activeTab === 'habits' ? 'ردیاب عادت‌ها و رفتارهای روزانه' :
                     activeTab === 'goals' ? 'اهداف و میانی‌های کلیدی زندگی' :
                     activeTab === 'projects' ? 'مرکز مدیریت و پیشبرد پروژه‌ها' :
-                    activeTab === 'areas' ? 'حوزه‌های زندگی و اهداف' :
-                    activeTab === 'notes' ? 'دفترچه یادداشت‌های هوشمند' :
-                    activeTab === 'documents' ? 'مدیریت اسناد، بیمه‌ها و مدارک' :
+                    activeTab === 'areas' ? 'حوزه‌ها' :
+                    activeTab === 'notes' ? 'یادداشت‌ها' :
+                    activeTab === 'documents' ? 'اسناد' :
                     activeTab === 'nutrition' ? 'تغذیه، رژیم غذایی و ردیاب بدنی' :
                     activeTab === 'fitness' ? 'باشگاه بدنسازی، تمرینات و هوازی' :
                     activeTab === 'coach' ? 'کوچ هوشمند همبافت (Gemini AI)' :
@@ -3688,10 +3688,10 @@ export default function App({
                     activeTab === 'planner-board' ? 'برنامه‌ریز — بورد' :
                     activeTab === 'planner-areas' ? 'برنامه‌ریز — حوزه‌ها' :
                     activeTab === 'balance_report' ? 'گزارش توازن زندگی' :
-                    activeTab === 'profile' ? 'پروفایل و تنظیمات' : 'همبافت'
+                    activeTab === 'profile' ? 'تنظیمات' : 'همبافت'
                   }</span>
                 </h2>
-                <span className="text-[10px] text-[#8D7F72] dark:text-[#9D978B] font-semibold mt-0.5 block">شنبه، ۱۴ تیر ۱۴۰۵ • زمان‌بندی هماهنگ با بیوریتم مغز شما</span>
+                <span className="text-[10px] text-[#8D7F72] dark:text-[#9D978B] font-semibold mt-0.5 block">{(() => { try { const d = new Date(); const days = ["یکشنبه","دوشنبه","سه‌شنبه","چهارشنبه","پنجشنبه","جمعه","شنبه"]; return days[d.getDay()] + " " + d.toLocaleDateString("fa-IR"); } catch { return ""; } })()} • زمان‌بندی هماهنگ با بیوریتم مغز شما</span>
               </div>
 
               {/* Mini Widget Row */}

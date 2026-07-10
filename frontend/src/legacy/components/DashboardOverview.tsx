@@ -99,8 +99,33 @@ export default function DashboardOverview({
     ? Math.round((mainActiveGoalCompletedCount / mainActiveGoalMilestonesCount) * 100)
     : (mainActiveGoal?.completed ? 100 : 0);
 
-  // Welcome date in Farsi
-  const farsiDate = "شنبه ۱۴ تیر ۱۴۰۵";
+  // Welcome date — computed from real date
+  const computeFarsiDate = () => {
+    try {
+      const d = new Date();
+      const days = ['یکشنبه','دوشنبه','سه‌شنبه','چهارشنبه','پنجشنبه','جمعه','شنبه'];
+      const dayName = days[d.getDay()];
+      const day = d.getDate();
+      const months = ['فروردین','اردیبهشت','خرداد','تیر','مرداد','شهریور','مهر','آبان','آذر','دی','بهمن','اسفند'];
+      // Simple Gregorian-to-Jalali approximation for display
+      const gMonth = d.getMonth() + 1;
+      const gYear = d.getFullYear();
+      const gDay = d.getDate();
+      // Convert to Jalali (simple lookup method)
+      const g_d_m = [0,31,59,90,120,151,181,212,243,273,304,334];
+      let jy = gYear - 621;
+      const gdn = g_d_m[gMonth-1] + gDay;
+      const mjl = (gYear % 4 === 0 && gYear % 100 !== 0) || gYear % 400 === 0;
+      const gdn2 = gdn + (mjl && gMonth > 2 ? 1 : 0);
+      const jdn = gdn2 - 80;
+      let jMonth, jDay;
+      if (jdn <= 186) { jMonth = Math.ceil(jdn / 31); jDay = jdn % 31 || 31; }
+      else { jMonth = Math.ceil((jdn - 186) / 30) + 6; jDay = (jdn - 186) % 30 || 30; }
+      const persianNums = (n: number) => String(n).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[+d]);
+      return `${dayName} ${persianNums(jDay)} ${months[jMonth-1]} ${persianNums(jy)}`;
+    } catch { return ''; }
+  };
+  const farsiDate = computeFarsiDate();
 
   return (
     <div className="space-y-6 text-right w-full max-w-7xl mx-auto" dir="rtl">
@@ -161,7 +186,16 @@ export default function DashboardOverview({
               <div className="space-y-2">
                 <span className="text-[10px] text-[#8D7F72] dark:text-[#9D978B] font-bold">امتیاز امروز شما</span>
                 <div className="flex items-baseline gap-1">
-                  <h2 className="text-4xl font-extrabold text-[#2D3025] dark:text-[#E8ECE0] font-serif-elegant tracking-tight">۸.۶</h2>
+                  <h2 className="text-4xl font-extrabold text-[#2D3025] dark:text-[#E8ECE0] font-serif-elegant tracking-tight">
+                    {(() => {
+                      const total = tasks.length + habits.length;
+                      if (total === 0) return '—';
+                      const done = tasks.filter(t => t.completed).length + habits.filter(h => h.logs.includes(todayDate)).length;
+                      const pct = done / total;
+                      const score = Math.round(pct * 10 * 10) / 10;
+                      return String(score).replace('.', '.').replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[+d]);
+                    })()}
+                  </h2>
                   <span className="text-xs text-[#8D7F72] dark:text-[#9D978B] font-medium">از ۱۰</span>
                 </div>
                 
