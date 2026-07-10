@@ -1271,6 +1271,20 @@ export default function App({
         ...prev,
         documents: (prev.documents || []).map(item => item.id === newDoc.id ? { ...item, id: saved.name } : item)
       }));
+      // Persist the auto-created occasion reminder to backend
+      if (schedDate) {
+        try {
+          const docOcc: Omit<Occasion, 'id'> = {
+            title: `🛡️ یادآور سند: ${doc.title}`,
+            date: schedDate,
+            type: 'deadline',
+            recurrenceType: 'once',
+            reminderDaysBefore: 0,
+            notes: `موعد یا یادآوری انقضای مدرک "${doc.title}". ${doc.description || ''}`
+          };
+          await createOccasionRecord(docOcc);
+        } catch { /* non-critical — occasion will be local-only */ }
+      }
     });
   };
   const handleDeleteDocument = (id: string) => {
@@ -2745,6 +2759,20 @@ export default function App({
             : c
         ))
       }));
+      // Persist the auto-created birthday occasion to backend
+      if (contact.birthday) {
+        try {
+          const bdayOcc: Omit<Occasion, 'id'> = {
+            title: `🎂 تولد: ${contact.name}`,
+            type: 'birthday',
+            date: contact.birthday,
+            recurrenceType: 'yearly',
+            reminderDaysBefore: 3,
+            notes: `یادآوری تولد ${contact.name} از دفتر ارتباطات CRM. برای تبریک، تماس بگیرید.`
+          };
+          await createOccasionRecord(bdayOcc);
+        } catch { /* non-critical */ }
+      }
     });
   };
 
