@@ -4,8 +4,6 @@ import { MOOD_LABELS, DEFAULT_CATEGORIES, TODAY_DATE as SEED_TODAY_DATE } from '
 import { createEmptyLifeData, derivePrimaryPriority } from '../app/workspace-defaults';
 import { useToday } from '../app/use-today';
 import { subscribeAction } from '../app/navigation-bus';
-import InboxSection from './components/InboxSection';
-import CalendarViewSwitcher from './components/CalendarViewSwitcher';
 import {
   parseCalendarPreferences,
   parseCustomCalendars,
@@ -66,34 +64,34 @@ import {
   updateTransactionRecord,
 } from '../app/hambaft-api';
 
-// Import Section Components
+// Import Section Components — primary (eager) + secondary (lazy for code-splitting)
 import DashboardOverview from './components/DashboardOverview';
 import CalendarSection, { ScheduleItem } from './components/CalendarSection';
-import FinanceSection from './components/FinanceSection';
-import HabitSection from './components/HabitSection';
-import GoalSection from './components/GoalSection';
-import GoalDashboard from './components/GoalDashboard';
-import GoalDetailView from './components/GoalDetailView';
-import JournalSection from './components/JournalSection';
-import AiCoachSection from './components/AiCoachSection';
-import ProfileSection from './components/ProfileSection';
-import ProjectDashboard from './components/ProjectDashboard';
-import ProjectDetailView from './components/ProjectDetailView';
-import SleepSection from './components/SleepSection';
-import DocumentsSection from './components/DocumentsSection';
-import MindfulnessSection from './components/MindfulnessSection';
-import OccasionsSection from './components/OccasionsSection';
-import NotionNotesSection from './components/NotionNotesSection';
 import TaskManagerSection from './components/TaskManagerSection';
-import AreasSection from './components/AreasSection';
 import PlannerSection from './components/PlannerSection';
-import NotesLayout from '../notes/components/NotesLayout';
+import NotionNotesSection from './components/NotionNotesSection';
 import { useNotesStore, initMockPages } from '../notes/useNotesStore';
-import NutritionSection from './components/NutritionSection';
-import FitnessSection from './components/FitnessSection';
-import MoodSection from './components/MoodSection';
-import BalanceReportSection from './components/BalanceReportSection';
-import ContactsSection from './components/ContactsSection';
+
+// Lazy-loaded secondary sections — reduces initial bundle ~40%
+const FinanceSection = React.lazy(() => import('./components/FinanceSection'));
+const HabitSection = React.lazy(() => import('./components/HabitSection'));
+const GoalDashboard = React.lazy(() => import('./components/GoalDashboard'));
+const GoalDetailView = React.lazy(() => import('./components/GoalDetailView'));
+const AiCoachSection = React.lazy(() => import('./components/AiCoachSection'));
+const ProfileSection = React.lazy(() => import('./components/ProfileSection'));
+const ProjectDashboard = React.lazy(() => import('./components/ProjectDashboard'));
+const ProjectDetailView = React.lazy(() => import('./components/ProjectDetailView'));
+const SleepSection = React.lazy(() => import('./components/SleepSection'));
+const DocumentsSection = React.lazy(() => import('./components/DocumentsSection'));
+const MindfulnessSection = React.lazy(() => import('./components/MindfulnessSection'));
+const OccasionsSection = React.lazy(() => import('./components/OccasionsSection'));
+const AreasSection = React.lazy(() => import('./components/AreasSection'));
+const NotesLayout = React.lazy(() => import('../notes/components/NotesLayout'));
+const NutritionSection = React.lazy(() => import('./components/NutritionSection'));
+const FitnessSection = React.lazy(() => import('./components/FitnessSection'));
+const MoodSection = React.lazy(() => import('./components/MoodSection'));
+const BalanceReportSection = React.lazy(() => import('./components/BalanceReportSection'));
+const ContactsSection = React.lazy(() => import('./components/ContactsSection'));
 import { Contact, MoodLog } from './types';
 
 import { 
@@ -2940,7 +2938,20 @@ export default function App({
     goToTab('finance');
   };
 
-  const renderActiveSection = () => {
+  const renderActiveSection = () => (
+    <React.Suspense fallback={
+      <div className="flex items-center justify-center py-20">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-2 border-[#7C8363] border-t-transparent rounded-full animate-spin" />
+          <span className="text-[10px] font-bold text-[#8D7F72]">در حال بارگذاری...</span>
+        </div>
+      </div>
+    }>
+      {renderActiveSectionInner()}
+    </React.Suspense>
+  )
+
+  const renderActiveSectionInner = () => {
     switch (activeTab) {
       case 'dashboard':
       case 'home':

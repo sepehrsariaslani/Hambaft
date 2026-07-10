@@ -25,6 +25,13 @@ export default defineConfig({
         entryFileNames: 'assets/[name].[hash].js',
         chunkFileNames: 'assets/[name].[hash].js',
         assetFileNames: 'assets/[name].[hash].[ext]',
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+          'vendor-motion': ['motion/react'],
+          'vendor-recharts': ['recharts'],
+          'vendor-markdown': ['react-markdown'],
+          'vendor-lucide': ['lucide-react'],
+        },
       },
     },
   },

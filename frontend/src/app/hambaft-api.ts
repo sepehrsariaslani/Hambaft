@@ -945,6 +945,22 @@ export async function aiCoachChat(prompt: string, history: Array<{ role: string;
   })
 }
 
+export async function getAiConversations(limit = 20) {
+  return callGet<{ data?: { conversations?: Array<{ name: string; title: string; ai_type: string; status: string; started_at: string; last_message_at: string }> } }>(
+    `hambaft.hambaft.api.get_ai_conversations?limit=${limit}`
+  )
+}
+
+export async function getAiConversationMessages(conversationId: string, limit = 100) {
+  return call<{ data?: { messages?: Array<{ name: string; role: string; content: string; timestamp: string; model?: string }>; conversation_id?: string } }>(
+    'hambaft.hambaft.api.get_ai_conversation_messages', { conversation_id: conversationId, limit }
+  )
+}
+
+export async function deleteAiConversation(conversationId: string) {
+  return call<{ data?: { ok?: boolean } }>('hambaft.hambaft.api.delete_ai_conversation', { conversation_id: conversationId })
+}
+
 export async function loginWithFrappe(email: string, password: string) {
   return call<{ data?: { onboarding_completed?: boolean } }>('hambaft.hambaft.api.login', { email, password })
 }

@@ -7,10 +7,10 @@
 import React, { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import {
-  X, CheckCircle, Edit2, Trash2, Calendar, Clock, Flag, Zap,
+  X, CheckCircle, Circle, Edit2, Trash2, Calendar, Clock, Flag, Zap,
   FolderKanban, Target, Layers, AlertCircle, Play, Pause,
   Square, RotateCcw, Sparkles, Pin, Link2, ArrowUpRight,
-  BookOpen, Timer, History,
+  BookOpen, Timer, History, Plus,
 } from 'lucide-react'
 import type { Task, SubTask } from '../types'
 import PersianDatePicker from './PersianDatePicker'

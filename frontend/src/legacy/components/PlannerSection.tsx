@@ -378,12 +378,12 @@ export default function PlannerSection() {
         selected={false}
         onToggleSelect={() => {}}
         onToggle={() => handleMove(task.id, task.status === 'done' ? 'inbox' : 'done')}
-        onDelete={() => { deleteTaskRecord(task.id); loadBucket() }}
+        onDelete={() => { deleteTaskRecord(task.id); fetchBucket(activeBucket) }}
         onView={() => setDrawerTaskId(task.id)}
         onQuickAction={(taskId, field, value) => {
           if (field === 'status') handleMove(taskId, value)
           else if (field === 'importance') {
-            updateTaskImportance(taskId, value).then(() => loadBucket()).catch(() => {})
+            updateTaskImportance(taskId, value).then(() => fetchBucket(activeBucket)).catch(() => {})
           }
         }}
         onAddSubtask={() => setDrawerTaskId(task.id)}

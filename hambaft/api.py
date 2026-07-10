@@ -2580,6 +2580,15 @@ def ai_coach_chat(prompt, history=None, life_data=None, conversation_id=None):
         conversation.status = "فعال"
         conversation.started_at = now_datetime()
 
+    # Save user message
+    user_msg = frappe.new_doc("Hambaft AI Message")
+    user_msg.user = frappe.session.user
+    user_msg.conversation = conversation.name if not conversation.is_new() else None
+    user_msg.role = "کاربر"
+    user_msg.content = prompt
+    user_msg.timestamp = now_datetime()
+    user_msg.model = "gemini-3.5"
+
     task_count = len(life_data.get("tasks") or [])
     habit_count = len(life_data.get("habits") or [])
     goal_count = len(life_data.get("goals") or [])
@@ -2602,11 +2611,89 @@ def ai_coach_chat(prompt, history=None, life_data=None, conversation_id=None):
     conversation.context_summary = f"tasks={task_count}, habits={habit_count}, goals={goal_count}, tx={transaction_count}, history={len(history)}"
     if conversation.is_new():
         conversation.insert(ignore_permissions=True)
+        # Update user message with the conversation ID now that it's saved
+        user_msg.conversation = conversation.name
     else:
         conversation.save(ignore_permissions=True)
 
+    # Save user message
+    user_msg.conversation = conversation.name
+    user_msg.insert(ignore_permissions=True)
+
+    # Save AI response message
+    ai_msg = frappe.new_doc("Hambaft AI Message")
+    ai_msg.user = frappe.session.user
+    ai_msg.conversation = conversation.name
+    ai_msg.role = "دستیار"
+    ai_msg.content = response_text
+    ai_msg.timestamp = now_datetime()
+    ai_msg.model = "gemini-3.5"
+    ai_msg.insert(ignore_permissions=True)
+
     frappe.db.commit()
     return _api_response({"text": response_text, "conversation_id": conversation.name})
+
+
+@frappe.whitelist()
+def get_ai_conversations(limit=20):
+    """Get recent AI conversations for the current user."""
+    _check_auth()
+    conversations = frappe.get_all(
+        "Hambaft AI Conversation",
+        filters={"user": frappe.session.user},
+        fields=["name", "title", "ai_type", "status", "started_at", "last_message_at"],
+        order_by="last_message_at desc",
+        limit_page_length=limit,
+    )
+    return _api_response({"conversations": conversations})
+
+
+@frappe.whitelist()
+def get_ai_conversation_messages(conversation_id, limit=100):
+    """Get all messages for a specific conversation."""
+    _check_auth()
+    # Verify ownership
+    conv = frappe.get_doc("Hambaft AI Conversation", conversation_id)
+    if conv.user != frappe.session.user:
+        frappe.throw("عدم دسترسی", frappe.PermissionError)
+
+    messages = frappe.get_all(
+        "Hambaft AI Message",
+        filters={"conversation": conversation_id},
+        fields=["name", "role", "content", "timestamp", "model"],
+        order_by="timestamp asc",
+        limit_page_length=limit,
+    )
+
+    # Map role names to frontend-friendly values
+    role_map = {"کاربر": "user", "دستیار": "model", "سیستم": "system"}
+    for m in messages:
+        m["role"] = role_map.get(m["role"], "system")
+        # Convert datetime to time string for display
+        if m.get("timestamp"):
+            try:
+                dt = getdate(m["timestamp"])
+                m["timestamp"] = m["timestamp"].strftime("%H:%M") if hasattr(m["timestamp"], "strftime") else str(m["timestamp"])
+            except Exception:
+                pass
+
+    return _api_response({"messages": messages, "conversation_id": conversation_id})
+
+
+@frappe.whitelist()
+def delete_ai_conversation(conversation_id):
+    """Delete a conversation and all its messages."""
+    _check_auth()
+    conv = frappe.get_doc("Hambaft AI Conversation", conversation_id)
+    if conv.user != frappe.session.user:
+        frappe.throw("عدم دسترسی", frappe.PermissionError)
+
+    # Delete all messages first
+    frappe.db.delete("Hambaft AI Message", {"conversation": conversation_id})
+    # Delete conversation
+    frappe.delete_doc("Hambaft AI Conversation", conversation_id, ignore_permissions=True)
+    frappe.db.commit()
+    return _api_response({"ok": True})
 
 
 # ─── Scheduled Tasks ────────────────────────────────────────────
