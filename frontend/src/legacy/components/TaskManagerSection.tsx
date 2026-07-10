@@ -18,6 +18,7 @@ const TaskTreeView = lazy(() => import('./TaskTreeView'))
 interface TaskManagerSectionProps {
   tasks: Task[]
   goals: Goal[]
+  areas?: any[]
   onToggleTask: (id: string) => void
   onDeleteTask: (id: string) => void
   onUpdateTask: (task: Task) => void
@@ -69,6 +70,7 @@ function collectAllTasks(tasks: Task[], goals: Goal[]): Array<Task & { sourceGoa
 export default function TaskManagerSection({
   tasks,
   goals,
+  areas = [],
   onToggleTask,
   onDeleteTask,
   onUpdateTask,
@@ -340,7 +342,7 @@ export default function TaskManagerSection({
         placeholder="تسک جدید بنویس و Enter بزن..."
         context="task_manager"
         projects={goals.flatMap(g => (g.projects || []).map(p => ({ id: p.id, title: p.title })))}
-        areas={[]}
+        areas={areas}
         goals={goals.map(g => ({ id: g.id, title: g.title }))}
         onSubmit={handleAdd}
       />
@@ -533,7 +535,7 @@ export default function TaskManagerSection({
           allTasks={allTasks}
           goals={goals}
           projects={goals.flatMap(g => (g.projects || []).map(p => ({ id: p.id, title: p.title })))}
-          areas={[]}
+          areas={areas}
           onUpdateTask={onUpdateTask}
           onDeleteTask={(id) => { onDeleteTask(id); setDrawerTaskId(null) }}
           onClose={() => setDrawerTaskId(null)}

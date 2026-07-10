@@ -3122,6 +3122,7 @@ export default function App({
           <TaskManagerSection
             tasks={lifeData.tasks}
             goals={lifeData.goals}
+            areas={lifeData.areas || []}
             onToggleTask={handleToggleTask}
             onDeleteTask={handleDeleteTask}
             onUpdateTask={handleUpdateTask}
@@ -3139,17 +3140,17 @@ export default function App({
         );
       case 'planner':
       case 'inbox':
-        return <PlannerSection initialView="buckets" />;
+        return <PlannerSection initialView="buckets" onNavigate={(tab, id) => { if (tab === 'goals' && id) goToGoal(id); else if (tab === 'projects' && id) goToProject(id); else goToTab(tab); }} />;
       case 'planner-timeline':
-        return <PlannerSection initialView="timeline" />;
+        return <PlannerSection initialView="timeline" onNavigate={(tab, id) => { if (tab === 'goals' && id) goToGoal(id); else if (tab === 'projects' && id) goToProject(id); else goToTab(tab); }} />;
       case 'planner-week':
-        return <PlannerSection initialView="week" />;
+        return <PlannerSection initialView="week" onNavigate={(tab, id) => { if (tab === 'goals' && id) goToGoal(id); else if (tab === 'projects' && id) goToProject(id); else goToTab(tab); }} />;
       case 'planner-month':
-        return <PlannerSection initialView="month" />;
+        return <PlannerSection initialView="month" onNavigate={(tab, id) => { if (tab === 'goals' && id) goToGoal(id); else if (tab === 'projects' && id) goToProject(id); else goToTab(tab); }} />;
       case 'planner-board':
-        return <PlannerSection initialView="board" />;
+        return <PlannerSection initialView="board" onNavigate={(tab, id) => { if (tab === 'goals' && id) goToGoal(id); else if (tab === 'projects' && id) goToProject(id); else goToTab(tab); }} />;
       case 'planner-areas':
-        return <PlannerSection initialView="areas" />;
+        return <PlannerSection initialView="areas" onNavigate={(tab, id) => { if (tab === 'goals' && id) goToGoal(id); else if (tab === 'projects' && id) goToProject(id); else goToTab(tab); }} />;
       case 'task-detail':
         // Deep-link: show task list with the drawer open for the selected task.
         // This replaces the old TaskDetailView full-page, which duplicated
@@ -3158,6 +3159,7 @@ export default function App({
           <TaskManagerSection
             tasks={lifeData.tasks}
             goals={lifeData.goals}
+            areas={lifeData.areas || []}
             onToggleTask={handleToggleTask}
             onDeleteTask={handleDeleteTask}
             onUpdateTask={handleUpdateTask}
@@ -3167,6 +3169,11 @@ export default function App({
             }}
             todayDate={TODAY_DATE}
             initialDrawerTaskId={selectedTaskId}
+            onNavigate={(tab, id) => {
+              if (tab === 'goals' && id) goToGoal(id);
+              else if (tab === 'projects' && id) goToProject(id);
+              else goToTab(tab);
+            }}
           />
         );
       case 'goals':

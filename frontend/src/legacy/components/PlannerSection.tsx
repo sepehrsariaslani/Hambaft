@@ -125,9 +125,10 @@ const PRIORITY_COLORS: Record<string, string> = {
 
 interface PlannerSectionProps {
   initialView?: PlannerView
+  onNavigate?: (tab: string, id?: string) => void
 }
 
-export default function PlannerSection({ initialView }: PlannerSectionProps = {}) {
+export default function PlannerSection({ initialView, onNavigate }: PlannerSectionProps = {}) {
   const [activeView, setActiveView] = useState<PlannerView>(initialView || 'buckets')
   const [activeBucket, setActiveBucket] = useState<PlannerBucket>('today')
   const [tasks, setTasks] = useState<Task[]>([])
@@ -954,6 +955,7 @@ export default function PlannerSection({ initialView }: PlannerSectionProps = {}
       {drawerTask && (
         <TaskDetailDrawer
           task={drawerTask}
+          areas={areasData}
           onUpdateTask={() => {
             // Refresh the current bucket after any update
             fetchBucket(activeBucket)
@@ -964,6 +966,7 @@ export default function PlannerSection({ initialView }: PlannerSectionProps = {}
             fetchBucket(activeBucket)
           }}
           onClose={() => setDrawerTaskId(null)}
+          onNavigate={onNavigate}
         />
       )}
     </div>
