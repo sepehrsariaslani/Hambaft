@@ -85,7 +85,7 @@ interface ProjectDetailViewProps {
   onDeleteTransaction: (id: string) => void;
   onToggleTaskTracking: (goalId: string, projectId: string, taskId: string) => void;
   onBack: () => void;
-  onAddTaskToProject: (goalId: string, projectId: string, title: string) => void;
+  onAddTaskToProject: (goalId: string, projectId: string, titleOrTask: string | Task) => void;
   onToggleTaskInProject: (goalId: string, projectId: string, taskId: string) => void;
   onDeleteTaskFromProject: (goalId: string, projectId: string, taskId: string) => void;
   onToggleProjectCompletion: (goalId: string, projectId: string) => void;
@@ -594,7 +594,7 @@ export default function ProjectDetailView({
                     onToggleTask={(taskId) => onToggleTaskInProject(project.goalId, project.id, taskId)}
                     onDeleteTask={(taskId) => onDeleteTaskFromProject(project.goalId, project.id, taskId)}
                     onUpdateTask={(task) => handleUpdateSingleTask(task)}
-                    onAddTask={(title) => onAddTaskToProject(project.goalId, project.id, title)}
+                    onAddTask={(titleOrTask) => onAddTaskToProject(project.goalId, project.id, titleOrTask)}
                     onViewTaskDetails={(taskId) => {
                       const t = tasksList.find(x => x.id === taskId)
                       if (t) setSelectedTaskForDetails(t)

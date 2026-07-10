@@ -7,34 +7,47 @@ frappe.pages['hambaft'].on_page_load = function (wrapper) {
 
     $(wrapper).find('.layout-main-section').html('<div id="root" class="h-full"></div>');
 
-    const ensureAsset = (tagName, attributes) => {
-        const selector = Object.entries(attributes)
-            .map(([key, value]) => `[${key}="${value}"]`)
-            .join('');
+    // Dynamically load assets from the Vite-generated index.html so hashed filenames work
+    if (window.__hambaftAssetsLoaded) return;
+    window.__hambaftAssetsLoaded = true;
 
-        if (document.head.querySelector(`${tagName}${selector}`)) {
-            return;
-        }
+    fetch('/assets/hambaft/frontend/index.html')
+        .then(r => r.text())
+        .then(html => {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
 
-        const node = document.createElement(tagName);
-        Object.entries(attributes).forEach(([key, value]) => {
-            node.setAttribute(key, value);
+            doc.querySelectorAll('link[rel="stylesheet"]').forEach(link => {
+                if (document.querySelector(`link[href="${link.getAttribute('href')}"]`)) return;
+                const node = document.createElement('link');
+                node.rel = 'stylesheet';
+                node.href = link.getAttribute('href');
+                if (link.crossOrigin) node.crossOrigin = link.crossOrigin;
+                document.head.appendChild(node);
+            });
+
+            doc.querySelectorAll('script[type="module"]').forEach(script => {
+                const src = script.getAttribute('src');
+                if (!src || document.querySelector(`script[src="${src}"]`)) return;
+                const node = document.createElement('script');
+                node.type = 'module';
+                node.src = src;
+                if (script.crossOrigin) node.crossOrigin = script.crossOrigin;
+                document.body.appendChild(node);
+            });
+        })
+        .catch(err => {
+            console.error('[hambaft] failed to load assets', err);
+            // Fallback to stable paths (if build used stable filenames)
+            const link = document.createElement('link');
+            link.rel = 'stylesheet';
+            link.href = '/assets/hambaft/frontend/assets/index.css';
+            document.head.appendChild(link);
+            const script = document.createElement('script');
+            script.type = 'module';
+            script.src = '/assets/hambaft/frontend/assets/index.js';
+            document.body.appendChild(script);
         });
-        document.head.appendChild(node);
-    };
-
-    ensureAsset('link', {
-        rel: 'stylesheet',
-        href: '/assets/hambaft/assets/index.css',
-    });
-
-    if (!window.__hambaftDeskScriptLoaded) {
-        const script = document.createElement('script');
-        script.type = 'module';
-        script.src = '/assets/hambaft/assets/index.js';
-        document.body.appendChild(script);
-        window.__hambaftDeskScriptLoaded = true;
-    }
 };
 
 frappe.pages['hambaft'].on_page_show = function () {

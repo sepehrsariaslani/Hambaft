@@ -109,6 +109,18 @@ export default function TaskManagerSection({
     return result
   }, [allTasks, search, filterStatus, filterPriority, filterCategory, sortBy])
 
+  const statusLabelsMap: Record<string, string> = {
+    inbox: 'صندوق ورودی',
+    not_started: 'شروع نشده',
+    next: 'بعدی',
+    today: 'امروز',
+    in_progress: 'در حال انجام',
+    done: 'انجام شده',
+    on_hold: 'متوقف',
+    someday: 'روزی',
+    dropped: 'کنار گذاشته',
+  }
+
   const grouped = useMemo(() => {
     if (groupBy === 'none') return { 'همه تسک‌ها': filteredTasks }
     const groups: Record<string, typeof filteredTasks> = {}
@@ -119,7 +131,7 @@ export default function TaskManagerSection({
       } else if (groupBy === 'priority') {
         key = priorityLabels[t.priority || 'low'] || 'متوسط'
       } else if (groupBy === 'status') {
-        key = t.completed ? 'انجام‌شده' : 'در حال انجام'
+        key = statusLabelsMap[t.status || 'inbox'] || 'صندوق ورودی'
       } else if (groupBy === 'category') {
         key = categoryLabels[t.category || 'other'] || 'سایر'
       } else if (groupBy === 'dueDate') {
@@ -456,6 +468,11 @@ function TaskRow({
           )}
         </div>
         <div className="flex items-center gap-2 mt-1 flex-wrap">
+          {task.status && (
+            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#f3ebdf] text-[#8D7F72]`}>
+              {statusLabelsMap[task.status] || task.status}
+            </span>
+          )}
           {task.priority && (
             <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${priorityColors[task.priority] || priorityColors.low}`}>
               {priorityLabels[task.priority] || 'متوسط'}

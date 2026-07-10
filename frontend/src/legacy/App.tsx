@@ -1927,18 +1927,18 @@ export default function App({
     }
   };
 
-  const handleAddTaskToProject = (goalId: string, projectId: string, title: string) => {
+  const handleAddTaskToProject = (goalId: string, projectId: string, titleOrTask: string | Task) => {
+    const newTask: Task = typeof titleOrTask === 'object' ? titleOrTask : {
+      id: `tk-p-${Date.now()}`,
+      title: titleOrTask,
+      completed: false,
+      createdAt: TODAY_DATE
+    };
     setLifeData(prev => {
       const updatedGoals = prev.goals.map(g => {
         if (g.id === goalId) {
           const updatedProjects = (g.projects || []).map(p => {
             if (p.id === projectId) {
-              const newTask: Task = {
-                id: `tk-p-${Date.now()}`,
-                title,
-                completed: false,
-                createdAt: TODAY_DATE
-              };
               return {
                 ...p,
                 tasks: [...(p.tasks || []), newTask],
