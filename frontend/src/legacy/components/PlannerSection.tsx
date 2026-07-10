@@ -748,12 +748,15 @@ export default function PlannerSection() {
               const group = (boardData[status] || []).map(mapBackendTask)
               const milestoneCount = group.filter(t => t.importance === 'milestone').length
               const keyCount = group.filter(t => t.importance === 'key').length
+              const doneCount = group.filter(t => t.completed || t.status === 'done').length
+              const pct = group.length > 0 ? Math.round((doneCount / group.length) * 100) : 0
               return (
                 <div
                   key={status}
-                  className="min-w-[220px] max-w-[280px] flex-1 bg-[#F9F6EE] dark:bg-[#1B1D16] rounded-2xl p-3 space-y-2 border border-[#E6DFD3]/50 dark:border-[#3D4133]/30"
+                  className="min-w-[220px] max-w-[280px] flex-1 bg-[#F9F6EE] dark:bg-[#1B1D16] rounded-2xl p-3 space-y-2 border border-[#E6DFD3]/50 dark:border-[#3D4133]/30 flex flex-col"
                 >
-                  <div className="flex items-center justify-between mb-2">
+                  {/* Column header */}
+                  <div className="flex items-center justify-between mb-1">
                     <div className="flex items-center gap-1.5">
                       <span className={`text-[10px] font-black px-2 py-1 rounded-lg border ${STATUS_COLORS[status]}`}>
                         {STATUS_LABELS[status]}
@@ -765,14 +768,44 @@ export default function PlannerSection() {
                         <span className="text-[9px] font-bold bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full">★ {keyCount}</span>
                       )}
                     </div>
-                    <span className="text-[9px] font-bold text-[#8D7F72]">{group.length}</span>
+                    <div className="flex items-center gap-1.5">
+                      {group.length > 0 && (
+                        <span className="text-[8px] text-[#8D7F72] font-mono">{pct}%</span>
+                      )}
+                      <span className="text-[9px] font-bold text-[#8D7F72]">{group.length}</span>
+                    </div>
                   </div>
-                  <div className="space-y-2">
+                  {/* Mini progress bar */}
+                  {group.length > 0 && (
+                    <div className="w-full h-1 bg-[#E6DFD3]/50 rounded-full overflow-hidden">
+                      <div className="h-full bg-[#7C8363] rounded-full transition-all" style={{ width: `${pct}%` }} />
+                    </div>
+                  )}
+                  {/* Task cards */}
+                  <div className="space-y-2 flex-1 min-h-[40px]">
                     {group.map(task => renderTaskCard(task, true))}
                   </div>
                   {group.length === 0 && (
-                    <p className="text-[9px] text-[#D6CFC3] text-center py-4">خالی</p>
+                    <p className="text-[9px] text-[#D6CFC3] text-center py-3">خالی</p>
                   )}
+                  {/* Quick add at bottom of column */}
+                  <QuickAddBar
+                    placeholder="+ تسک جدید..."
+                    context={status === 'today' ? 'planner_today' : status === 'inbox' ? 'planner_inbox' : 'planner_inbox'}
+                    onSubmit={async (data) => {
+                      try {
+                        await quickAddTask(data.title, {
+                          ...data,
+                          status: status === 'in_progress' ? undefined : status,
+                        })
+                        fetchBoard()
+                      } catch (e) {
+                        console.error('quickAdd board error:', e)
+                      }
+                    }}
+                    loading={false}
+                    compact
+                  />
                 </div>
               )
             })}
