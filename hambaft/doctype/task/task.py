@@ -17,11 +17,11 @@ class Task(Document):
             frappe.throw(_("Title is required"))
         if not self.user:
             self.user = frappe.session.user
-        if self.status == "done" and not self.completed_on:
+        if self.status == "انجام‌شده" and not self.completed_on:
             self.completed_on = now_datetime()
 
     def on_update(self):
-        if self.status == "done" and self.goal:
+        if self.status == "انجام‌شده" and self.goal:
             goal = frappe.get_doc("Goal", self.goal)
             if goal.current_value is not None:
                 goal.current_value += 1

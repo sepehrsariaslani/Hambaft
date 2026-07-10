@@ -765,7 +765,7 @@ def complete_task(name, actual_minutes=None):
     if frappe.session.user == "Guest":
         frappe.throw("Authentication required", frappe.AuthenticationError)
     doc = frappe.get_doc("Task", name)
-    doc.status = "done"
+    doc.status = "انجام‌شده"
     doc.completed_on = now_datetime()
     if actual_minutes:
         doc.actual_minutes = cint(actual_minutes)
@@ -845,7 +845,7 @@ def delete_habit(name):
 
 
 @frappe.whitelist()
-def log_habit(habit, date=None, status="done", value=1, note=None, mood=None):
+def log_habit(habit, date=None, status="انجام‌شده", value=1, note=None, mood=None):
     if frappe.session.user == "Guest":
         frappe.throw("Authentication required", frappe.AuthenticationError)
     if not date:
@@ -2246,7 +2246,7 @@ def habit_streak_recalc():
     for h in habits:
         try:
             logs = frappe.get_all("Habit Log",
-                                  filters={"habit": h.name, "status": "done"},
+                                  filters={"habit": h.name, "status": "انجام‌شده"},
                                   fields=["date"], order_by="date asc")
             if not logs:
                 continue
@@ -2529,7 +2529,11 @@ def create_note_page(data):
     doc.title = data.get("title") or "بدون عنوان"
     doc.icon = data.get("icon")
     doc.cover = data.get("cover")
-    doc.parent_page = data.get("parentId")
+    parent_id = data.get("parentId")
+    if parent_id and not frappe.db.exists("Hambaft Note Page", parent_id):
+        frappe.logger().warning(f"create_note_page: parent {parent_id} not found; creating at root")
+        parent_id = None
+    doc.parent_page = parent_id
     doc.is_favorite = cint(data.get("isFavorite") or 0)
     doc.is_archived = cint(data.get("isArchived") or 0)
     doc.is_trashed = cint(data.get("isTrashed") or 0)
@@ -2555,7 +2559,11 @@ def update_note_page(name, data):
     if "cover" in data:
         doc.cover = data["cover"]
     if "parentId" in data:
-        doc.parent_page = data["parentId"] or None
+        pid = data["parentId"] or None
+        if pid and not frappe.db.exists("Hambaft Note Page", pid):
+            frappe.logger().warning(f"update_note_page: parent {pid} not found; clearing")
+            pid = None
+        doc.parent_page = pid
     if "isFavorite" in data:
         doc.is_favorite = cint(data["isFavorite"])
     if "isArchived" in data:

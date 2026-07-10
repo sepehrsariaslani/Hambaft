@@ -135,7 +135,8 @@ import {
   Apple,
   Dumbbell,
   Users,
-  Activity
+  Activity,
+  Layers
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -2661,7 +2662,7 @@ export default function App({
     runSync('create mood log', async () => {
       await logMoodRecord({
         date: newMood.date,
-        note: newMood.note,
+        note: newMood.notes,
         gratitude: newMood.gratitude,
       });
     });

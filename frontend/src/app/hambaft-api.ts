@@ -19,7 +19,7 @@ import type {
   WeightLog,
   WorkoutLog,
 } from '../legacy/types'
-import { call, checkFrappeSession, createDoc, deleteDoc, updateDoc } from './frappe'
+import { call, callGet, checkFrappeSession, createDoc, deleteDoc, updateDoc } from './frappe'
 
 const taskPriorityToBackend: Record<string, string> = {
   low: 'پایین',
@@ -230,7 +230,9 @@ export function toTaskPayload(task: Task): Record<string, unknown> {
     due_date: combineDateTime(task.dueDate, '09:00'),
     priority: taskPriorityToBackend[task.priority || 'medium'] || 'متوسط',
     category: taskCategoryToBackend[task.category || 'other'] || 'شخصی',
-    status: task.completed ? 'انجام‌شده' : 'انجام‌نشده',
+    status: (task.status && ['انجام‌شده', 'انجام‌نشده', 'در حال انجام', 'لغو‌شده'].includes(task.status))
+      ? task.status
+      : (task.completed ? 'انجام‌شده' : 'انجام‌نشده'),
     project: task.projectId || null,
     noteBlocks: task.noteBlocks || [],
   }

@@ -152,6 +152,7 @@ export interface Task {
   id: string;
   title: string;
   completed: boolean;
+  status?: string; // Backend status: 'انجام‌شده' | 'انجام‌نشده' | 'در حال انجام' | 'لغو‌شده'
   createdAt: string;
   description?: string;
   dueDate?: string; // YYYY-MM-DD
@@ -458,6 +459,7 @@ export interface MoodLog {
   mentalFocus: number; // 1-10
   triggers: string[]; // e.g., ["work", "exercise", "sleep", "family"]
   notes?: string;
+  gratitude?: string;
   weather?: 'sunny' | 'cloudy' | 'rainy' | 'windy';
 }
 

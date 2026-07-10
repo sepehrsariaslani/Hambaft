@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Goal, Project, Task, GoalCategory, BankAccount, Transaction, Milestone } from '../types';
 import EntityNoteEditor from '../../notes/components/EntityNoteEditor';
+import ViewSwitcher, { type ViewMode } from './ViewSwitcher';
 import { 
   ArrowRight, 
   FolderKanban, 
@@ -106,7 +107,8 @@ export default function ProjectDetailView({
   onUpdateProjectDetails
 }: ProjectDetailViewProps) {
   // Views/Tabs State
-  const [activeTab, setActiveTab] = useState<'tasks' | 'planning' | 'milestones' | 'report' | 'notes' | 'task-tree'>('tasks');
+  const [activeTab, setActiveTab] = useState<'tasks' | 'finance' | 'planning' | 'milestones' | 'report' | 'notes'>('tasks');
+  const [taskViewMode, setTaskViewMode] = useState<ViewMode>('tree');
   const [selectedTaskForDetails, setSelectedTaskForDetails] = useState<Task | null>(null);
   const [schedulingTaskId, setSchedulingTaskId] = useState<string | null>(null);
   const [calendarDate, setCalendarDate] = useState(() => new Date());
@@ -470,7 +472,19 @@ export default function ProjectDetailView({
         >
           <div className="flex items-center gap-1">
             <FolderKanban className="w-3.5 h-3.5" />
-            <span>لیست کارها و مالی</span>
+            <span>تسک‌ها</span>
+          </div>
+        </button>
+
+        <button
+          onClick={() => { setActiveTab('finance'); setSchedulingTaskId(null); }}
+          className={`px-4 py-2 text-xs font-black transition-all cursor-pointer ${
+            activeTab === 'finance' ? 'border-b-2 border-[#7C8363] text-[#7C8363]' : 'text-[#8D7F72]'
+          }`}
+        >
+          <div className="flex items-center gap-1">
+            <Coins className="w-3.5 h-3.5" />
+            <span>مالی</span>
           </div>
         </button>
 
@@ -521,18 +535,6 @@ export default function ProjectDetailView({
             <span>یادداشت‌ها (Notion)</span>
           </div>
         </button>
-
-        <button
-          onClick={() => { setActiveTab('task-tree'); setSchedulingTaskId(null); }}
-          className={`px-4 py-2 text-xs font-black transition-all cursor-pointer ${
-            activeTab === 'task-tree' ? 'border-b-2 border-[#7C8363] text-[#7C8363]' : 'text-[#8D7F72]'
-          }`}
-        >
-          <div className="flex items-center gap-1">
-            <Layers className="w-3.5 h-3.5" />
-            <span>نمای درختی</span>
-          </div>
-        </button>
       </div>
 
       {/* VIEW CONTENTS */}
@@ -574,8 +576,35 @@ export default function ProjectDetailView({
                   <button type="submit" className="px-4 py-1.5 bg-[#7C8363] text-white text-xs font-bold rounded-xl cursor-pointer">افزودن</button>
                 </form>
 
-                {/* Tasks List */}
-                <div className="space-y-2">
+                {/* View Switcher: Tree / List */}
+                <ViewSwitcher
+                  views={[
+                    { id: 'tree', label: 'نمای درختی', emoji: '🌲' },
+                    { id: 'list', label: 'نمای لیست', emoji: '🗂️' },
+                  ]}
+                  activeView={taskViewMode}
+                  onChange={setTaskViewMode}
+                  size="sm"
+                />
+
+                {/* Tasks Tree View */}
+                {taskViewMode === 'tree' && (
+                  <ProjectTaskTreeView
+                    tasks={tasksList}
+                    onToggleTask={(taskId) => onToggleTaskInProject(project.goalId, project.id, taskId)}
+                    onDeleteTask={(taskId) => onDeleteTaskFromProject(project.goalId, project.id, taskId)}
+                    onUpdateTask={(task) => handleUpdateSingleTask(task)}
+                    onAddTask={(title) => onAddTaskToProject(project.goalId, project.id, title)}
+                    onViewTaskDetails={(taskId) => {
+                      const t = tasksList.find(x => x.id === taskId)
+                      if (t) setSelectedTaskForDetails(t)
+                    }}
+                  />
+                )}
+
+                {/* Tasks List View */}
+                {taskViewMode === 'list' && (
+                  <div className="space-y-2">
                   {filteredTasks.length > 0 ? (
                     filteredTasks.map((t) => {
                       const sec = getTaskSeconds(t);
@@ -640,72 +669,7 @@ export default function ProjectDetailView({
                     <p className="text-[10px] text-center text-[#8D7F72] py-6">هیچ وظیفه‌ای با این مشخصات یافت نشد.</p>
                   )}
                 </div>
-              </div>
-
-              {/* Financial Logger */}
-              <div className="bg-white dark:bg-[#1C1D17] rounded-3xl border border-[#E6DFD3] p-5 space-y-4 shadow-xs">
-                <h3 className="text-xs font-black text-[#2D3025] dark:text-[#E8ECE0] flex items-center gap-1.5 pb-2 border-b border-[#E6DFD3]/40">
-                  <Coins className="w-4 h-4 text-emerald-600" />
-                  <span>ثبت مخارج و درآمدهای اختصاصی پروژه</span>
-                </h3>
-
-                <form onSubmit={handleAddProjectTx} className="space-y-2">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-[9px] text-[#8D7F72] font-black">نوع تراکنش</label>
-                      <div className="grid grid-cols-2 gap-1 bg-[#FDFBF7] p-0.5 border border-[#D6CFC3] rounded-xl mt-1">
-                        <button type="button" onClick={() => setTxType('expense')} className={`py-1 text-[9px] font-black rounded-lg ${txType === 'expense' ? 'bg-red-500 text-white' : 'text-[#8D7F72]'}`}>هزینه</button>
-                        <button type="button" onClick={() => setTxType('income')} className={`py-1 text-[9px] font-black rounded-lg ${txType === 'income' ? 'bg-emerald-500 text-white' : 'text-[#8D7F72]'}`}>درآمد</button>
-                      </div>
-                    </div>
-                    <div>
-                      <label className="text-[9px] text-[#8D7F72] font-black">مبلغ (ریال)</label>
-                      <input
-                        type="text" required placeholder="مثلا ۵,۰۰۰,۰۰۰" value={txAmount}
-                        onChange={(e) => {
-                          const val = e.target.value.replace(/,/g, '');
-                          if (!isNaN(Number(val))) setTxAmount(val ? Number(val).toLocaleString() : '');
-                        }}
-                        className="w-full px-3 py-1.5 text-xs bg-white dark:bg-[#121411] border border-[#D6CFC3] rounded-xl mt-1 font-mono text-left"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-[9px] text-[#8D7F72] font-black font-sans">توضیحات</label>
-                      <input type="text" placeholder="بابت..." value={txDesc} onChange={e => setTxDesc(e.target.value)} className="w-full px-3 py-1.5 text-xs bg-white dark:bg-[#121411] border border-[#D6CFC3] rounded-xl mt-1" />
-                    </div>
-                    <div>
-                      <label className="text-[9px] text-[#8D7F72] font-black">تاریخ</label>
-                      <PersianDatePicker value={txDate} onChange={setTxDate} className="mt-1" />
-                    </div>
-                  </div>
-
-                  <button type="submit" className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl mt-2">ثبت تراکنش مالی</button>
-                </form>
-
-                {/* Transactions history */}
-                <div className="space-y-1 max-h-40 overflow-y-auto pt-2 border-t border-[#E6DFD3]/40">
-                  {projectTransactions.length > 0 ? (
-                    projectTransactions.map((tx) => (
-                      <div key={tx.id} className="flex justify-between items-center p-2 bg-[#FDFBF7] dark:bg-[#121411] border border-[#E6DFD3]/40 rounded-xl text-right">
-                        <div>
-                          <div className="text-xs font-bold text-[#3D3D3D] dark:text-[#E8ECE0]">{tx.description}</div>
-                          <div className="text-[8px] text-[#8D7F72] font-mono mt-0.5">{tx.date}</div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className={`text-xs font-black font-mono ${tx.type === 'income' ? 'text-emerald-600' : 'text-red-600'}`}>
-                            {tx.type === 'income' ? '+' : '-'}{tx.amount.toLocaleString()}
-                          </span>
-                          <button onClick={() => onDeleteTransaction(tx.id)} className="p-1 text-red-500"><Trash2 className="w-3 h-3" /></button>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-[8px] text-[#8D7F72] italic text-center py-2">هیچ تراکنشی ثبت نشده است.</p>
-                  )}
-                </div>
+                )}
               </div>
             </div>
 
@@ -742,6 +706,76 @@ export default function ProjectDetailView({
               </div>
             </div>
 
+          </div>
+        )}
+
+        {/* FINANCE VIEW */}
+        {activeTab === 'finance' && (
+          <div className="space-y-6">
+            <div className="bg-white dark:bg-[#1C1D17] rounded-3xl border border-[#E6DFD3] p-5 space-y-4 shadow-xs">
+              <h3 className="text-xs font-black text-[#2D3025] dark:text-[#E8ECE0] flex items-center gap-1.5 pb-2 border-b border-[#E6DFD3]/40">
+                <Coins className="w-4 h-4 text-emerald-600" />
+                <span>ثبت مخارج و درآمدهای اختصاصی پروژه</span>
+              </h3>
+
+              <form onSubmit={handleAddProjectTx} className="space-y-2">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[9px] text-[#8D7F72] font-black">نوع تراکنش</label>
+                    <div className="grid grid-cols-2 gap-1 bg-[#FDFBF7] p-0.5 border border-[#D6CFC3] rounded-xl mt-1">
+                      <button type="button" onClick={() => setTxType('expense')} className={`py-1 text-[9px] font-black rounded-lg ${txType === 'expense' ? 'bg-red-500 text-white' : 'text-[#8D7F72]'}`}>هزینه</button>
+                      <button type="button" onClick={() => setTxType('income')} className={`py-1 text-[9px] font-black rounded-lg ${txType === 'income' ? 'bg-emerald-500 text-white' : 'text-[#8D7F72]'}`}>درآمد</button>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[9px] text-[#8D7F72] font-black">مبلغ (ریال)</label>
+                    <input
+                      type="text" required placeholder="مثلا ۵,۰۰۰,۰۰۰" value={txAmount}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/,/g, '');
+                        if (!isNaN(Number(val))) setTxAmount(val ? Number(val).toLocaleString() : '');
+                      }}
+                      className="w-full px-3 py-1.5 text-xs bg-white dark:bg-[#121411] border border-[#D6CFC3] rounded-xl mt-1 font-mono text-left"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[9px] text-[#8D7F72] font-black font-sans">توضیحات</label>
+                    <input type="text" placeholder="بابت..." value={txDesc} onChange={e => setTxDesc(e.target.value)} className="w-full px-3 py-1.5 text-xs bg-white dark:bg-[#121411] border border-[#D6CFC3] rounded-xl mt-1" />
+                  </div>
+                  <div>
+                    <label className="text-[9px] text-[#8D7F72] font-black">تاریخ</label>
+                    <PersianDatePicker value={txDate} onChange={setTxDate} className="mt-1" />
+                  </div>
+                </div>
+
+                <button type="submit" className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl mt-2">ثبت تراکنش مالی</button>
+              </form>
+
+              {/* Transactions history */}
+              <div className="space-y-1 max-h-40 overflow-y-auto pt-2 border-t border-[#E6DFD3]/40">
+                {projectTransactions.length > 0 ? (
+                  projectTransactions.map((tx) => (
+                    <div key={tx.id} className="flex justify-between items-center p-2 bg-[#FDFBF7] dark:bg-[#121411] border border-[#E6DFD3]/40 rounded-xl text-right">
+                      <div>
+                        <div className="text-xs font-bold text-[#3D3D3D] dark:text-[#E8ECE0]">{tx.description}</div>
+                        <div className="text-[8px] text-[#8D7F72] font-mono mt-0.5">{tx.date}</div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className={`text-xs font-black font-mono ${tx.type === 'income' ? 'text-emerald-600' : 'text-red-600'}`}>
+                          {tx.type === 'income' ? '+' : '-'}{tx.amount.toLocaleString()}
+                        </span>
+                        <button onClick={() => onDeleteTransaction(tx.id)} className="p-1 text-red-500"><Trash2 className="w-3 h-3" /></button>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-[8px] text-[#8D7F72] italic text-center py-2">هیچ تراکنشی ثبت نشده است.</p>
+                )}
+              </div>
+            </div>
           </div>
         )}
 
@@ -1130,20 +1164,7 @@ export default function ProjectDetailView({
           </div>
         )}
 
-        {/* TASK TREE VIEW */}
-        {activeTab === 'task-tree' && (
-          <ProjectTaskTreeView
-            tasks={tasksList}
-            onToggleTask={(taskId) => onToggleTaskInProject(project.goalId, project.id, taskId)}
-            onDeleteTask={(taskId) => onDeleteTaskFromProject(project.goalId, project.id, taskId)}
-            onUpdateTask={(task) => handleUpdateSingleTask(task)}
-            onAddTask={(title) => onAddTaskToProject(project.goalId, project.id, title)}
-            onViewTaskDetails={(taskId) => {
-              const t = tasksList.find(x => x.id === taskId)
-              if (t) setSelectedTaskForDetails(t)
-            }}
-          />
-        )}
+
       </div>
 
       {/* TASK DETAILS SLIDE-OVER OVERLAY MODAL */}

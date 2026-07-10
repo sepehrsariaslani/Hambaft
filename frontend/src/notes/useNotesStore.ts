@@ -120,6 +120,22 @@ async function apiDeletePage(pageId: string): Promise<boolean> {
   }
 }
 
+async function seedMockPages() {
+  const idMap: Record<string, string> = {}
+  const createdPages: NotePage[] = []
+  for (const page of GLOBAL_PAGES) {
+    const parentId = page.parentId ? idMap[page.parentId] : undefined
+    const created = await apiCreatePage({ ...page, parentId })
+    if (created) {
+      idMap[page.id] = created.id
+      createdPages.push(created)
+    } else {
+      createdPages.push({ ...page, parentId })
+    }
+  }
+  GLOBAL_PAGES = createdPages
+}
+
 /* ─── Store hook ───────────────────────────────────────────────────────── */
 
 export function useNotesStore() {
@@ -135,14 +151,13 @@ export function useNotesStore() {
     // Lazy-load from backend once
     if (!INITIALIZED && !initRef.current) {
       initRef.current = true
-      apiGetPages().then((pages) => {
+      apiGetPages().then(async (pages) => {
         if (pages.length > 0) {
           GLOBAL_PAGES = pages
         } else {
           // Seed with defaults if nothing on server
           initMockPages()
-          // Persist defaults
-          GLOBAL_PAGES.forEach((p) => apiCreatePage(p))
+          await seedMockPages()
         }
         INITIALIZED = true
         notify()

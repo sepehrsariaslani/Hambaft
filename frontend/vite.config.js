@@ -5,7 +5,7 @@ import { resolve } from 'path'
 
 export default defineConfig({
   cacheDir: '/tmp/.vite-cache',
-  base: '/assets/hambaft/',
+  base: '/assets/hambaft/frontend/',
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
@@ -16,9 +16,9 @@ export default defineConfig({
     outDir: resolve(__dirname, '../hambaft/public'),
     rollupOptions: {
       output: {
-        entryFileNames: 'assets/[name].js',
-        chunkFileNames: 'assets/[name].js',
-        assetFileNames: 'assets/[name].[ext]',
+        entryFileNames: 'assets/[name].[hash].js',
+        chunkFileNames: 'assets/[name].[hash].js',
+        assetFileNames: 'assets/[name].[hash].[ext]',
       },
     },
   },

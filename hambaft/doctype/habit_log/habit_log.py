@@ -30,7 +30,7 @@ class HabitLog(Document):
         habit = frappe.get_doc("Habit", self.habit)
         logs = frappe.get_all(
             "Habit Log",
-            filters={"habit": self.habit, "status": "done", "user": self.user},
+            filters={"habit": self.habit, "status": "انجام‌شده", "user": self.user},
             fields=["date"],
             order_by="date asc"
         )

@@ -16,7 +16,7 @@ interface BlockEditorProps {
 }
 
 export default function BlockEditor({
-  page, onUpdatePage, onUpdateBlock, onAddBlock, onDeleteBlock, onMoveBlock,
+  page, onUpdatePage, onUpdateBlock, onAddBlock, onDeleteBlock, onMoveBlock, onReorderBlocks,
 }: BlockEditorProps) {
   const [focusedBlockId, setFocusedBlockId] = useState<string | null>(null)
   const [slashBlockId, setSlashBlockId] = useState<string | null>(null)
