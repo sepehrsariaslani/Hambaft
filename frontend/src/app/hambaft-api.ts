@@ -429,6 +429,13 @@ export async function deleteTaskRecord(name: string) {
   return call('hambaft.hambaft.api.delete_task', { name })
 }
 
+export async function bulkUpdateTasks(names: string[], updates: Record<string, any>) {
+  return call('hambaft.hambaft.api.bulk_update_tasks', {
+    names: JSON.stringify(names),
+    updates: JSON.stringify(updates),
+  })
+}
+
 export async function createHabitRecord(name: string, description: string, extras?: Partial<Habit>) {
   return call('hambaft.hambaft.api.create_habit', { data: toHabitPayload(name, description, extras) })
 }

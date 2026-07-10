@@ -1096,6 +1096,62 @@ def delete_task(name):
     return _api_response({"ok": True})
 
 
+@frappe.whitelist()
+def bulk_update_tasks(names, updates):
+    """Bulk update multiple tasks at once.
+
+    Args:
+        names: JSON string of task name list, e.g. '["TASK-001","TASK-002"]'
+        updates: JSON string of field updates, e.g. '{"status":"done","priority":"high"}'
+    """
+    if frappe.session_user == "Guest":
+        frappe.throw("Authentication required", frappe.AuthenticationError)
+    if isinstance(names, str):
+        names = json.loads(names)
+    if isinstance(updates, str):
+        updates = json.loads(updates)
+    if not names or not updates:
+        frappe.throw("names and updates are required")
+
+    _STATUS_MAP = {
+        "inbox": "صندوق ورودی", "today": "امروز", "next": "بعدی",
+        "scheduled": "زمان‌بندی‌شده", "someday": "شاید", "in_progress": "در حال انجام",
+        "on_hold": "متوقف", "done": "انجام‌شده", "completed": "انجام‌شده",
+    }
+    _PRIORITY_MAP = {"low": "پایین", "medium": "متوسط", "high": "بالا", "urgent": "فوری"}
+    _IMPORTANCE_MAP = {"normal": "عادی", "key": "کلیدی", "milestone": "نقطه‌عطف"}
+
+    allowed_fields = {"status", "priority", "importance"}
+    filtered_updates = {k: v for k, v in updates.items() if k in allowed_fields}
+    if not filtered_updates:
+        frappe.throw("No valid fields to update")
+
+    if "status" in filtered_updates and filtered_updates["status"] in _STATUS_MAP:
+        filtered_updates["status"] = _STATUS_MAP[filtered_updates["status"]]
+    if "priority" in filtered_updates and filtered_updates["priority"] in _PRIORITY_MAP:
+        filtered_updates["priority"] = _PRIORITY_MAP[filtered_updates["priority"]]
+    if "importance" in filtered_updates and filtered_updates["importance"] in _IMPORTANCE_MAP:
+        filtered_updates["importance"] = _IMPORTANCE_MAP[filtered_updates["importance"]]
+
+    updated = 0
+    errors = 0
+    for name in names:
+        try:
+            doc = frappe.get_doc("Task", name)
+            if doc.user and doc.user != frappe.session.user:
+                errors += 1
+                continue
+            for field, value in filtered_updates.items():
+                doc.set(field, value)
+            doc.save(ignore_permissions=True)
+            updated += 1
+        except Exception:
+            errors += 1
+
+    frappe.db.commit()
+    return _api_response({"updated": updated, "errors": errors})
+
+
 # ─── Habits CRUD ────────────────────────────────────────────────
 
 @frappe.whitelist()

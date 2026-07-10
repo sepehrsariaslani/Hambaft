@@ -129,9 +129,6 @@ export default function PlannerSection() {
   const [activeSession, setActiveSession] = useState<TaskSession | null>(null)
   const [sessionTaskTitle, setSessionTaskTitle] = useState('')
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null)
-  const [quickAddText, setQuickAddText] = useState('')
-  const [quickAdding, setQuickAdding] = useState(false)
-
   // Notion-like view config (columns, density, saved views)
   const [viewConfig, setViewConfig] = useState<ViewConfig>(() =>
     getOrInitViewConfig('planner-buckets', 'برنامه‌ریز')
@@ -161,31 +158,6 @@ export default function PlannerSection() {
 
   // Areas view state
   const [areasData, setAreasData] = useState<any[]>([])
-
-  // ─── Quick Add ───────────────────────────────────────────────
-  const handleQuickAdd = useCallback(async () => {
-    if (!quickAddText.trim() || quickAdding) return
-    setQuickAdding(true)
-    try {
-      // Map current bucket to context for smart defaults
-      const contextMap: Partial<Record<PlannerBucket, 'planner_today' | 'planner_inbox' | 'planner_next' | 'planner_scheduled'>> = {
-        today: 'planner_today',
-        inbox: 'planner_inbox',
-        next: 'planner_next',
-        scheduled: 'planner_scheduled',
-      }
-      await quickAddTask(quickAddText.trim(), {
-        context: contextMap[activeBucket],
-      })
-      setQuickAddText('')
-      // Refresh current bucket
-      fetchBucket(activeBucket)
-    } catch (e) {
-      console.error('quickAdd error:', e)
-    } finally {
-      setQuickAdding(false)
-    }
-  }, [quickAddText, quickAdding, activeBucket, fetchBucket])
 
   // ─── Bucket data fetching ──────────────────────────────────
   const fetchBucket = useCallback(async (bucket: PlannerBucket) => {
@@ -1030,7 +1002,6 @@ export default function PlannerSection() {
         <h2 className="text-sm font-black text-[#2D3025] dark:text-[#E8ECE0] flex items-center gap-2">
           <Layers className="w-4 h-4 text-[#7C8363]" />
           <span>برنامه‌ریز شخصی</span>
-          <span className="text-[8px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 font-bold">v2.1</span>
         </h2>
         <div className="flex items-center gap-2">
           <DensityToggle density={density} onChange={(d) => handleViewConfigChange({ ...viewConfig, density: d })} />

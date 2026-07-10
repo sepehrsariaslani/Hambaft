@@ -3,7 +3,7 @@ import type { Task, Goal } from '../types'
 import ViewSwitcher, { type ViewMode } from './ViewSwitcher'
 import { ImportanceBadge, ImportanceSelector, BlockedTaskIndicator, TaskImpactBanner, ImpactScoreBadge, sortTasksByImpact } from './TaskV2Shared'
 import type { ImportanceLevel } from './TaskV2Shared'
-import { updateTaskImportance, quickAddTask } from '../../app/hambaft-api'
+import { updateTaskImportance, quickAddTask, bulkUpdateTasks, deleteTaskRecord } from '../../app/hambaft-api'
 import { ColumnConfigurator } from './ColumnConfigurator'
 import { DensityToggle } from './DensityToggle'
 import { type ViewConfig, type DensityMode, type ColumnId, DENSITY_CONFIG, isColumnVisible, getOrInitViewConfig, setViewConfig } from './ViewConfigStore'
@@ -230,9 +230,6 @@ export default function TaskManagerSection({
   return (
     <div className="space-y-6">
       {/* Header Stats */}
-      <div className="flex items-center gap-2 mb-2">
-        <span className="text-[8px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 font-bold">v2.1</span>
-      </div>
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
         <StatCard label="کل تسک‌ها" value={stats.total} color="bg-[#2d3025] text-white" />
         <StatCard label="انجام‌شده" value={stats.completed} color="bg-[#7C8363] text-white" />
@@ -242,6 +239,90 @@ export default function TaskManagerSection({
         <StatCard label="کلیدی" value={stats.keyTasks} color="bg-blue-700 text-white" />
         <StatCard label="مسدود" value={stats.blocked} color="bg-red-600 text-white" />
       </div>
+
+      {/* Bulk Actions Bar — shown when tasks are selected */}
+      {selectedTaskIds.size > 0 && (
+        <div className="flex items-center gap-3 bg-[#7C8363]/10 border border-[#7C8363]/30 rounded-2xl px-4 py-3">
+          <span className="text-xs font-black text-[#7C8363]">
+            {selectedTaskIds.size} تسک انتخاب‌شده
+          </span>
+          <div className="flex-1" />
+          <div className="flex items-center gap-2">
+            <select
+              className="text-[10px] px-2 py-1.5 rounded-lg border border-[#D6CFC3] bg-white font-bold"
+              defaultValue=""
+              onChange={async (e) => {
+                if (!e.target.value) return
+                await bulkUpdateTasks(Array.from(selectedTaskIds), { status: e.target.value })
+                setSelectedTaskIds(new Set())
+                onAddTask('') // trigger parent refresh
+                e.target.value = ''
+              }}
+            >
+              <option value="">تغییر وضعیت</option>
+              <option value="inbox">صندوق ورودی</option>
+              <option value="today">امروز</option>
+              <option value="next">بعدی</option>
+              <option value="in_progress">در حال انجام</option>
+              <option value="done">انجام‌شده</option>
+              <option value="on_hold">متوقف</option>
+              <option value="someday">شاید</option>
+            </select>
+            <select
+              className="text-[10px] px-2 py-1.5 rounded-lg border border-[#D6CFC3] bg-white font-bold"
+              defaultValue=""
+              onChange={async (e) => {
+                if (!e.target.value) return
+                await bulkUpdateTasks(Array.from(selectedTaskIds), { priority: e.target.value })
+                setSelectedTaskIds(new Set())
+                onAddTask('') // trigger parent refresh
+                e.target.value = ''
+              }}
+            >
+              <option value="">تغییر اولویت</option>
+              <option value="urgent">فوری</option>
+              <option value="high">بالا</option>
+              <option value="medium">متوسط</option>
+              <option value="low">پایین</option>
+            </select>
+            <select
+              className="text-[10px] px-2 py-1.5 rounded-lg border border-[#D6CFC3] bg-white font-bold"
+              defaultValue=""
+              onChange={async (e) => {
+                if (!e.target.value) return
+                await bulkUpdateTasks(Array.from(selectedTaskIds), { importance: e.target.value })
+                setSelectedTaskIds(new Set())
+                onAddTask('') // trigger parent refresh
+                e.target.value = ''
+              }}
+            >
+              <option value="">تغییر اهمیت</option>
+              <option value="milestone">نقطه‌عطف</option>
+              <option value="key">کلیدی</option>
+              <option value="normal">عادی</option>
+            </select>
+            <button
+              onClick={async () => {
+                if (!confirm(`${selectedTaskIds.size} تسک حذف شود؟`)) return
+                for (const id of selectedTaskIds) {
+                  await deleteTaskRecord(id)
+                }
+                setSelectedTaskIds(new Set())
+                onAddTask('') // trigger parent refresh
+              }}
+              className="text-[10px] px-3 py-1.5 rounded-lg bg-red-50 text-red-700 border border-red-200 font-bold hover:bg-red-100 transition-colors"
+            >
+              حذف
+            </button>
+            <button
+              onClick={() => setSelectedTaskIds(new Set())}
+              className="text-[10px] px-3 py-1.5 rounded-lg bg-white text-[#8D7F72] border border-[#D6CFC3] font-bold hover:bg-[#F9F6EE] transition-colors"
+            >
+              لغو انتخاب
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Quick Add Bar */}
       <QuickAddBar

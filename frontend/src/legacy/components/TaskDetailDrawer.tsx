@@ -4,13 +4,13 @@
  * Progressive disclosure: most-used controls in Overview,
  * deeper context in other tabs.
  */
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import {
   X, CheckCircle, Edit2, Trash2, Calendar, Clock, Flag, Zap,
   FolderKanban, Target, Layers, AlertCircle, Play, Pause,
   Square, RotateCcw, Sparkles, Pin, Link2, ArrowUpRight,
-  BookOpen, Timer,
+  BookOpen, Timer, History,
 } from 'lucide-react'
 import type { Task, SubTask } from '../types'
 import PersianDatePicker from './PersianDatePicker'
@@ -20,6 +20,7 @@ import {
   TaskImpactBanner, TaskImpactExplanation, BlockedTaskIndicator,
 } from './TaskV2Shared'
 import type { ImportanceLevel } from './TaskV2Shared'
+import { getTaskSessions } from '../../app/hambaft-api'
 
 // ─── Tab definitions ─────────────────────────────────────────
 type DetailTab = 'overview' | 'plan' | 'relations' | 'time' | 'notes'
@@ -656,6 +657,39 @@ function TimeTab({ task, isActiveSession, activeTimerSeconds, isTimerRunning, on
   onStartTimer?: (id: string) => void; onPauseTimer?: () => void; onStopTimer?: () => void;
   onResetTimer?: (id: string) => void; formatSeconds: (s: number) => string
 }) {
+  const [sessions, setSessions] = useState<any[]>([])
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (!task.id) return
+    setLoading(true)
+    getTaskSessions(task.id, 20)
+      .then(resp => {
+        const list = resp?.data?.sessions || []
+        setSessions(list)
+      })
+      .catch(() => setSessions([]))
+      .finally(() => setLoading(false))
+  }, [task.id])
+
+  const formatDuration = (minutes: number) => {
+    if (!minutes) return '—'
+    if (minutes < 60) return `${minutes} دقیقه`
+    const h = Math.floor(minutes / 60)
+    const m = minutes % 60
+    return m ? `${h}س ${m}د` : `${h} ساعت`
+  }
+
+  const formatTime = (iso: string) => {
+    if (!iso) return '—'
+    try {
+      const d = new Date(iso)
+      return d.toLocaleString('fa-IR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+    } catch {
+      return iso
+    }
+  }
+
   return (
     <div className="space-y-4">
       {/* Timer display */}
@@ -716,6 +750,37 @@ function TimeTab({ task, isActiveSession, activeTimerSeconds, isTimerRunning, on
           <Clock className="w-4 h-4 text-[#7C8363]" />
           <span className="text-xs font-bold text-[#2D3025]">{task.effortType === 'fixed' ? 'ثابت' : task.effortType === 'variable' ? 'متغیر' : 'مشخص نشده'}</span>
         </div>
+      </div>
+
+      {/* Session History */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-1.5">
+          <History className="w-3.5 h-3.5 text-[#7C8363]" />
+          <span className="text-[10px] font-black text-[#8D7F72]">تاریخچه جلسات</span>
+        </div>
+        {loading ? (
+          <div className="text-[10px] text-[#8D7F72] text-center py-3">در حال بارگذاری...</div>
+        ) : sessions.length === 0 ? (
+          <div className="text-[10px] text-[#9D978B] text-center py-3 bg-[#F9F6EE] rounded-xl">هنوز جلسه‌ای ثبت نشده</div>
+        ) : (
+          <div className="space-y-1.5 max-h-48 overflow-y-auto">
+            {sessions.map((s, idx) => (
+              <div key={s.name || idx} className="flex items-center justify-between bg-[#F9F6EE] px-3 py-2 rounded-xl">
+                <div className="flex items-center gap-2">
+                  <span className={`w-2 h-2 rounded-full ${s.status === 'completed' ? 'bg-emerald-500' : s.status === 'active' ? 'bg-blue-500 animate-pulse' : 'bg-amber-500'}`} />
+                  <div>
+                    <span className="text-[10px] font-bold text-[#2D3025] block">{formatDuration(s.duration_minutes)}</span>
+                    {s.notes && <span className="text-[8px] text-[#8D7F72] block truncate max-w-[140px]">{s.notes}</span>}
+                  </div>
+                </div>
+                <div className="text-left">
+                  <span className="text-[8px] text-[#8D7F72] block">{formatTime(s.started_at)}</span>
+                  {s.stopped_at && <span className="text-[8px] text-[#9D978B] block">→ {formatTime(s.stopped_at)}</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )
