@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { ScheduleItem } from './CalendarSection';
 import { Task, SleepLog, WorkoutLog, MindfulnessSession, Contact } from '../types';
 import { 
@@ -114,19 +114,15 @@ export default function BalanceReportSection({
 
     // Adjust parameters for weekly view (average)
     if (reportRange === 'week') {
-      // Scale down slightly to average daily hours
-      workHrs = workHrs > 0 ? Math.min(10, workHrs / 1.5) : 6.5;
-      lifeSocialHrs = lifeSocialHrs > 0 ? Math.min(6, lifeSocialHrs / 1.5) : 3.5;
-      healthHrs = healthHrs > 0 ? Math.min(4, healthHrs / 1.2) : 1.8;
+      // Scale down to average daily hours — only if we have real data
+      workHrs = workHrs > 0 ? Math.min(10, workHrs / 7) : 0;
+      lifeSocialHrs = lifeSocialHrs > 0 ? Math.min(6, lifeSocialHrs / 7) : 0;
+      healthHrs = healthHrs > 0 ? Math.min(4, healthHrs / 7) : 0;
       sleepHrs = sleepLogs.length > 0 
         ? sleepLogs.reduce((sum, s) => sum + s.duration, 0) / sleepLogs.length 
-        : 7.6;
-    } else {
-      // Daily view caps and defaults
-      if (workHrs === 0) workHrs = 7.5;
-      if (lifeSocialHrs === 0) lifeSocialHrs = 3;
-      if (healthHrs === 0) healthHrs = 1.5;
+        : 0;
     }
+    // No fake defaults — if no data, show zeros
 
     // Normalize values
     workHrs = Math.round(workHrs * 10) / 10;
@@ -207,15 +203,49 @@ export default function BalanceReportSection({
   ];
 
   // Stacked Bar Data over past week
-  const weeklyTrendData = [
-    { day: 'شنبه', 'کار و تسک': 8.2, 'معاشرت و زندگی': 2.5, 'ورزش و تندرستی': 1.2, 'خواب و استراحت': 7.5 },
-    { day: 'یکشنبه', 'کار و تسک': 7.5, 'معاشرت و زندگی': 3.2, 'ورزش و تندرستی': 1.8, 'خواب و استراحت': 8.0 },
-    { day: 'دوشنبه', 'کار و تسک': 9.0, 'معاشرت و زندگی': 1.5, 'ورزش و تندرستی': 0.8, 'خواب و استراحت': 6.8 },
-    { day: 'سه‌شنبه', 'کار و تسک': 8.0, 'معاشرت و زندگی': 4.0, 'ورزش و تندرستی': 1.5, 'خواب و استراحت': 7.2 },
-    { day: 'چهارشنبه', 'کار و تسک': 7.8, 'معاشرت و زندگی': 3.5, 'ورزش و تندرستی': 2.0, 'خواب و استراحت': 7.8 },
-    { day: 'پنجشنبه', 'کار و تسک': 5.0, 'معاشرت و زندگی': 6.5, 'ورزش و تندرستی': 2.5, 'خواب و استراحت': 8.5 },
-    { day: 'جمعه', 'کار و تسک': 1.5, 'معاشرت و زندگی': 8.0, 'ورزش و تندرستی': 3.0, 'خواب و استراحت': 9.2 },
-  ];
+  // Build weekly trend from real sleep logs data
+  const weeklyTrendData = useMemo(() => {
+    const dayNames = ['شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنجشنبه', 'جمعه']
+    
+    // If we have sleep logs for the past week, use them
+    if (sleepLogs.length >= 3) {
+      const result = []
+      const now = new Date()
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(now.getTime() - i * 86400000)
+        const dateStr = d.toISOString().slice(0, 10)
+        const dayIdx = d.getDay()
+        // Saturday = 6 in JS but 0 in our array
+        const persianIdx = (dayIdx + 1) % 7
+        
+        const daySleep = sleepLogs.find(l => l.date === dateStr)
+        const dayWorkout = workoutLogs.filter(l => l.date === dateStr)
+        const daySessions = sessions.filter(l => l.date === dateStr)
+        
+        const sleepVal = daySleep ? daySleep.duration : 0
+        const healthVal = dayWorkout.reduce((s, w) => s + (w.durationMinutes || 0), 0) / 60 
+          + daySessions.reduce((s, m) => s + (m.durationMinutes || 0), 0) / 60
+        
+        result.push({
+          day: dayNames[persianIdx],
+          'کار و تسک': 0,
+          'معاشرت و زندگی': 0,
+          'ورزش و تندرستی': Math.round(healthVal * 10) / 10,
+          'خواب و استراحت': Math.round(sleepVal * 10) / 10,
+        })
+      }
+      return result
+    }
+    
+    // No real data — return empty structure (not fake data)
+    return dayNames.map(day => ({
+      day,
+      'کار و تسک': 0,
+      'معاشرت و زندگی': 0,
+      'ورزش و تندرستی': 0,
+      'خواب و استراحت': 0,
+    }))
+  }, [sleepLogs, workoutLogs, sessions])
 
   // Determine nervous system status label and style
   let nervousStatusLabel = 'متعادل و پایدار ⚖️';
@@ -496,7 +526,11 @@ export default function BalanceReportSection({
 
           <div className="mt-4 p-3 bg-white dark:bg-[#20241A] rounded-2xl border border-[#E6DFD3]/40 dark:border-[#3D4133]/20 text-xs text-[#8D7F72] dark:text-[#9D978B] leading-relaxed">
             <span className="font-black text-[#2D3025] dark:text-[#E8ECE0] block mb-1">🔍 تحلیل همبستگی روندها:</span>
-            روز دوشنبه با ۹ ساعت کار و خواب کمترین توازن را داشته‌اید، در حالی که آخرهفته (پنجشنبه و جمعه) با کاهش ساعات کار فکری، شاخص اکسی‌توسین و ریکاوری بدنی شما با جبران خواب به اوج رسیده است. هدف ما نزدیک کردن روزهای میانی هفته به سطح پایداری روز یکشنبه است.
+            {metrics.score > 0 ? (
+              <>نمره توازن شما {getPersianNumber(metrics.score)} از ۱۰۰ است. {metrics.score >= 75 ? 'وضعیت شما در محدوده مطلوب قرار دارد. تداوم عادات فعلی کلید حفظ این تعادل است.' : metrics.score >= 50 ? 'توازن شما قابل قبول است اما جای بهبود دارد. روی افزایش ساعات ورزش و خواب تمرکز کنید.' : 'توازن شما نیازمند توجه جدی است. ساعات کار را کاهش و خواب و ورزش را افزایش دهید.'}</>
+            ) : (
+              <>هنوز داده کافی برای تحلیل روند هفتگی ثبت نشده. با ثبت منظم خواب، ورزش و فعالیت‌ها، نمودار روند تکمیل خواهد شد.</>
+            )}
           </div>
         </div>
 
