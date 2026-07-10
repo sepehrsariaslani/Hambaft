@@ -3299,6 +3299,7 @@ export default function App({
             sessions={lifeData.mindfulnessSessions || []}
             contacts={lifeData.contacts || []}
             todayDate={TODAY_DATE}
+            onNavigate={(section) => goToTab(section)}
           />
         );
       case 'contacts':

@@ -16,6 +16,8 @@ interface BalanceReportSectionProps {
   sessions: MindfulnessSession[];
   contacts?: Contact[];
   todayDate: string;
+  /** Navigate to a section for drill-down detail */
+  onNavigate?: (section: string) => void;
 }
 
 export default function BalanceReportSection({
@@ -25,7 +27,8 @@ export default function BalanceReportSection({
   workoutLogs = [],
   sessions = [],
   contacts = [],
-  todayDate
+  todayDate,
+  onNavigate,
 }: BalanceReportSectionProps) {
   const [reportRange, setReportRange] = useState<'day' | 'week'>('week');
 
@@ -332,6 +335,9 @@ export default function BalanceReportSection({
               </div>
               <span className="text-2xl font-black text-[#2D3025] dark:text-[#E8ECE0] font-mono mt-3 block">{getPersianNumber(metrics.workHrs)} <span className="text-xs font-sans">ساعت</span></span>
               <span className="text-[9px] text-[#8D7F72] dark:text-[#9D978B] mt-1 block">هدف ایده‌آل: ۶ تا ۸ ساعت</span>
+              {onNavigate && (
+                <button onClick={() => onNavigate('tasks')} className="mt-2 text-[9px] font-bold text-[#E26645] hover:underline cursor-pointer">مشاهده تسک‌ها ←</button>
+              )}
             </div>
 
             {/* Sleep */}
@@ -342,6 +348,9 @@ export default function BalanceReportSection({
               </div>
               <span className="text-2xl font-black text-[#2D3025] dark:text-[#E8ECE0] font-mono mt-3 block">{getPersianNumber(metrics.sleepHrs)} <span className="text-xs font-sans">ساعت</span></span>
               <span className="text-[9px] text-[#8D7F72] dark:text-[#9D978B] mt-1 block">هدف ایده‌آل: ۷ تا ۹ ساعت</span>
+              {onNavigate && (
+                <button onClick={() => onNavigate('sleep')} className="mt-2 text-[9px] font-bold text-slate-500 hover:underline cursor-pointer">مشاهده خواب ←</button>
+              )}
             </div>
 
             {/* Social / Family */}
@@ -352,6 +361,9 @@ export default function BalanceReportSection({
               </div>
               <span className="text-2xl font-black text-[#2D3025] dark:text-[#E8ECE0] font-mono mt-3 block">{getPersianNumber(metrics.lifeSocialHrs)} <span className="text-xs font-sans">ساعت</span></span>
               <span className="text-[9px] text-[#8D7F72] dark:text-[#9D978B] mt-1 block">هدف ایده‌آل: ۲ تا ۴ ساعت</span>
+              {onNavigate && (
+                <button onClick={() => onNavigate('occasions')} className="mt-2 text-[9px] font-bold text-amber-500 hover:underline cursor-pointer">مشاهده مناسبت‌ها ←</button>
+              )}
             </div>
 
             {/* Health */}
@@ -362,6 +374,9 @@ export default function BalanceReportSection({
               </div>
               <span className="text-2xl font-black text-[#2D3025] dark:text-[#E8ECE0] font-mono mt-3 block">{getPersianNumber(metrics.healthHrs)} <span className="text-xs font-sans">ساعت</span></span>
               <span className="text-[9px] text-[#8D7F72] dark:text-[#9D978B] mt-1 block">هدف ایده‌آل: ۱ تا ۳ ساعت</span>
+              {onNavigate && (
+                <button onClick={() => onNavigate('fitness')} className="mt-2 text-[9px] font-bold text-[#7C8363] hover:underline cursor-pointer">مشاهده ورزش ←</button>
+              )}
             </div>
 
           </div>
