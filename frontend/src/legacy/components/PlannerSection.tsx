@@ -54,7 +54,9 @@ import { ColumnConfigurator } from './ColumnConfigurator'
 import { DensityToggle } from './DensityToggle'
 import { type ViewConfig, type DensityMode, type ColumnId, DENSITY_CONFIG, isColumnVisible, getOrInitViewConfig, setViewConfig } from './ViewConfigStore'
 import QuickAddBar from './QuickAddBar'
-import type { ImportanceLevel } from './TaskV2Shared'
+import TaskRowV2 from './TaskRowV2'
+import TaskDetailDrawer from './TaskDetailDrawer'
+import { deleteTaskRecord } from '../../app/hambaft-api'
 
 type PlannerBucket = 'inbox' | 'today' | 'next' | 'scheduled' | 'someday' | 'overdue' | 'key' | 'milestone' | 'blocked' | 'unscheduled' | 'high_impact'
 type PlannerView = 'buckets' | 'timeline' | 'week' | 'month' | 'board' | 'areas'
@@ -128,13 +130,14 @@ export default function PlannerSection() {
   const [loading, setLoading] = useState(false)
   const [activeSession, setActiveSession] = useState<TaskSession | null>(null)
   const [sessionTaskTitle, setSessionTaskTitle] = useState('')
-  const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null)
+  const [drawerTaskId, setDrawerTaskId] = useState<string | null>(null)
   // Notion-like view config (columns, density, saved views)
   const [viewConfig, setViewConfig] = useState<ViewConfig>(() =>
     getOrInitViewConfig('planner-buckets', 'برنامه‌ریز')
   )
   const density = viewConfig.density
   const dCfg = DENSITY_CONFIG[density]
+  const drawerTask = drawerTaskId ? tasks.find(t => t.id === drawerTaskId) || null : null
   const handleViewConfigChange = (cfg: ViewConfig) => {
     setViewConfig(cfg)
     setViewConfig('planner-buckets', cfg)
@@ -348,10 +351,6 @@ export default function PlannerSection() {
     }
   }
 
-  const toggleExpand = (taskId: string) => {
-    setExpandedTaskId(prev => prev === taskId ? null : taskId)
-  }
-
   // ─── Helpers ───────────────────────────────────────────────
   const getPersianDayName = (dateStr: string) => {
     const dayNames = ['یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنجشنبه', 'جمعه', 'شنبه']
@@ -373,155 +372,25 @@ export default function PlannerSection() {
       initial={{ opacity: 0, y: 4 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, x: 30 }}
-      className="bg-white dark:bg-[#1C1D17] rounded-2xl border border-[#E6DFD3] dark:border-[#3D4133]/50 overflow-hidden"
     >
-      <div className={`${dCfg.rowPadding} flex items-center ${dCfg.gap} ${compact ? 'py-2 px-3' : ''}`}>
-        <button
-          onClick={() => handleMove(task.id, task.status === 'done' ? 'inbox' : 'done')}
-          className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
-            task.status === 'done'
-              ? 'bg-emerald-500 border-emerald-500 text-white'
-              : 'border-[#D6CFC3] hover:border-[#7C8363]'
-          }`}
-        >
-          {task.status === 'done' && <CheckCircle2 className="w-3.5 h-3.5" />}
-        </button>
-
-        <div className="flex-1 min-w-0" onClick={() => toggleExpand(task.id)}>
-          <div className={`${dCfg.textSize} font-bold truncate flex items-center ${dCfg.gap} ${task.status === 'done' ? 'line-through text-gray-400' : 'text-[#2D3025] dark:text-[#E8ECE0]'}`}>
-            <span>{task.title}</span>
-            {isColumnVisible(viewConfig, 'importance') && task.importance && task.importance !== 'normal' && (
-              <ImportanceBadge importance={task.importance} size="xs" />
-            )}
-            {isColumnVisible(viewConfig, 'impactScore') && task.impactScore != null && task.impactScore >= 30 && task.status !== 'done' && (
-              <ImpactScoreBadge score={task.impactScore} />
-            )}
-          </div>
-          {!compact && (
-            <div className={`flex items-center ${dCfg.gap} mt-1 flex-wrap`}>
-              {isColumnVisible(viewConfig, 'status') && (
-                <span className={`${dCfg.badgeSize} rounded-md border font-bold ${STATUS_COLORS[task.status || 'inbox']}`}>
-                  {STATUS_LABELS[task.status || 'inbox']}
-                </span>
-              )}
-              {isColumnVisible(viewConfig, 'priority') && task.priority && (
-                <span className={`${dCfg.badgeSize} rounded ${PRIORITY_COLORS[task.priority] || PRIORITY_COLORS.medium}`}>
-                  {PRIORITY_LABELS[task.priority] || task.priority}
-                </span>
-              )}
-              {isColumnVisible(viewConfig, 'scheduledDate') && task.scheduledDate && (
-                <span className={`${dCfg.badgeSize} text-[#8D7F72] flex items-center gap-0.5`}>
-                  <CalendarDays className="w-2.5 h-2.5" />
-                  {task.scheduledDate}
-                </span>
-              )}
-              {isColumnVisible(viewConfig, 'actualMinutes') && task.actualMinutes ? (
-                <span className={`${dCfg.badgeSize} text-indigo-600 flex items-center gap-0.5`}>
-                  <Clock className="w-2.5 h-2.5" />
-                  {formatMinutes(task.actualMinutes)}
-                </span>
-              ) : null}
-              {isColumnVisible(viewConfig, 'blockedBy') && task.blockedBy && task.blockedBy.length > 0 && (
-                <span className={`${dCfg.badgeSize} text-amber-600 flex items-center gap-0.5`}>
-                  <AlertCircle className="w-2.5 h-2.5" />
-                  {task.blockedBy.length} پیش‌نیاز
-                </span>
-              )}
-              {isColumnVisible(viewConfig, 'project') && task.projectId && (
-                <span className={`${dCfg.badgeSize} text-[#5a6b8a]`}>📁</span>
-              )}
-              {isColumnVisible(viewConfig, 'isDailyHighlight') && task.isDailyHighlight && (
-                <span className={`${dCfg.badgeSize} bg-[#d4a017]/15 text-[#b8860b]`}>⭐ برجسته</span>
-              )}
-            </div>
-          )}
-        </div>
-
-        <div className="flex items-center gap-1 shrink-0">
-          {activeSession?.taskId === task.id ? (
-            <button
-              onClick={handleStopSession}
-              className="p-1.5 bg-red-50 text-red-600 rounded-lg border border-red-200"
-              title="توقف"
-            >
-              <Pause className="w-3.5 h-3.5" />
-            </button>
-          ) : task.status !== 'done' ? (
-            <button
-              onClick={() => handleStartSession(task.id)}
-              className="p-1.5 bg-[#E8ECE0] text-[#7C8363] rounded-lg hover:bg-[#7C8363] hover:text-white transition-colors"
-              title="شروع زمان‌سنج"
-            >
-              <Play className="w-3.5 h-3.5" />
-            </button>
-          ) : null}
-          {!compact && (
-            <button onClick={() => toggleExpand(task.id)}>
-              {expandedTaskId === task.id ? (
-                <ChevronDown className="w-4 h-4 text-[#8D7F72]" />
-              ) : (
-                <ChevronLeft className="w-4 h-4 text-[#8D7F72]" />
-              )}
-            </button>
-          )}
-        </div>
-      </div>
-
-      <AnimatePresence>
-        {expandedTaskId === task.id && !compact && (
-          <motion.div
-            initial={{ height: 0 }}
-            animate={{ height: 'auto' }}
-            exit={{ height: 0 }}
-            className="overflow-hidden"
-          >
-            <div className="px-3 pb-3 pt-1 border-t border-[#E6DFD3]/40 space-y-2">
-              {task.description && (
-                <p className="text-[10px] text-[#8D7F72]">{task.description}</p>
-              )}
-              {/* Importance Selector */}
-              <div className="flex items-center gap-2">
-                <span className="text-[8px] font-bold text-[#8D7F72]">اهمیت:</span>
-                <ImportanceSelector
-                  value={task.importance || 'normal'}
-                  onChange={(imp) => {
-                    updateTaskImportance(task.id, imp).then(() => {
-                      // Refresh tasks after importance update
-                      loadBucket()
-                    }).catch(() => {})
-                  }}
-                  compact
-                />
-              </div>
-              {/* Impact context */}
-              {(task.impactGoalTitle || task.impactProjectTitle) && task.status !== 'done' && (
-                <TaskImpactBanner task={task} />
-              )}
-              {/* Impact explanation */}
-              <TaskImpactExplanation task={task} />
-              {/* Blocked indicator */}
-              {(task.blockedBy || []).length > 0 && task.status !== 'done' && (
-                <BlockedTaskIndicator task={task} />
-              )}
-              <div className="flex flex-wrap gap-1">
-                {(['inbox', 'today', 'next', 'in_progress', 'on_hold', 'someday', 'done'] as const).map(b => (
-                  <button
-                    key={b}
-                    onClick={() => handleMove(task.id, b)}
-                    className={`px-2 py-1 text-[8px] font-bold rounded-lg border transition-colors ${
-                      task.status === b
-                        ? 'bg-[#7C8363] text-white border-[#7C8363]'
-                        : 'bg-white dark:bg-[#121411] text-[#8D7F72] border-[#D6CFC3] hover:border-[#7C8363]'
-                    }`}
-                  >
-                    {STATUS_LABELS[b]}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <TaskRowV2
+        task={task}
+        selected={false}
+        onToggleSelect={() => {}}
+        onToggle={() => handleMove(task.id, task.status === 'done' ? 'inbox' : 'done')}
+        onDelete={() => { deleteTaskRecord(task.id); loadBucket() }}
+        onView={() => setDrawerTaskId(task.id)}
+        onQuickAction={(taskId, field, value) => {
+          if (field === 'status') handleMove(taskId, value)
+          else if (field === 'importance') {
+            updateTaskImportance(taskId, value).then(() => loadBucket()).catch(() => {})
+          }
+        }}
+        onAddSubtask={() => setDrawerTaskId(task.id)}
+        todayDate={new Date().toISOString().slice(0, 10)}
+        viewConfig={viewConfig}
+        dCfg={compact ? DENSITY_CONFIG.compact : dCfg}
+      />
     </motion.div>
   )
 
@@ -1043,6 +912,23 @@ export default function PlannerSection() {
       {activeView === 'month' && renderMonth()}
       {activeView === 'board' && renderBoard()}
       {activeView === 'areas' && renderAreas()}
+
+      {/* Task Detail Drawer — same drawer used in TaskManagerSection */}
+      {drawerTask && (
+        <TaskDetailDrawer
+          task={drawerTask}
+          onUpdateTask={() => {
+            // Refresh the current bucket after any update
+            fetchBucket(activeBucket)
+          }}
+          onDeleteTask={(id) => {
+            deleteTaskRecord(id)
+            setDrawerTaskId(null)
+            fetchBucket(activeBucket)
+          }}
+          onClose={() => setDrawerTaskId(null)}
+        />
+      )}
     </div>
   )
 }

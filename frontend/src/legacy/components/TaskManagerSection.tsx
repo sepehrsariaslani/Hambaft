@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, lazy, Suspense } from 'react'
+import { useState, useMemo, useCallback, useEffect, lazy, Suspense } from 'react'
 import type { Task, Goal } from '../types'
 import ViewSwitcher, { type ViewMode } from './ViewSwitcher'
 import { ImportanceBadge, ImportanceSelector, BlockedTaskIndicator, TaskImpactBanner, ImpactScoreBadge, sortTasksByImpact } from './TaskV2Shared'
@@ -24,6 +24,8 @@ interface TaskManagerSectionProps {
   onAddTask: (titleOrTask: string | Task) => void
   onViewTaskDetails?: (id: string) => void
   todayDate: string
+  /** Open the detail drawer for this task on mount (e.g. deep-link) */
+  initialDrawerTaskId?: string | null
 }
 
 type GroupBy = 'none' | 'project' | 'priority' | 'status' | 'category' | 'dueDate' | 'importance'
@@ -71,6 +73,7 @@ export default function TaskManagerSection({
   onAddTask,
   onViewTaskDetails,
   todayDate,
+  initialDrawerTaskId = null,
 }: TaskManagerSectionProps) {
   const [viewMode, setViewMode] = useState<ViewMode>('list')
   const [search, setSearch] = useState('')
@@ -85,7 +88,12 @@ export default function TaskManagerSection({
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set())
 
   // Task detail drawer
-  const [drawerTaskId, setDrawerTaskId] = useState<string | null>(null)
+  const [drawerTaskId, setDrawerTaskId] = useState<string | null>(initialDrawerTaskId)
+
+  // Sync deep-link changes
+  useEffect(() => {
+    if (initialDrawerTaskId) setDrawerTaskId(initialDrawerTaskId)
+  }, [initialDrawerTaskId])
   const drawerTask = drawerTaskId ? allTasks.find(t => t.id === drawerTaskId) || null : null
 
   // Notion-like view config (columns, density, saved views)

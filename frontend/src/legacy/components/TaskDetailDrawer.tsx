@@ -289,7 +289,7 @@ function OverviewTab({ task, goals, projects, areas, onUpdateTask }: {
 }) {
   return (
     <div className="space-y-4">
-      {/* Status */}
+      {/* Status — most frequent action */}
       <div className="space-y-1.5">
         <label className="text-[10px] font-black text-[#8D7F72]">وضعیت</label>
         <div className="flex flex-wrap gap-1.5">
@@ -309,53 +309,33 @@ function OverviewTab({ task, goals, projects, areas, onUpdateTask }: {
         </div>
       </div>
 
-      {/* Priority */}
-      <div className="space-y-1.5">
-        <label className="text-[10px] font-black text-[#8D7F72]">اولویت</label>
-        <div className="flex flex-wrap gap-1.5">
-          {PRIORITY_OPTIONS.map(p => (
-            <button
-              key={p.id}
-              onClick={() => onUpdateTask({ ...task, priority: p.id as any })}
-              className={`text-[10px] font-bold px-2.5 py-1.5 rounded-xl border cursor-pointer transition-all ${
-                task.priority === p.id
-                  ? `${p.color} border-current shadow-sm`
-                  : 'bg-white text-[#8D7F72] border-[#E6DFD3] hover:border-[#7C8363]'
-              }`}
-            >
-              {p.label}
-            </button>
-          ))}
+      {/* Priority + Importance — compact side-by-side */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1.5">
+          <label className="text-[10px] font-black text-[#8D7F72]">اولویت</label>
+          <div className="flex flex-wrap gap-1">
+            {PRIORITY_OPTIONS.map(p => (
+              <button
+                key={p.id}
+                onClick={() => onUpdateTask({ ...task, priority: p.id as any })}
+                className={`text-[9px] font-bold px-2 py-1 rounded-lg border cursor-pointer transition-all ${
+                  task.priority === p.id
+                    ? `${p.color} border-current shadow-sm`
+                    : 'bg-white text-[#8D7F72] border-[#E6DFD3] hover:border-[#7C8363]'
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-[10px] font-black text-[#8D7F72]">اهمیت</label>
+          <ImportanceSelector value={task.importance || 'normal'} onChange={imp => onUpdateTask({ ...task, importance: imp })} />
         </div>
       </div>
 
-      {/* Importance */}
-      <div className="space-y-1.5">
-        <label className="text-[10px] font-black text-[#8D7F72]">اهمیت</label>
-        <ImportanceSelector value={task.importance || 'normal'} onChange={imp => onUpdateTask({ ...task, importance: imp })} />
-      </div>
-
-      {/* Category */}
-      <div className="space-y-1.5">
-        <label className="text-[10px] font-black text-[#8D7F72]">دسته‌بندی</label>
-        <div className="flex flex-wrap gap-1.5">
-          {CATEGORIES.map(c => (
-            <button
-              key={c.id}
-              onClick={() => onUpdateTask({ ...task, category: c.id as any })}
-              className={`text-[10px] font-bold px-2.5 py-1.5 rounded-xl border cursor-pointer transition-all ${
-                task.category === c.id
-                  ? 'bg-[#7C8363] text-white border-[#7C8363] shadow-sm'
-                  : 'bg-white text-[#8D7F72] border-[#E6DFD3] hover:border-[#7C8363]'
-              }`}
-            >
-              {c.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Dates */}
+      {/* Dates — always visible */}
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
           <label className="text-[10px] font-black text-[#8D7F72] flex items-center gap-1"><Calendar className="w-3 h-3" /> تاریخ برنامه</label>
@@ -420,6 +400,40 @@ function OverviewTab({ task, goals, projects, areas, onUpdateTask }: {
         )}
       </div>
 
+      {/* Category + Daily Highlight — compact row */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1.5">
+          <label className="text-[10px] font-black text-[#8D7F72]">دسته‌بندی</label>
+          <div className="flex flex-wrap gap-1">
+            {CATEGORIES.map(c => (
+              <button
+                key={c.id}
+                onClick={() => onUpdateTask({ ...task, category: c.id as any })}
+                className={`text-[9px] font-bold px-2 py-1 rounded-lg border cursor-pointer transition-all ${
+                  task.category === c.id
+                    ? 'bg-[#7C8363] text-white border-[#7C8363] shadow-sm'
+                    : 'bg-white text-[#8D7F72] border-[#E6DFD3] hover:border-[#7C8363]'
+                }`}
+              >
+                {c.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-[10px] font-black text-[#8D7F72]">برجسته روز</label>
+          <button
+            onClick={() => onUpdateTask({ ...task, isDailyHighlight: !task.isDailyHighlight })}
+            className={`w-full py-2 text-[10px] font-black rounded-xl border cursor-pointer transition-all flex items-center justify-center gap-1.5 ${
+              task.isDailyHighlight ? 'bg-[#E5C158] border-[#D4AF37] text-[#2D3025]' : 'bg-white border-[#D6CFC3] text-[#8D7F72] hover:border-[#D4AF37]'
+            }`}
+          >
+            <Pin className="w-3 h-3" />
+            {task.isDailyHighlight ? 'سنجاق شده' : 'سنجاق'}
+          </button>
+        </div>
+      </div>
+
       {/* Effort */}
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
@@ -450,23 +464,7 @@ function OverviewTab({ task, goals, projects, areas, onUpdateTask }: {
         </div>
       </div>
 
-      {/* Daily Highlight */}
-      <div className="flex items-center justify-between p-3 bg-[#FDFBF7] rounded-xl border border-[#E5C158]/40">
-        <div className="flex items-center gap-2">
-          <Pin className="w-3.5 h-3.5 text-[#b8860b]" />
-          <span className="text-[10px] font-bold text-[#2D3025]">تسک برجسته روز</span>
-        </div>
-        <button
-          onClick={() => onUpdateTask({ ...task, isDailyHighlight: !task.isDailyHighlight })}
-          className={`px-2.5 py-1 text-[9px] font-black rounded-lg border cursor-pointer transition-all ${
-            task.isDailyHighlight ? 'bg-[#E5C158] border-[#D4AF37] text-[#2D3025]' : 'bg-white border-[#D6CFC3] text-[#8D7F72] hover:border-[#D4AF37]'
-          }`}
-        >
-          {task.isDailyHighlight ? 'سنجاق شده' : 'سنجاق'}
-        </button>
-      </div>
-
-      {/* Description */}
+      {/* Description — progressive disclosure */}
       <div className="space-y-1.5">
         <label className="text-[10px] font-black text-[#8D7F72]">توضیحات</label>
         <textarea

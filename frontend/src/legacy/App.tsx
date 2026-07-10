@@ -75,7 +75,6 @@ import GoalSection from './components/GoalSection';
 import GoalDashboard from './components/GoalDashboard';
 import GoalDetailView from './components/GoalDetailView';
 import JournalSection from './components/JournalSection';
-import TaskDetailView from './components/TaskDetailView';
 import AiCoachSection from './components/AiCoachSection';
 import ProfileSection from './components/ProfileSection';
 import ProjectDashboard from './components/ProjectDashboard';
@@ -3060,38 +3059,22 @@ export default function App({
       case 'planner':
         return <PlannerSection />;
       case 'task-detail':
-        const selectedTask = lifeData.tasks.find(t => t.id === selectedTaskId) || (() => {
-          for (const g of lifeData.goals) {
-            for (const p of (g.projects || [])) {
-              const pt = (p.tasks || []).find(t => t.id === selectedTaskId);
-              if (pt) return pt;
-            }
-          }
-          return null;
-        })();
-        if (!selectedTask) {
-          goToTab('tasks');
-          return null;
-        }
+        // Deep-link: show task list with the drawer open for the selected task.
+        // This replaces the old TaskDetailView full-page, which duplicated
+        // functionality now in TaskDetailDrawer.
         return (
-          <TaskDetailView 
-            task={selectedTask}
-            allTasks={[...lifeData.tasks, ...lifeData.goals.flatMap(g => (g.projects || []).flatMap(p => p.tasks || []))]}
+          <TaskManagerSection
+            tasks={lifeData.tasks}
             goals={lifeData.goals}
+            onToggleTask={handleToggleTask}
+            onDeleteTask={handleDeleteTask}
             onUpdateTask={handleUpdateTask}
-            onDeleteTask={(id) => {
-              handleDeleteTask(id);
-              goToTab('tasks');
+            onAddTask={handleAddTask}
+            onViewTaskDetails={(id) => {
+              goToTaskDetail(id);
             }}
-            onBack={() => goToTab('tasks')}
-            activeTimerTaskId={activeTimerTaskId}
-            activeTimerSeconds={activeTimerSeconds}
-            isTimerRunning={isTimerRunning}
-            onStartTimer={handleStartTimer}
-            onPauseTimer={handlePauseTimer}
-            onResumeTimer={handleResumeTimer}
-            onStopTimer={handleStopTimer}
-            onResetTimer={handleResetTimerForTask}
+            todayDate={TODAY_DATE}
+            initialDrawerTaskId={selectedTaskId}
           />
         );
       case 'goals':

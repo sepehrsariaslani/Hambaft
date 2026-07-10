@@ -187,8 +187,13 @@ export default function TaskRowV2({
               <ImportanceBadge importance={task.importance} size="xs" />
             )}
             {isColumnVisible(viewConfig, 'dueDate') && task.dueDate && (
-              <span className={`${dCfg.badgeSize} font-bold text-[#8D7F72] flex items-center gap-0.5`}>
+              <span className={`${dCfg.badgeSize} font-bold flex items-center gap-0.5 ${isOverdue ? 'text-[#c44a3d]' : 'text-[#8D7F72]'}`}>
                 <Calendar className="w-2.5 h-2.5" /> {task.dueDate}
+              </span>
+            )}
+            {isColumnVisible(viewConfig, 'scheduledDate') && task.scheduledDate && !task.dueDate && (
+              <span className={`${dCfg.badgeSize} font-bold text-[#7C8363] flex items-center gap-0.5`}>
+                <Calendar className="w-2.5 h-2.5" /> {task.scheduledDate}
               </span>
             )}
             {isColumnVisible(viewConfig, 'project') && task.sourceProject && (
