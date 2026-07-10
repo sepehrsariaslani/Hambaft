@@ -16,8 +16,10 @@ export default defineConfig({
   publicDir: false,
   build: {
     outDir: resolve(__dirname, '../hambaft/public'),
-    // Clean output dir before build to avoid stale assets
-    emptyOutDir: true,
+    // This app builds directly into Frappe's tracked public directory.
+    // In the production container that path may not be deletable by the build user,
+    // so we keep old assets around and let post-build handle lightweight cleanup.
+    emptyOutDir: false,
     rollupOptions: {
       output: {
         entryFileNames: 'assets/[name].[hash].js',

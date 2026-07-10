@@ -15,8 +15,6 @@ for (const asset of staticAssets) {
   if (existsSync(src)) {
     try {
       mkdirSync(dirname(dst), { recursive: true })
-      // Remove existing file first to avoid permission issues with copyFileSync
-      if (existsSync(dst)) rmSync(dst, { force: true })
       copyFileSync(src, dst)
       console.log('[post-build] copied', asset)
     } catch (err) {
