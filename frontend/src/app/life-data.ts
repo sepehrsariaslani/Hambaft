@@ -92,6 +92,16 @@ function mapTasks(items: any[]): Task[] {
     areaId: item.area || undefined,
     effortType: item.effort_type === 'fixed' || item.effort_type === 'ثابت' ? 'fixed' : 'variable',
     noteBlocks: parseNoteBlocks(item.note_blocks_json),
+    goalId: item.goal || undefined,
+    // Impact awareness fields (enriched by backend when available)
+    impactGoalTitle: item.impact_goal_title || undefined,
+    impactGoalHealth: item.impact_goal_health || undefined,
+    impactGoalProgress: item.impact_goal_progress || undefined,
+    impactProjectTitle: item.impact_project_title || undefined,
+    impactProjectContributionType: item.impact_project_contribution_type || undefined,
+    impactProjectProgress: item.impact_project_progress || undefined,
+    blockedByTitles: item.blocked_by_titles || undefined,
+    blockedByStatuses: item.blocked_by_statuses || undefined,
   }))
 }
 

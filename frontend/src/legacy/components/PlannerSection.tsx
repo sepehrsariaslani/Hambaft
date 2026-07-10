@@ -38,7 +38,11 @@ import {
   getPlannerMonth,
   getTasksGroupedByStatus,
   getAreasWithSummaries,
+  updateTaskImportance,
+  resolveBlockedTasks,
 } from '../../app/hambaft-api'
+import { ImportanceBadge, ImportanceSelector, BlockedTaskIndicator, TaskImpactBanner } from './TaskV2Shared'
+import type { ImportanceLevel } from './TaskV2Shared'
 
 type PlannerBucket = 'inbox' | 'today' | 'next' | 'scheduled' | 'someday'
 type PlannerView = 'buckets' | 'timeline' | 'week' | 'month' | 'board' | 'areas'
@@ -349,8 +353,11 @@ export default function PlannerSection() {
         </button>
 
         <div className="flex-1 min-w-0" onClick={() => toggleExpand(task.id)}>
-          <div className={`text-xs font-bold truncate ${task.status === 'done' ? 'line-through text-gray-400' : 'text-[#2D3025] dark:text-[#E8ECE0]'}`}>
-            {task.title}
+          <div className={`text-xs font-bold truncate flex items-center gap-1.5 ${task.status === 'done' ? 'line-through text-gray-400' : 'text-[#2D3025] dark:text-[#E8ECE0]'}`}>
+            <span>{task.title}</span>
+            {task.importance && task.importance !== 'normal' && (
+              <ImportanceBadge importance={task.importance} size="xs" />
+            )}
           </div>
           {!compact && (
             <div className="flex items-center gap-2 mt-1 flex-wrap">
@@ -425,6 +432,28 @@ export default function PlannerSection() {
             <div className="px-3 pb-3 pt-1 border-t border-[#E6DFD3]/40 space-y-2">
               {task.description && (
                 <p className="text-[10px] text-[#8D7F72]">{task.description}</p>
+              )}
+              {/* Importance Selector */}
+              <div className="flex items-center gap-2">
+                <span className="text-[8px] font-bold text-[#8D7F72]">اهمیت:</span>
+                <ImportanceSelector
+                  value={task.importance || 'normal'}
+                  onChange={(imp) => {
+                    updateTaskImportance(task.id, imp).then(() => {
+                      // Refresh tasks after importance update
+                      loadBucket()
+                    }).catch(() => {})
+                  }}
+                  compact
+                />
+              </div>
+              {/* Impact context */}
+              {(task.impactGoalTitle || task.impactProjectTitle) && task.status !== 'done' && (
+                <TaskImpactBanner task={task} />
+              )}
+              {/* Blocked indicator */}
+              {(task.blockedBy || []).length > 0 && task.status !== 'done' && (
+                <BlockedTaskIndicator task={task} />
               )}
               <div className="flex flex-wrap gap-1">
                 {(['inbox', 'today', 'next', 'in_progress', 'on_hold', 'someday', 'done'] as const).map(b => (
@@ -895,7 +924,7 @@ function mapBackendTask(row: any): Task {
   return {
     id: row.name,
     title: row.title,
-    completed: row.status === 'done',
+    completed: ['done', 'completed', 'انجام‌شده', 'انجام شده'].includes(String(row.status || '')),
     status: row.status || 'inbox',
     createdAt: row.creation ? String(row.creation).slice(0, 10) : today(),
     description: row.description,
@@ -909,11 +938,22 @@ function mapBackendTask(row: any): Task {
     blockedBy: row.blocked_by_json ? (typeof row.blocked_by_json === 'string' ? JSON.parse(row.blocked_by_json) : row.blocked_by_json) : [],
     blocking: row.blocking_json ? (typeof row.blocking_json === 'string' ? JSON.parse(row.blocking_json) : row.blocking_json) : [],
     isDailyHighlight: !!row.is_daily_highlight,
+    importance: row.importance === 'کلیدی' ? 'key' : row.importance === 'نقطه‌عطف' ? 'milestone' : row.importance === 'عادی' ? 'normal' : undefined,
     actualMinutes: row.actual_minutes || undefined,
     estimatedMinutes: row.estimated_minutes || undefined,
     areaId: row.area || undefined,
+    goalId: row.goal || undefined,
     effortType: row.effort_type === 'fixed' || row.effort_type === 'ثابت' ? 'fixed' : row.effort_type === 'variable' || row.effort_type === 'متغیر' ? 'variable' : undefined,
     noteBlocks: row.note_blocks_json ? (typeof row.note_blocks_json === 'string' ? JSON.parse(row.note_blocks_json) : row.note_blocks_json) : [],
+    // Impact fields (enriched by backend)
+    impactGoalTitle: row.impact_goal_title || undefined,
+    impactGoalHealth: row.impact_goal_health || undefined,
+    impactGoalProgress: row.impact_goal_progress || undefined,
+    impactProjectTitle: row.impact_project_title || undefined,
+    impactProjectContributionType: row.impact_project_contribution_type || undefined,
+    impactProjectProgress: row.impact_project_progress || undefined,
+    blockedByTitles: row.blocked_by_titles || undefined,
+    blockedByStatuses: row.blocked_by_statuses || undefined,
   }
 }
 

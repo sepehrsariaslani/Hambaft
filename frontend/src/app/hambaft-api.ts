@@ -228,6 +228,11 @@ export function mapEventToScheduleItem(event: any): ScheduleItem {
 }
 
 export function toTaskPayload(task: Task): Record<string, unknown> {
+  const importanceMap: Record<string, string> = {
+    normal: 'عادی',
+    key: 'کلیدی',
+    milestone: 'نقطه‌عطف',
+  }
   return {
     title: task.title,
     description: task.description || '',
@@ -240,6 +245,12 @@ export function toTaskPayload(task: Task): Record<string, unknown> {
     project: task.projectId || null,
     parent_task: task.parentTaskId || null,
     blocked_by_json: JSON.stringify(task.blockedBy || []),
+    importance: importanceMap[task.importance || 'normal'] || 'عادی',
+    is_daily_highlight: task.isDailyHighlight ? 1 : 0,
+    estimated_minutes: task.estimatedMinutes || null,
+    effort_type: task.effortType === 'fixed' ? 'ثابت' : 'متغیر',
+    area: task.areaId || null,
+    goal: task.goalId || null,
     noteBlocks: task.noteBlocks || [],
   }
 }
@@ -1251,4 +1262,26 @@ export async function recomputeAllGoalProgress() {
 
 export async function getAreaDetail(name: string) {
   return callGet<{ data?: any }>(`hambaft.hambaft.api.get_area_detail?name=${encodeURIComponent(name)}`)
+}
+
+// ─── Task Management V2 APIs ──────────────────────────────────
+
+export async function getTaskImpactDetail(taskName: string) {
+  return call<{ data?: { task?: string; importance?: string; project?: any; goal?: any; blocked_by_details?: any[] } }>(
+    'hambaft.hambaft.api.get_task_impact_detail', { task_name: taskName }
+  )
+}
+
+export async function updateTaskImportance(taskName: string, importance: 'normal' | 'key' | 'milestone') {
+  const importanceMap: Record<string, string> = { normal: 'عادی', key: 'کلیدی', milestone: 'نقطه‌عطف' }
+  return call<{ data?: { task?: any } }>(
+    'hambaft.hambaft.api.update_task_importance',
+    { task_name: taskName, importance: importanceMap[importance] || 'عادی' }
+  )
+}
+
+export async function resolveBlockedTasks() {
+  return call<{ data?: { resolvable_tasks?: any[] } }>(
+    'hambaft.hambaft.api.resolve_blocked_tasks', {}
+  )
 }

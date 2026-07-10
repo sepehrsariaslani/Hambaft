@@ -1,6 +1,8 @@
 import { useState, useMemo, useCallback, lazy, Suspense } from 'react'
 import type { Task, Goal } from '../types'
 import ViewSwitcher, { type ViewMode } from './ViewSwitcher'
+import { ImportanceBadge, ImportanceSelector, BlockedTaskIndicator, TaskImpactBanner, sortTasksByImpact } from './TaskV2Shared'
+import type { ImportanceLevel } from './TaskV2Shared'
 
 const TaskTableView = lazy(() => import('./TaskTableView'))
 const TaskKanbanView = lazy(() => import('./TaskKanbanView'))
@@ -17,10 +19,10 @@ interface TaskManagerSectionProps {
   todayDate: string
 }
 
-type GroupBy = 'none' | 'project' | 'priority' | 'status' | 'category' | 'dueDate'
-type SortBy = 'dueDate' | 'priority' | 'createdAt' | 'title'
+type GroupBy = 'none' | 'project' | 'priority' | 'status' | 'category' | 'dueDate' | 'importance'
+type SortBy = 'dueDate' | 'priority' | 'createdAt' | 'title' | 'impact'
 type FilterStatus = 'all' | 'open' | 'completed'
-type KanbanGroup = 'status' | 'priority' | 'project'
+type KanbanGroup = 'status' | 'priority' | 'project' | 'importance'
 
 const priorityOrder: Record<string, number> = { high: 0, medium: 1, low: 2 }
 const priorityLabels: Record<string, string> = { high: 'بالا', medium: 'متوسط', low: 'پایین' }
@@ -68,6 +70,7 @@ export default function TaskManagerSection({
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('all')
   const [filterPriority, setFilterPriority] = useState<string>('all')
   const [filterCategory, setFilterCategory] = useState<string>('all')
+  const [filterImportance, setFilterImportance] = useState<string>('all')
   const [groupBy, setGroupBy] = useState<GroupBy>('none')
   const [sortBy, setSortBy] = useState<SortBy>('dueDate')
   const [kanbanGroup, setKanbanGroup] = useState<KanbanGroup>('status')
@@ -86,10 +89,14 @@ export default function TaskManagerSection({
       if (filterStatus === 'completed' && !t.completed) return false
       if (filterPriority !== 'all' && t.priority !== filterPriority) return false
       if (filterCategory !== 'all' && t.category !== filterCategory) return false
+      if (filterImportance !== 'all' && t.importance !== filterImportance) return false
       return true
     })
 
     result.sort((a, b) => {
+      if (sortBy === 'impact') {
+        return sortTasksByImpact(a, b)
+      }
       if (sortBy === 'priority') {
         const pa = priorityOrder[a.priority || 'low'] ?? 2
         const pb = priorityOrder[b.priority || 'low'] ?? 2
@@ -134,6 +141,9 @@ export default function TaskManagerSection({
         key = statusLabelsMap[t.status || 'inbox'] || 'صندوق ورودی'
       } else if (groupBy === 'category') {
         key = categoryLabels[t.category || 'other'] || 'سایر'
+      } else if (groupBy === 'importance') {
+        const impLabels: Record<string, string> = { milestone: 'نقطه‌عطف', key: 'کلیدی', normal: 'عادی' }
+        key = impLabels[t.importance || 'normal'] || 'عادی'
       } else if (groupBy === 'dueDate') {
         if (!t.dueDate) key = 'بدون تاریخ'
         else if (t.dueDate < todayDate) key = 'تاریخ گذشته'
@@ -166,17 +176,23 @@ export default function TaskManagerSection({
     const completed = allTasks.filter(t => t.completed).length
     const overdue = allTasks.filter(t => !t.completed && t.dueDate && t.dueDate < todayDate).length
     const highPriority = allTasks.filter(t => !t.completed && t.priority === 'high').length
-    return { total, completed, overdue, highPriority }
+    const milestones = allTasks.filter(t => !t.completed && t.importance === 'milestone').length
+    const keyTasks = allTasks.filter(t => !t.completed && t.importance === 'key').length
+    const blocked = allTasks.filter(t => !t.completed && (t.blockedBy || []).length > 0).length
+    return { total, completed, overdue, highPriority, milestones, keyTasks, blocked }
   }, [allTasks, todayDate])
 
   return (
     <div className="space-y-6">
       {/* Header Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
         <StatCard label="کل تسک‌ها" value={stats.total} color="bg-[#2d3025] text-white" />
         <StatCard label="انجام‌شده" value={stats.completed} color="bg-[#7C8363] text-white" />
         <StatCard label="تاریخ گذشته" value={stats.overdue} color="bg-[#c44a3d] text-white" />
         <StatCard label="اولویت بالا" value={stats.highPriority} color="bg-[#d4a017] text-white" />
+        <StatCard label="نقطه‌عطف" value={stats.milestones} color="bg-amber-700 text-white" />
+        <StatCard label="کلیدی" value={stats.keyTasks} color="bg-blue-700 text-white" />
+        <StatCard label="مسدود" value={stats.blocked} color="bg-red-600 text-white" />
       </div>
 
       {/* Add Task */}
@@ -232,6 +248,13 @@ export default function TaskManagerSection({
             { value: 'finance', label: 'مالی' },
             { value: 'learning', label: 'آموزشی' },
           ]} />
+
+          <Select value={filterImportance} onChange={(v) => setFilterImportance(v)} options={[
+            { value: 'all', label: 'همه اهمیت‌ها' },
+            { value: 'milestone', label: '◆ نقطه‌عطف' },
+            { value: 'key', label: '★ کلیدی' },
+            { value: 'normal', label: '○ عادی' },
+          ]} />
         </div>
 
         <div className="flex flex-wrap gap-3 items-center border-t border-[#E6DFD3] pt-3">
@@ -254,6 +277,7 @@ export default function TaskManagerSection({
                 { value: 'status', label: 'وضعیت' },
                 { value: 'priority', label: 'اولویت' },
                 { value: 'project', label: 'پروژه' },
+                { value: 'importance', label: 'اهمیت' },
               ]} />
             </>
           )}
@@ -266,6 +290,7 @@ export default function TaskManagerSection({
                 { value: 'project', label: 'پروژه' },
                 { value: 'priority', label: 'اولویت' },
                 { value: 'status', label: 'وضعیت' },
+                { value: 'importance', label: 'اهمیت' },
                 { value: 'category', label: 'دسته' },
                 { value: 'dueDate', label: 'تاریخ' },
               ]} />
@@ -274,6 +299,7 @@ export default function TaskManagerSection({
 
           <span className="text-xs font-bold text-[#8D7F72] mr-2">مرتب‌سازی:</span>
           <Segmented value={sortBy} onChange={(v) => setSortBy(v as SortBy)} options={[
+            { value: 'impact', label: 'تأثیر' },
             { value: 'dueDate', label: 'تاریخ' },
             { value: 'priority', label: 'اولویت' },
             { value: 'createdAt', label: 'جدیدترین' },
@@ -422,37 +448,42 @@ function TaskRow({
   todayDate: string
 }) {
   const isOverdue = !task.completed && task.dueDate && task.dueDate < todayDate
+  const hasBlockers = (task.blockedBy || []).length > 0
 
   return (
     <div
-      className={`group flex items-center gap-3 rounded-xl border px-4 py-3 transition-all hover:shadow-sm ${
+      className={`group flex items-start gap-3 rounded-xl border px-4 py-3 transition-all hover:shadow-sm ${
         task.completed
           ? 'border-[#E6DFD3] bg-[#f9f7f2] opacity-60'
           : isOverdue
             ? 'border-[#c44a3d]/30 bg-[#c44a3d]/5'
-            : 'border-[#E6DFD3] bg-white hover:border-[#7C8363]/40'
+            : hasBlockers
+              ? 'border-orange-200 bg-orange-50/30 hover:border-orange-300'
+              : 'border-[#E6DFD3] bg-white hover:border-[#7C8363]/40'
       }`}
     >
-      <input
-        type="checkbox"
-        checked={selected}
-        onChange={onToggleSelect}
-        className="w-4 h-4 rounded border-[#E6DFD3] text-[#7C8363] focus:ring-[#7C8363]/20 cursor-pointer"
-      />
-      <button
-        onClick={onToggle}
-        className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${
-          task.completed
-            ? 'bg-[#7C8363] border-[#7C8363] text-white'
-            : 'border-[#E6DFD3] hover:border-[#7C8363]'
-        }`}
-      >
-        {task.completed && (
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-        )}
-      </button>
+      <div className="flex items-center gap-3 pt-0.5">
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={onToggleSelect}
+          className="w-4 h-4 rounded border-[#E6DFD3] text-[#7C8363] focus:ring-[#7C8363]/20 cursor-pointer"
+        />
+        <button
+          onClick={onToggle}
+          className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${
+            task.completed
+              ? 'bg-[#7C8363] border-[#7C8363] text-white'
+              : 'border-[#E6DFD3] hover:border-[#7C8363]'
+          }`}
+        >
+          {task.completed && (
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          )}
+        </button>
+      </div>
 
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0 space-y-1.5">
         <div className="flex items-center gap-2 flex-wrap">
           <span
             onClick={onView}
@@ -460,6 +491,9 @@ function TaskRow({
           >
             {task.title}
           </span>
+          {task.importance && task.importance !== 'normal' && (
+            <ImportanceBadge importance={task.importance} size="xs" />
+          )}
           {task.isDailyHighlight && (
             <span className="text-[10px] font-bold bg-[#d4a017]/15 text-[#b8860b] px-1.5 py-0.5 rounded">⭐ برجسته</span>
           )}
@@ -467,7 +501,7 @@ function TaskRow({
             <span className="text-[10px] font-bold bg-[#c44a3d]/15 text-[#c44a3d] px-1.5 py-0.5 rounded">تاریخ گذشته</span>
           )}
         </div>
-        <div className="flex items-center gap-2 mt-1 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
           {task.status && (
             <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#f3ebdf] text-[#8D7F72]`}>
               {statusLabelsMap[task.status] || task.status}
@@ -493,6 +527,14 @@ function TaskRow({
             <span className="text-[10px] font-bold text-[#6b5a8a]">🎯 {task.sourceGoal}</span>
           )}
         </div>
+        {/* Blocked indicator */}
+        {hasBlockers && !task.completed && (
+          <BlockedTaskIndicator task={task} />
+        )}
+        {/* Impact context */}
+        {(task.impactGoalTitle || task.impactProjectTitle) && !task.completed && (
+          <TaskImpactBanner task={task} />
+        )}
       </div>
 
       <button

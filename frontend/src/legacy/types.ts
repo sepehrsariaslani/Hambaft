@@ -297,6 +297,21 @@ export interface Task {
   
   // Effort type
   effortType?: 'fixed' | 'variable';
+  
+  // Goal linkage (direct or inherited from project)
+  goalId?: string;
+  
+  // Impact awareness — derived fields for task detail context
+  impactGoalTitle?: string; // title of linked goal (if any)
+  impactGoalHealth?: string; // health state of linked goal
+  impactGoalProgress?: number; // progress % of linked goal
+  impactProjectTitle?: string; // title of linked project
+  impactProjectContributionType?: string; // contribution_type of project to goal
+  impactProjectProgress?: number; // progress % of linked project
+  
+  // Blocked resolution
+  blockedByTitles?: string[]; // titles of blocking tasks (for UX display)
+  blockedByStatuses?: Record<string, string>; // task_id → status of blockers
 }
 
 export interface TaskSession {

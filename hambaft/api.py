@@ -225,6 +225,92 @@ def _loads_json(value, default):
         return default
 
 
+_DONE_STATUSES = {"done", "completed", "انجام‌شده", "انجام شده"}
+
+
+def _enrich_task_with_impact(task_dict):
+    """Add impact-aware fields to a task dict (project/goal context, blocked detail)."""
+    task_dict["impact_goal_title"] = None
+    task_dict["impact_goal_health"] = None
+    task_dict["impact_goal_progress"] = None
+    task_dict["impact_project_title"] = None
+    task_dict["impact_project_contribution_type"] = None
+    task_dict["impact_project_progress"] = None
+    task_dict["blocked_by_titles"] = []
+    task_dict["blocked_by_statuses"] = {}
+
+    project_name = task_dict.get("project")
+    if project_name:
+        proj = frappe.db.get_value(
+            "Hambaft Project", project_name,
+            ["title", "progress", "goal"], as_dict=True,
+        )
+        if proj:
+            task_dict["impact_project_title"] = proj.title
+            task_dict["impact_project_progress"] = proj.progress or 0
+            if proj.goal:
+                goal = frappe.db.get_value(
+                    "Goal", proj.goal,
+                    ["name", "title", "health_state", "progress_percent"], as_dict=True,
+                )
+                if goal:
+                    task_dict["impact_goal_title"] = goal.title
+                    task_dict["impact_goal_health"] = goal.health_state
+                    task_dict["impact_goal_progress"] = goal.progress_percent or 0
+                    # contribution_type
+                    try:
+                        for link in frappe.get_all(
+                            "Goal Project Link",
+                            filters={"parent": proj.goal, "project": project_name},
+                            fields=["contribution_type"], limit=1,
+                        ):
+                            task_dict["impact_project_contribution_type"] = link.contribution_type
+                            break
+                    except Exception:
+                        pass
+
+    # Also check direct goal link
+    goal_name = task_dict.get("goal")
+    if goal_name and not task_dict.get("impact_goal_title"):
+        goal = frappe.db.get_value(
+            "Goal", goal_name,
+            ["title", "health_state", "progress_percent"], as_dict=True,
+        )
+        if goal:
+            task_dict["impact_goal_title"] = goal.title
+            task_dict["impact_goal_health"] = goal.health_state
+            task_dict["impact_goal_progress"] = goal.progress_percent or 0
+
+    # Blocked-by enrichment
+    blocked_raw = task_dict.get("blocked_by_json")
+    blocked = _loads_json(blocked_raw, [])
+    if blocked:
+        titles = []
+        statuses = {}
+        for dep_id in blocked:
+            dep = frappe.db.get_value("Task", dep_id, ["name", "title", "status"], as_dict=True)
+            if dep:
+                titles.append(dep.title or dep.name)
+                statuses[dep.name] = dep.status
+        task_dict["blocked_by_titles"] = titles
+        task_dict["blocked_by_statuses"] = statuses
+
+    return task_dict
+
+
+_IMPORTANCE_ORDER = {"نقطه‌عطف": 0, "کلیدی": 1, "عادی": 2}
+_PRIORITY_ORDER = {"فوری": 0, "بالا": 1, "متوسط": 2, "پایین": 3, "urgent": 0, "high": 1, "medium": 2, "low": 3}
+
+
+def _impact_sort_key(task_dict):
+    """Sort key: importance desc → priority desc → due_date asc → creation desc."""
+    imp = _IMPORTANCE_ORDER.get(task_dict.get("importance", "عادی"), 2)
+    pri = _PRIORITY_ORDER.get(task_dict.get("priority", "متوسط"), 2)
+    due = task_dict.get("due_date") or "9999-12-31"
+    created = task_dict.get("creation") or ""
+    return (imp, pri, due, created)
+
+
 def _save_doc(doc):
     if doc.is_new():
         doc.insert(ignore_permissions=True)
@@ -2897,12 +2983,167 @@ def is_task_blocked(task_name):
     blocked = _loads_json(doc.blocked_by_json, [])
     if not blocked:
         return _api_response({"blocked": False, "reason": None})
-    # Check if any dependency is not done
+    # Check if any dependency is not done (support both English and Persian statuses)
+    done_statuses = {"done", "completed", "انجام‌شده", "انجام شده"}
     for dep_id in blocked:
         dep = frappe.db.get_value("Task", dep_id, "status", as_dict=True)
-        if dep and dep.status != "done":
+        if dep and dep.status not in done_statuses:
             return _api_response({"blocked": True, "reason": f"تسک پیش‌نیاز {dep_id} هنوز انجام نشده"})
     return _api_response({"blocked": False, "reason": None})
+
+
+@frappe.whitelist()
+def get_task_impact_detail(task_name):
+    """Return impact context for a task: linked project, goal, contribution info."""
+    _check_auth()
+    task = frappe.get_doc("Task", task_name)
+    _require_owner("Task", task_name)
+
+    result = {
+        "task": task.name,
+        "importance": task.importance or "عادی",
+        "project": None,
+        "goal": None,
+    }
+
+    # If task has a project, load project context
+    if task.project:
+        proj = frappe.db.get_value(
+            "Hambaft Project", task.project,
+            ["name", "title", "status", "progress", "goal"],
+            as_dict=True,
+        )
+        if proj:
+            result["project"] = {
+                "name": proj.name,
+                "title": proj.title,
+                "status": proj.status,
+                "progress": proj.progress or 0,
+            }
+            # If project has a goal, load goal context
+            if proj.goal:
+                goal = frappe.db.get_value(
+                    "Goal", proj.goal,
+                    ["name", "title", "health_state", "progress_percent", "progress_mode"],
+                    as_dict=True,
+                )
+                if goal:
+                    # Find the contribution_type of this project to its goal
+                    contrib_type = "اجباری"
+                    try:
+                        goal_doc = frappe.get_doc("Goal", proj.goal)
+                        for link in (goal_doc.get("linked_projects") or []):
+                            if link.project == proj.name:
+                                contrib_type = link.contribution_type or "اجباری"
+                                break
+                    except Exception:
+                        pass
+                    result["goal"] = {
+                        "name": goal.name,
+                        "title": goal.title,
+                        "health_state": goal.health_state or "در_مسیر",
+                        "progress_percent": goal.progress_percent or 0,
+                        "progress_mode": goal.progress_mode or "",
+                        "project_contribution_type": contrib_type,
+                    }
+
+    # Also check direct goal link on the task
+    if task.goal and not result.get("goal"):
+        goal = frappe.db.get_value(
+            "Goal", task.goal,
+            ["name", "title", "health_state", "progress_percent", "progress_mode"],
+            as_dict=True,
+        )
+        if goal:
+            result["goal"] = {
+                "name": goal.name,
+                "title": goal.title,
+                "health_state": goal.health_state or "در_مسیر",
+                "progress_percent": goal.progress_percent or 0,
+                "progress_mode": goal.progress_mode or "",
+            }
+
+    # Blocked-by details
+    blocked_by = _loads_json(task.blocked_by_json, [])
+    if blocked_by:
+        blocked_details = []
+        done_statuses = {"done", "completed", "انجام‌شده", "انجام شده"}
+        for dep_id in blocked_by:
+            dep = frappe.db.get_value("Task", dep_id, ["name", "title", "status"], as_dict=True)
+            if dep:
+                blocked_details.append({
+                    "name": dep.name,
+                    "title": dep.title or dep.name,
+                    "status": dep.status,
+                    "is_done": dep.status in done_statuses,
+                })
+        result["blocked_by_details"] = blocked_details
+
+    return _api_response(result)
+
+
+@frappe.whitelist()
+def update_task_importance(task_name, importance):
+    """Quick update of task importance field."""
+    _check_auth()
+    _require_owner("Task", task_name)
+    valid = {"عادی", "کلیدی", "نقطه‌عطف"}
+    if importance not in valid:
+        frappe.throw("اهمیت نامعتبر. مقادیر مجاز: عادی، کلیدی، نقطه‌عطف", frappe.ValidationError)
+    frappe.db.set_value("Task", task_name, "importance", importance, update_modified=True)
+    frappe.db.commit()
+    return _api_response({"task": frappe.get_doc("Task", task_name).as_dict()})
+
+
+@frappe.whitelist()
+def resolve_blocked_tasks():
+    """Return tasks that are blocked but whose blockers are all done — ready to unblock."""
+    _check_auth()
+    done_statuses = {"done", "completed", "انجام‌شده", "انجام شده"}
+    # Find all tasks with blocked_by_json that are not done themselves
+    blocked_tasks = frappe.get_all(
+        "Task",
+        filters={
+            "user": frappe.session.user,
+            "status": ["not in", list(done_statuses)],
+            "blocked_by_json": ["is", "set"],
+        },
+        fields=["name", "title", "status", "blocked_by_json", "importance"],
+        limit_page_length=200,
+    )
+    resolvable = []
+    for t in blocked_tasks:
+        deps = _loads_json(t.blocked_by_json, [])
+        if not deps:
+            continue
+        all_done = True
+        dep_details = []
+        for dep_id in deps:
+            dep_status = frappe.db.get_value("Task", dep_id, ["name", "title", "status"], as_dict=True)
+            if dep_status and dep_status.status not in done_statuses:
+                all_done = False
+                dep_details.append({
+                    "name": dep_status.name,
+                    "title": dep_status.title or dep_status.name,
+                    "status": dep_status.status,
+                    "is_done": False,
+                })
+            elif dep_status:
+                dep_details.append({
+                    "name": dep_status.name,
+                    "title": dep_status.title or dep_status.name,
+                    "status": dep_status.status,
+                    "is_done": True,
+                })
+        if all_done:
+            resolvable.append({
+                "task": t.name,
+                "title": t.title or t.name,
+                "status": t.status,
+                "importance": t.importance or "عادی",
+                "blockers": dep_details,
+            })
+    return _api_response({"resolvable_tasks": resolvable})
 
 
 # ─── Planner Views ──────────────────────────────────────────────
@@ -2915,9 +3156,10 @@ def get_planner_inbox(limit=100):
         filters={"user": frappe.session.user, "status": "inbox"},
         fields="*",
         limit_page_length=cint(limit),
-        order_by="creation desc",
     )
-    return _api_response({"tasks": tasks})
+    enriched = [_enrich_task_with_impact(dict(t)) for t in tasks]
+    enriched.sort(key=_impact_sort_key)
+    return _api_response({"tasks": enriched})
 
 
 @frappe.whitelist()
@@ -2930,22 +3172,22 @@ def get_planner_today(limit=100):
         filters={"user": frappe.session.user, "status": "today"},
         fields="*",
         limit_page_length=cint(limit),
-        order_by="scheduled_time asc, priority asc",
     )
     # Also include scheduled for today
     scheduled = frappe.get_all(
         "Task",
-        filters={"user": frappe.session.user, "scheduled_date": today_str, "status": ["not in", ["done", "dropped"]]},
+        filters={"user": frappe.session.user, "scheduled_date": today_str, "status": ["not in", ["done", "dropped", "انجام‌شده"]]},
         fields="*",
         limit_page_length=cint(limit),
-        order_by="scheduled_time asc, priority asc",
     )
     # Merge without duplicates
     seen = {t.name for t in tasks}
     for s in scheduled:
         if s.name not in seen:
             tasks.append(s)
-    return _api_response({"tasks": tasks})
+    enriched = [_enrich_task_with_impact(dict(t)) for t in tasks]
+    enriched.sort(key=_impact_sort_key)
+    return _api_response({"tasks": enriched})
 
 
 @frappe.whitelist()
@@ -2956,9 +3198,10 @@ def get_planner_next(limit=100):
         filters={"user": frappe.session.user, "status": "next"},
         fields="*",
         limit_page_length=cint(limit),
-        order_by="priority asc, creation desc",
     )
-    return _api_response({"tasks": tasks})
+    enriched = [_enrich_task_with_impact(dict(t)) for t in tasks]
+    enriched.sort(key=_impact_sort_key)
+    return _api_response({"tasks": enriched})
 
 
 @frappe.whitelist()
@@ -2977,9 +3220,10 @@ def get_planner_scheduled(from_date=None, to_date=None, limit=100):
         filters=filters,
         fields="*",
         limit_page_length=cint(limit),
-        order_by="scheduled_date asc, scheduled_time asc",
     )
-    return _api_response({"tasks": tasks})
+    enriched = [_enrich_task_with_impact(dict(t)) for t in tasks]
+    enriched.sort(key=lambda t: (t.get("scheduled_date") or "9999-12-31", t.get("scheduled_time") or "", _impact_sort_key(t)))
+    return _api_response({"tasks": enriched})
 
 
 @frappe.whitelist()
@@ -2990,22 +3234,33 @@ def get_planner_someday(limit=100):
         filters={"user": frappe.session.user, "status": "someday"},
         fields="*",
         limit_page_length=cint(limit),
-        order_by="creation desc",
     )
-    return _api_response({"tasks": tasks})
+    enriched = [_enrich_task_with_impact(dict(t)) for t in tasks]
+    enriched.sort(key=_impact_sort_key)
+    return _api_response({"tasks": enriched})
 
 
 @frappe.whitelist()
 def move_task_to_bucket(task_name, bucket):
     _check_auth()
     _require_owner("Task", task_name)
-    valid_buckets = {"inbox", "not_started", "next", "today", "in_progress", "done", "on_hold", "someday", "dropped"}
-    if bucket not in valid_buckets:
+    # Support both English and Persian status names
+    _PERSIAN_TO_ENGLISH = {
+        "صندوق ورودی": "inbox", "شروع نشده": "not_started", "بعدی": "next",
+        "امروز": "today", "در حال انجام": "in_progress", "انجام‌شده": "done",
+        "انجام شده": "done", "متوقف": "on_hold", "روزی": "someday",
+        "کنار گذاشته": "dropped", "done": "done", "inbox": "inbox",
+        "not_started": "not_started", "next": "next", "today": "today",
+        "in_progress": "in_progress", "on_hold": "on_hold", "someday": "someday",
+        "dropped": "dropped",
+    }
+    normalized = _PERSIAN_TO_ENGLISH.get(bucket)
+    if not normalized:
         frappe.throw("Invalid bucket", frappe.ValidationError)
-    updates = {"status": bucket}
-    if bucket == "done":
+    updates = {"status": normalized}
+    if normalized == "done":
         updates["completed_on"] = now_datetime()
-    elif bucket == "today":
+    elif normalized == "today":
         updates["scheduled_date"] = today()
     frappe.db.set_value("Task", task_name, updates, update_modified=True)
     frappe.db.commit()
@@ -3018,11 +3273,18 @@ def move_task_to_bucket(task_name, bucket):
 def transition_task_status(task_name, new_status):
     _check_auth()
     _require_owner("Task", task_name)
+    _PERSIAN_TO_ENGLISH = {
+        "صندوق ورودی": "inbox", "شروع نشده": "not_started", "بعدی": "next",
+        "امروز": "today", "در حال انجام": "in_progress", "انجام‌شده": "done",
+        "انجام شده": "done", "متوقف": "on_hold", "روزی": "someday",
+        "کنار گذاشته": "dropped",
+    }
+    normalized = _PERSIAN_TO_ENGLISH.get(new_status, new_status)
     valid = {"inbox", "not_started", "next", "today", "in_progress", "done", "on_hold", "someday", "dropped"}
-    if new_status not in valid:
+    if normalized not in valid:
         frappe.throw("Invalid status", frappe.ValidationError)
-    updates = {"status": new_status}
-    if new_status == "done":
+    updates = {"status": normalized}
+    if normalized == "done":
         updates["completed_on"] = now_datetime()
     frappe.db.set_value("Task", task_name, updates, update_modified=True)
     frappe.db.commit()
