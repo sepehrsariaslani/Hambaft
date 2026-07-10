@@ -46,6 +46,7 @@ import {
   getUnscheduledTasks,
   getBlockedTasksView,
   getHighImpactTasks,
+  quickAddTask,
 } from '../../app/hambaft-api'
 import { ImportanceBadge, ImportanceSelector, BlockedTaskIndicator, TaskImpactBanner, ImpactScoreBadge, TaskImpactExplanation } from './TaskV2Shared'
 import type { ImportanceLevel } from './TaskV2Shared'
@@ -127,6 +128,8 @@ export default function PlannerSection() {
   const [activeSession, setActiveSession] = useState<TaskSession | null>(null)
   const [sessionTaskTitle, setSessionTaskTitle] = useState('')
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null)
+  const [quickAddText, setQuickAddText] = useState('')
+  const [quickAdding, setQuickAdding] = useState(false)
 
   // Notion-like view config (columns, density, saved views)
   const [viewConfig, setViewConfig] = useState<ViewConfig>(() =>
@@ -157,6 +160,31 @@ export default function PlannerSection() {
 
   // Areas view state
   const [areasData, setAreasData] = useState<any[]>([])
+
+  // ─── Quick Add ───────────────────────────────────────────────
+  const handleQuickAdd = useCallback(async () => {
+    if (!quickAddText.trim() || quickAdding) return
+    setQuickAdding(true)
+    try {
+      // Map current bucket to context for smart defaults
+      const contextMap: Partial<Record<PlannerBucket, 'planner_today' | 'planner_inbox' | 'planner_next' | 'planner_scheduled'>> = {
+        today: 'planner_today',
+        inbox: 'planner_inbox',
+        next: 'planner_next',
+        scheduled: 'planner_scheduled',
+      }
+      await quickAddTask(quickAddText.trim(), {
+        context: contextMap[activeBucket],
+      })
+      setQuickAddText('')
+      // Refresh current bucket
+      fetchBucket(activeBucket)
+    } catch (e) {
+      console.error('quickAdd error:', e)
+    } finally {
+      setQuickAdding(false)
+    }
+  }, [quickAddText, quickAdding, activeBucket, fetchBucket])
 
   // ─── Bucket data fetching ──────────────────────────────────
   const fetchBucket = useCallback(async (bucket: PlannerBucket) => {
@@ -546,6 +574,31 @@ export default function PlannerSection() {
             )}
           </button>
         ))}
+      </div>
+
+      {/* Quick Add Task */}
+      <div className="flex gap-2">
+        <input
+          type="text"
+          value={quickAddText}
+          onChange={(e) => setQuickAddText(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && handleQuickAdd()}
+          placeholder={
+            activeBucket === 'today' ? 'تسک جدید برای امروز + Enter...' :
+            activeBucket === 'inbox' ? 'تسک جدید به صندوق ورودی + Enter...' :
+            activeBucket === 'next' ? 'تسک جدید بخش بعدی + Enter...' :
+            'تسک جدید + Enter...'
+          }
+          disabled={quickAdding}
+          className="flex-1 min-w-0 px-3 py-2.5 text-xs bg-white dark:bg-[#1C1D17] border border-[#E6DFD3] dark:border-[#3D4133]/50 rounded-xl focus:outline-none focus:border-[#7C8363] font-semibold text-[#2D3025] dark:text-[#E8ECE0] placeholder:text-[#D6CFC3]"
+        />
+        <button
+          onClick={handleQuickAdd}
+          disabled={!quickAddText.trim() || quickAdding}
+          className="px-3 py-2.5 bg-[#7C8363] hover:bg-[#5A5A40] text-white text-[10px] font-bold rounded-xl disabled:opacity-40 transition-all cursor-pointer active:scale-95 shrink-0"
+        >
+          {quickAdding ? '...' : '+ افزودن'}
+        </button>
       </div>
 
       {/* Task List */}

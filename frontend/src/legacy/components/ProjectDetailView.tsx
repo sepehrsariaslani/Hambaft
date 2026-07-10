@@ -501,25 +501,57 @@ export default function ProjectDetailView({
         </div>
       </div>
 
-      {/* GOAL CONTRIBUTION CONTEXT */}
+      {/* GOAL CONTRIBUTION CONTEXT with Health State */}
       {project.goalId && project.goalTitle && (() => {
-        // Try to find this project's contribution data from the goal's linkedProjects
-        // This would come from the parent Goal's linkedProjects if passed down
-        // For now, show basic goal context
+        // Find contribution data from the parent goal's linkedProjects
+        const contribType = project.contributionType || 'mandatory'
+        const contribLabel = contribType === 'mandatory' || contribType === 'اجباری' ? 'اجباری' :
+                             contribType === 'recommended' || contribType === 'پیشنهادی' ? 'پیشنهادی' :
+                             contribType === 'supporting' || contribType === 'پشتیبان' ? 'پشتیبان' : contribType
+        const contribColor = contribLabel === 'اجباری' ? 'bg-red-100 text-red-700 border-red-200' :
+                             contribLabel === 'پیشنهادی' ? 'bg-blue-100 text-blue-700 border-blue-200' :
+                             'bg-gray-100 text-gray-600 border-gray-200'
+        // Health state from project
+        const healthState = (project as any).goalHealthState || ''
+        const healthLabel = healthState === 'در_مسیر' || healthState === 'on_track' ? 'در مسیر' :
+                            healthState === 'در_خطر' || healthState === 'at_risk' ? 'در خطر' :
+                            healthState === 'خارج_از_مسیر' || healthState === 'off_track' ? 'خارج از مسیر' :
+                            healthState === 'نیاز_به_بررسی' || healthState === 'needs_review' ? 'نیاز به بررسی' : ''
+        const healthColor = healthLabel === 'در مسیر' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' :
+                            healthLabel === 'در خطر' ? 'bg-amber-100 text-amber-700 border-amber-200' :
+                            healthLabel === 'خارج از مسیر' ? 'bg-red-100 text-red-700 border-red-200' :
+                            healthLabel === 'نیاز به بررسی' ? 'bg-yellow-100 text-yellow-700 border-yellow-200' : ''
         return (
-          <div className="bg-[#E8ECE0]/20 p-3 rounded-2xl border border-[#DDE2D5] flex items-center gap-3 text-right">
-            <div className="p-1.5 bg-[#7C8363]/10 rounded-lg">
-              <Target className="w-4 h-4 text-[#7C8363]" />
+          <div className="bg-[#E8ECE0]/20 p-3 rounded-2xl border border-[#DDE2D5] space-y-2 text-right">
+            <div className="flex items-center gap-3">
+              <div className="p-1.5 bg-[#7C8363]/10 rounded-lg">
+                <Target className="w-4 h-4 text-[#7C8363]" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <span className="text-[9px] text-[#8D7F72] block">مشارکت در هدف:</span>
+                <span className="text-xs font-bold text-[#2D3025] truncate block">{project.goalTitle}</span>
+              </div>
+              <div className="flex items-center gap-2 text-[9px] font-bold flex-wrap justify-end">
+                <span className={`px-2 py-0.5 rounded-md border ${contribColor}`}>
+                  {contribLabel}
+                </span>
+                {healthLabel && (
+                  <span className={`px-2 py-0.5 rounded-md border ${healthColor}`}>
+                    {healthLabel}
+                  </span>
+                )}
+                <span className="bg-[#F9F1D8] text-[#5A5A40] px-2 py-0.5 rounded-md border border-[#EBE3C8]">
+                  پیشرفت: {qualityProgress}%
+                </span>
+              </div>
             </div>
-            <div className="flex-1 min-w-0">
-              <span className="text-[9px] text-[#8D7F72] block">مشارکت در هدف:</span>
-              <span className="text-xs font-bold text-[#2D3025] truncate block">{project.goalTitle}</span>
-            </div>
-            <div className="flex items-center gap-2 text-[9px] font-bold">
-              <span className="bg-[#F9F1D8] text-[#5A5A40] px-2 py-0.5 rounded-md border border-[#EBE3C8]">
-                پیشرفت پروژه: {progressPercent}%
-              </span>
-            </div>
+            {/* Goal health detail row */}
+            {(healthLabel === 'در خطر' || healthLabel === 'خارج از مسیر') && (
+              <div className="flex items-center gap-2 text-[9px] text-red-600 font-semibold bg-red-50 px-3 py-1.5 rounded-lg border border-red-100">
+                <AlertCircle className="w-3 h-3" />
+                <span>هدف مرتبط {healthLabel} است — اولویت‌بندی پروژه‌های اجباری این هدف مهم است</span>
+              </div>
+            )}
           </div>
         );
       })()}

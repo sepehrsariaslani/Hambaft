@@ -154,12 +154,13 @@ class Task(Document):
         )
 
     def is_blocked(self):
+        _done_statuses = {"done", "completed", "انجام‌شده", "انجام شده"}
         blocked = json.loads(self.blocked_by_json or "[]") if self.blocked_by_json else []
         if not blocked:
             return False, None
         for dep_id in blocked:
             dep_status = frappe.db.get_value("Task", dep_id, "status")
-            if dep_status and dep_status != "done":
+            if dep_status and dep_status not in _done_statuses:
                 dep_title = frappe.db.get_value("Task", dep_id, "title") or dep_id
                 return True, dep_title
         return False, None

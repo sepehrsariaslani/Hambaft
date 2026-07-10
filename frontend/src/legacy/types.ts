@@ -88,6 +88,9 @@ export interface Project {
   trackedMinutes?: number;
   color?: string;
   icon?: string;
+  // Goal contribution context
+  contributionType?: string; // اجباری/پیشنهادی/پشتیبان
+  goalHealthState?: string; // در_مسیر/در_خطر/خارج_از_مسیر/نیاز_به_بررسی
 }
 
 export interface Milestone {

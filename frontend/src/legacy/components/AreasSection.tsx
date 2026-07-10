@@ -401,13 +401,15 @@ export default function AreasSection({ areas, goals, tasks, onSelectGoal, onSele
                   <th className="px-4 py-3 font-black text-[#2D3025] dark:text-[#E8ECE0]">اهداف</th>
                   <th className="px-4 py-3 font-black text-[#2D3025] dark:text-[#E8ECE0]">پروژه‌ها</th>
                   <th className="px-4 py-3 font-black text-[#2D3025] dark:text-[#E8ECE0]">کارها</th>
+                  <th className="px-4 py-3 font-black text-[#2D3025] dark:text-[#E8ECE0]">نقطه‌عطف</th>
+                  <th className="px-4 py-3 font-black text-[#2D3025] dark:text-[#E8ECE0]">کلیدی</th>
                   <th className="px-4 py-3 font-black text-[#2D3025] dark:text-[#E8ECE0]">زمان صرف‌شده</th>
                   <th className="px-4 py-3 font-black text-[#2D3025] dark:text-[#E8ECE0]">پیشرفت</th>
                   <th className="px-4 py-3 font-black text-[#2D3025] dark:text-[#E8ECE0]"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#E6DFD3]/50 dark:divide-[#2D3025]/50">
-                {areaStats.map(({ area, goals: ag, projects: ap, tasks: at, totalTime, completedGoals, totalGoals }) => {
+                {areaStats.map(({ area, goals: ag, projects: ap, tasks: at, totalTime, completedGoals, totalGoals, milestoneTotal, milestoneDone, keyTotal, keyDone }) => {
                   const isEditing = editingId === area.id
                   return (
                     <tr key={area.id} className="hover:bg-[#F9F6EE]/50 dark:hover:bg-[#1B1D16]/50 transition-colors">
@@ -441,6 +443,16 @@ export default function AreasSection({ areas, goals, tasks, onSelectGoal, onSele
                       <td className="px-4 py-3 font-mono text-[#7C8363]">{ag.length}</td>
                       <td className="px-4 py-3 font-mono text-[#9B6B61]">{ap.length}</td>
                       <td className="px-4 py-3 font-mono text-[#5A5A40]">{at.length}</td>
+                      <td className="px-4 py-3">
+                        <span className="text-[10px] font-bold bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded">
+                          {(milestoneDone ?? 0)}/{milestoneTotal ?? 0} ◆
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="text-[10px] font-bold bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">
+                          {(keyDone ?? 0)}/{keyTotal ?? 0} ★
+                        </span>
+                      </td>
                       <td className="px-4 py-3 font-mono text-[#2D3025] dark:text-[#E8ECE0]">{formatTime(totalTime)}</td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">

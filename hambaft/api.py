@@ -520,18 +520,63 @@ def _inject_note_blocks(data):
 
 
 def _project_to_frontend(doc):
+    _done_statuses = {"done", "completed", "انجام‌شده", "انجام شده"}
     task_rows = []
+    milestone_total = 0
+    milestone_done = 0
+    key_total = 0
+    key_done = 0
     for row in doc.get("tasks") or []:
+        imp = getattr(row, "importance", None) or "عادی"
+        is_done = row.status in _done_statuses
+        if imp == "نقطه‌عطف":
+            milestone_total += 1
+            if is_done:
+                milestone_done += 1
+        elif imp == "کلیدی":
+            key_total += 1
+            if is_done:
+                key_done += 1
         task_rows.append({
             "id": row.name,
             "title": row.title,
-            "completed": bool(row.completed or row.status == "انجام‌شده"),
+            "completed": is_done,
             "createdAt": str(getattr(row, "creation", None) or doc.creation or today())[:10],
             "description": row.description or "",
             "dueDate": str(row.due_date)[:10] if getattr(row, "due_date", None) else None,
             "priority": row.priority,
             "status": row.status,
+            "importance": imp,
         })
+
+    # Quality-aware progress
+    total_weight = 0
+    done_weight = 0
+    for row in doc.get("tasks") or []:
+        imp = getattr(row, "importance", None) or "عادی"
+        w = 3 if imp == "نقطه‌عطف" else 2 if imp == "کلیدی" else 1
+        total_weight += w
+        if row.status in _done_statuses:
+            done_weight += w
+    quality_progress = int((done_weight / total_weight) * 100) if total_weight > 0 else 0
+
+    # Goal health state (if project is linked to a goal)
+    goal_health_state = None
+    contribution_type = None
+    if doc.goal:
+        try:
+            link = frappe.get_all(
+                "Goal Project Link",
+                filters={"project": doc.name, "parent": doc.goal, "parenttype": "Goal"},
+                fields=["contribution_type"],
+                limit=1,
+            )
+            if link:
+                contribution_type = link[0].contribution_type
+            goal_doc = frappe.get_doc("Goal", doc.goal)
+            goal_health_state = getattr(goal_doc, "health_state", None)
+        except Exception:
+            pass
 
     return {
         "name": doc.name,
@@ -546,12 +591,19 @@ def _project_to_frontend(doc):
         "start_date": doc.start_date,
         "target_date": doc.target_date,
         "progress": doc.progress or 0,
+        "quality_progress": quality_progress,
+        "milestone_total": milestone_total,
+        "milestone_done": milestone_done,
+        "key_total": key_total,
+        "key_done": key_done,
         "color": doc.color,
         "icon": doc.icon,
         "actual_minutes": doc.actual_minutes or 0,
         "blocked_by_json": doc.blocked_by_json or None,
         "effort_type": doc.effort_type or None,
         "estimated_hours": doc.estimated_hours or None,
+        "contribution_type": contribution_type,
+        "goal_health_state": goal_health_state,
         "tasks": task_rows,
         "creation": str(doc.creation) if getattr(doc, "creation", None) else None,
         "noteBlocks": _extract_note_blocks(doc),
