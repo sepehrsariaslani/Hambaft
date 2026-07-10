@@ -123,8 +123,12 @@ const PRIORITY_COLORS: Record<string, string> = {
   urgent: 'bg-red-100 text-red-700 font-black',
 }
 
-export default function PlannerSection() {
-  const [activeView, setActiveView] = useState<PlannerView>('buckets')
+interface PlannerSectionProps {
+  initialView?: PlannerView
+}
+
+export default function PlannerSection({ initialView }: PlannerSectionProps = {}) {
+  const [activeView, setActiveView] = useState<PlannerView>(initialView || 'buckets')
   const [activeBucket, setActiveBucket] = useState<PlannerBucket>('today')
   const [tasks, setTasks] = useState<Task[]>([])
   const [loading, setLoading] = useState(false)

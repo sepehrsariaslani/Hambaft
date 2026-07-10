@@ -47,9 +47,15 @@ import {
   deleteTaskRecord,
   deleteTransactionRecord,
   deleteWorkoutRecord,
+  finishTaskSession,
+  getActiveTaskSession,
+  getTaskTrackedMinutes,
   logHabitRecord,
   logMoodRecord,
   logWaterRecord,
+  resumeTaskSession,
+  startTaskSession,
+  stopTaskSession,
   updateBankAccountRecord,
   updateContactRecord,
   updateGoalRecord,
@@ -64,15 +70,14 @@ import {
   updateTransactionRecord,
 } from '../app/hambaft-api';
 
-// Import Section Components — primary (eager) + secondary (lazy for code-splitting)
+// Import Section Components — primary (eager)
 import DashboardOverview from './components/DashboardOverview';
 import CalendarSection, { ScheduleItem } from './components/CalendarSection';
 import TaskManagerSection from './components/TaskManagerSection';
-import PlannerSection from './components/PlannerSection';
 import NotionNotesSection from './components/NotionNotesSection';
 import { useNotesStore, initMockPages } from '../notes/useNotesStore';
 
-// Lazy-loaded secondary sections — reduces initial bundle ~40%
+// Lazy-loaded secondary sections — reduces initial bundle ~68%
 const FinanceSection = React.lazy(() => import('./components/FinanceSection'));
 const HabitSection = React.lazy(() => import('./components/HabitSection'));
 const GoalDashboard = React.lazy(() => import('./components/GoalDashboard'));
@@ -88,6 +93,7 @@ const OccasionsSection = React.lazy(() => import('./components/OccasionsSection'
 const AreasSection = React.lazy(() => import('./components/AreasSection'));
 const NotesLayout = React.lazy(() => import('../notes/components/NotesLayout'));
 const NutritionSection = React.lazy(() => import('./components/NutritionSection'));
+const PlannerSection = React.lazy(() => import('./components/PlannerSection'));
 const FitnessSection = React.lazy(() => import('./components/FitnessSection'));
 const MoodSection = React.lazy(() => import('./components/MoodSection'));
 const BalanceReportSection = React.lazy(() => import('./components/BalanceReportSection'));
@@ -153,7 +159,6 @@ const NAVIGATION_GROUPS = [
       { id: 'journal', label: 'دفترچه یادداشت‌ها', icon: BookOpen },
       { id: 'planner', label: 'برنامه‌ریز شخصی', icon: Layers },
       { id: 'tasks', label: 'مدیریت تسک‌ها', icon: FileText },
-      { id: 'inbox', label: 'جعبه ورودی (Inbox)', icon: Info },
       { id: 'calendar', label: 'تقویم توازن زندگی', icon: Calendar },
       { id: 'occasions', label: 'تقویم مناسبت‌ها', icon: Gift },
       { id: 'balance_report', label: 'گزارش توازن زندگی', icon: Activity }
@@ -249,7 +254,7 @@ function tabToPath(tab: string, ids: { taskId?: string | null; goalId?: string |
   switch (tab) {
     case 'coach': return '/coach';
     case 'contacts': return '/contacts';
-    case 'inbox': return '/inbox';
+    case 'inbox': return '/planner';
     case 'journal': return '/journal';
     case 'tasks': return '/tasks';
     case 'mood': return '/mood';
@@ -269,6 +274,12 @@ function tabToPath(tab: string, ids: { taskId?: string | null; goalId?: string |
     case 'documents': return '/documents';
     case 'profile': return '/profile';
     case 'task-detail': return ids.taskId ? `/task/${ids.taskId}` : '/tasks';
+    case 'planner-timeline': return '/planner/timeline';
+    case 'planner-week': return '/planner/week';
+    case 'planner-month': return '/planner/month';
+    case 'planner-board': return '/planner/board';
+    case 'planner-areas': return '/planner/areas';
+    case 'planner': return '/planner';
     case 'home':
     case 'dashboard':
     default:
@@ -601,7 +612,6 @@ export default function App({
   useEffect(() => {
     (async () => {
       try {
-        const { getActiveTaskSession } = await import('../app/hambaft-api');
         const resp: any = await getActiveTaskSession();
         const sess = resp?.data?.session;
         if (sess) {
@@ -621,10 +631,8 @@ export default function App({
     try {
       // If there's already an active session, stop it first
       if (activeSessionId) {
-        const { stopTaskSession } = await import('../app/hambaft-api');
         await stopTaskSession(activeSessionId);
       }
-      const { startTaskSession } = await import('../app/hambaft-api');
       const resp: any = await startTaskSession(taskId);
       const sess = resp?.data?.session;
       if (sess) {
@@ -641,7 +649,6 @@ export default function App({
   const handlePauseTimer = async () => {
     if (!activeSessionId) return;
     try {
-      const { stopTaskSession } = await import('../app/hambaft-api');
       await stopTaskSession(activeSessionId);
       setIsTimerRunning(false);
       // Keep the task as active but paused
@@ -653,7 +660,6 @@ export default function App({
   const handleResumeTimer = async () => {
     if (!activeSessionId) return;
     try {
-      const { resumeTaskSession } = await import('../app/hambaft-api');
       await resumeTaskSession(activeSessionId);
       setIsTimerRunning(true);
       setActiveTimerSeconds(0);
@@ -665,12 +671,10 @@ export default function App({
   const handleStopTimer = async () => {
     if (!activeSessionId) return;
     try {
-      const { finishTaskSession } = await import('../app/hambaft-api');
       const resp: any = await finishTaskSession(activeSessionId);
       // Update task's actualMinutes from the session result
       const sess = resp?.data?.session;
       if (sess?.task) {
-        const { getTaskTrackedMinutes } = await import('../app/hambaft-api');
         const minsResp: any = await getTaskTrackedMinutes(sess.task);
         const totalMinutes = minsResp?.data?.tracked_minutes;
         if (totalMinutes !== undefined) {
@@ -697,7 +701,6 @@ export default function App({
   const handleResetTimerForTask = async (taskId: string) => {
     if (activeSessionId && activeTimerTaskId === taskId) {
       try {
-        const { stopTaskSession } = await import('../app/hambaft-api');
         await stopTaskSession(activeSessionId);
       } catch (e) {
         console.error('resetTimer stop error:', e);
@@ -3080,7 +3083,18 @@ export default function App({
           />
         );
       case 'planner':
-        return <PlannerSection />;
+      case 'inbox':
+        return <PlannerSection initialView="buckets" />;
+      case 'planner-timeline':
+        return <PlannerSection initialView="timeline" />;
+      case 'planner-week':
+        return <PlannerSection initialView="week" />;
+      case 'planner-month':
+        return <PlannerSection initialView="month" />;
+      case 'planner-board':
+        return <PlannerSection initialView="board" />;
+      case 'planner-areas':
+        return <PlannerSection initialView="areas" />;
       case 'task-detail':
         // Deep-link: show task list with the drawer open for the selected task.
         // This replaces the old TaskDetailView full-page, which duplicated
@@ -3479,7 +3493,15 @@ export default function App({
                     activeTab === 'documents' ? 'مدیریت اسناد، بیمه‌ها و مدارک' :
                     activeTab === 'nutrition' ? 'تغذیه، رژیم غذایی و ردیاب بدنی' :
                     activeTab === 'fitness' ? 'باشگاه بدنسازی، تمرینات و هوازی' :
-                    activeTab === 'coach' ? 'کوچ هوشمند همبافت (Gemini AI)' : 'همبافت'
+                    activeTab === 'coach' ? 'کوچ هوشمند همبافت (Gemini AI)' :
+                    activeTab === 'planner' || activeTab === 'inbox' ? 'برنامه‌ریز شخصی' :
+                    activeTab === 'planner-timeline' ? 'برنامه‌ریز — تایم‌لاین' :
+                    activeTab === 'planner-week' ? 'برنامه‌ریز — هفتگی' :
+                    activeTab === 'planner-month' ? 'برنامه‌ریز — ماهانه' :
+                    activeTab === 'planner-board' ? 'برنامه‌ریز — بورد' :
+                    activeTab === 'planner-areas' ? 'برنامه‌ریز — حوزه‌ها' :
+                    activeTab === 'balance_report' ? 'گزارش توازن زندگی' :
+                    activeTab === 'profile' ? 'پروفایل و تنظیمات' : 'همبافت'
                   }</span>
                 </h2>
                 <span className="text-[10px] text-[#8D7F72] dark:text-[#9D978B] font-semibold mt-0.5 block">شنبه، ۱۴ تیر ۱۴۰۵ • زمان‌بندی هماهنگ با بیوریتم مغز شما</span>
