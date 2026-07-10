@@ -1774,6 +1774,18 @@ def get_mood_trend(days=30):
                           "avg_sleep": round(avg_sleep, 1), "trend": logs})
 
 
+@frappe.whitelist()
+def delete_mood_log(name):
+    """Delete a mood energy log entry."""
+    if frappe.session.user == "Guest":
+        frappe.throw("Authentication required", frappe.AuthenticationError)
+    doc = frappe.get_doc("Mood Energy Log", name)
+    if doc.user != frappe.session.user:
+        frappe.throw("Not authorized", frappe.PermissionError)
+    frappe.delete_doc("Mood Energy Log", name)
+    return _api_response({"deleted": name})
+
+
 # ─── Motivation ─────────────────────────────────────────────────
 
 @frappe.whitelist()

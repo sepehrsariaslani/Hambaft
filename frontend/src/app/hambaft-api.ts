@@ -496,6 +496,10 @@ export async function logMoodRecord(entry: { date: string; note?: string; gratit
   })
 }
 
+export async function deleteMoodRecord(name: string) {
+  return call('hambaft.hambaft.api.delete_mood_log', { name })
+}
+
 export async function createTransactionRecord(tx: Omit<Transaction, 'id'>) {
   return call('hambaft.hambaft.api.create_finance_entry', { data: toFinancePayload(tx) })
 }

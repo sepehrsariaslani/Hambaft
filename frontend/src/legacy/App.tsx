@@ -51,6 +51,7 @@ import {
   getActiveTaskSession,
   getTaskTrackedMinutes,
   logHabitRecord,
+  deleteMoodRecord,
   logMoodRecord,
   logWaterRecord,
   resumeTaskSession,
@@ -2719,6 +2720,11 @@ export default function App({
       ...prev,
       moodLogs: (prev.moodLogs || []).filter(l => l.id !== id)
     }));
+    if (!id.startsWith('mld-')) {
+      runSync('delete mood log', async () => {
+        await deleteMoodRecord(id);
+      });
+    }
   };
 
   // 6.2 Contacts CRM Handlers
