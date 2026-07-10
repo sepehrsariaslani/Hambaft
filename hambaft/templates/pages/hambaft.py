@@ -11,9 +11,10 @@ def _get_asset_paths():
 
     Vite outputs to hambaft/public/ with base '/assets/hambaft/'.
     Frappe serves hambaft/public/ at /assets/hambaft/.
-    So hambaft/public/assets/index.HASH.js -> /assets/hambaft/assets/index.HASH.js
     """
-    public_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'public')
+    # templates/pages/ is at hambaft/templates/pages/
+    # public/ is at hambaft/public/
+    public_dir = os.path.join(os.path.dirname(__file__), '..', 'public')
     assets_dir = os.path.join(public_dir, 'assets')
     js_path = None
     css_path = None

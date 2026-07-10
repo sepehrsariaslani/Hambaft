@@ -230,6 +230,9 @@ export default function TaskManagerSection({
   return (
     <div className="space-y-6">
       {/* Header Stats */}
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-[8px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 font-bold">v2.1</span>
+      </div>
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
         <StatCard label="کل تسک‌ها" value={stats.total} color="bg-[#2d3025] text-white" />
         <StatCard label="انجام‌شده" value={stats.completed} color="bg-[#7C8363] text-white" />

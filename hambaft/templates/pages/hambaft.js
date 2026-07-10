@@ -7,12 +7,17 @@ frappe.pages['hambaft'].on_page_load = function (wrapper) {
 
     $(wrapper).find('.layout-main-section').html('<div id="root" class="h-full"></div>');
 
-    // Dynamically load assets from the Vite-generated index.html so hashed filenames work
+    // Dynamically load assets from the Vite-generated index.html so hashed filenames work.
+    // Frappe serves {app}/public/ at /assets/{app}/, so hambaft/public/index.html
+    // is available at /assets/hambaft/index.html.
     if (window.__hambaftAssetsLoaded) return;
     window.__hambaftAssetsLoaded = true;
 
-    fetch('/assets/hambaft/frontend/index.html')
-        .then(r => r.text())
+    fetch('/assets/hambaft/index.html')
+        .then(r => {
+            if (!r.ok) throw new Error('index.html fetch failed: ' + r.status);
+            return r.text();
+        })
         .then(html => {
             const parser = new DOMParser();
             const doc = parser.parseFromString(html, 'text/html');
@@ -37,15 +42,15 @@ frappe.pages['hambaft'].on_page_load = function (wrapper) {
             });
         })
         .catch(err => {
-            console.error('[hambaft] failed to load assets', err);
-            // Fallback to stable paths (if build used stable filenames)
+            console.error('[hambaft] failed to load assets from index.html:', err);
+            // Fallback: try to load stable asset paths directly
             const link = document.createElement('link');
             link.rel = 'stylesheet';
-            link.href = '/assets/hambaft/frontend/assets/index.css';
+            link.href = '/assets/hambaft/assets/index.css';
             document.head.appendChild(link);
             const script = document.createElement('script');
             script.type = 'module';
-            script.src = '/assets/hambaft/frontend/assets/index.js';
+            script.src = '/assets/hambaft/assets/index.js';
             document.body.appendChild(script);
         });
 };

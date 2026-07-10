@@ -1,5 +1,5 @@
-import { readFileSync, writeFileSync, copyFileSync, mkdirSync, readdirSync, statSync, rmSync, existsSync } from 'fs'
-import { resolve, dirname, extname } from 'path'
+import { readFileSync, copyFileSync, mkdirSync, readdirSync, rmSync, existsSync } from 'fs'
+import { resolve, dirname } from 'path'
 import { fileURLToPath } from 'url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -25,10 +25,6 @@ for (const asset of staticAssets) {
 
 // 2. Clean stale hashed assets — keep only assets referenced in the built index.html
 const sourceHtml = resolve(publicTarget, 'index.html')
-const targets = [
-  resolve(rootDir, 'hambaft/www/hambaft.html'),
-  resolve(rootDir, 'hambaft/templates/pages/hambaft.html'),
-]
 
 let html
 try {
@@ -41,13 +37,15 @@ try {
 // Clean stale assets: remove files in assets/ that aren't referenced in the HTML
 const assetsDir = resolve(publicTarget, 'assets')
 if (existsSync(assetsDir)) {
-  const referencedAssets = new Set()
   // Extract all asset references from the HTML
-  const assetRegex = /\/assets\/hambaft\/frontend\/assets\/([^\s"')]+)/g
+  // With base '/assets/hambaft/', Vite generates URLs like /assets/hambaft/assets/index.HASH.js
+  const referencedAssets = new Set()
+  const assetRegex = /\/assets\/hambaft\/assets\/([^\s"')]+)/g
   let match
   while ((match = assetRegex.exec(html)) !== null) {
     referencedAssets.add(match[1])
   }
+
   // Also check CSS for url() references
   for (const ref of referencedAssets) {
     if (ref.endsWith('.css')) {
@@ -86,15 +84,8 @@ if (existsSync(assetsDir)) {
   } catch (e) { /* ignore */ }
 }
 
-// 3. Copy HTML to Frappe templates
-for (const target of targets) {
-  try {
-    mkdirSync(dirname(target), { recursive: true })
-    writeFileSync(target, html, 'utf-8')
-    console.log('[post-build] copied to', target)
-  } catch (err) {
-    console.error('[post-build] failed to write', target, err.message)
-  }
-}
+// 3. Note: We do NOT copy index.html to templates/pages/ or www/ anymore.
+// Those files are Jinja templates that dynamically resolve hashed asset filenames
+// via _get_asset_paths() in their Python context generators.
 
 console.log('[post-build] done')

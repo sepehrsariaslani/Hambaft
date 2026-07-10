@@ -5,7 +5,7 @@ import { resolve } from 'path'
 
 export default defineConfig({
   cacheDir: '/tmp/.vite-cache',
-  base: '/assets/hambaft/frontend/',
+  base: '/assets/hambaft/',
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {

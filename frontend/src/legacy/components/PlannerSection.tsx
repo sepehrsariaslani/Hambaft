@@ -1030,6 +1030,7 @@ export default function PlannerSection() {
         <h2 className="text-sm font-black text-[#2D3025] dark:text-[#E8ECE0] flex items-center gap-2">
           <Layers className="w-4 h-4 text-[#7C8363]" />
           <span>برنامه‌ریز شخصی</span>
+          <span className="text-[8px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 font-bold">v2.1</span>
         </h2>
         <div className="flex items-center gap-2">
           <DensityToggle density={density} onChange={(d) => handleViewConfigChange({ ...viewConfig, density: d })} />

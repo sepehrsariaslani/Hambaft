@@ -10,7 +10,7 @@
   "dir": "rtl",
   "icons": [
     {
-      "src": "./hambaft-icon.svg",
+      "src": "/assets/hambaft/hambaft-icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any"
