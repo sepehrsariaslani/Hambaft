@@ -70,8 +70,24 @@ export interface Project {
   status?: 'waiting' | 'in_progress' | 'paused' | 'completed'; // ستون بورد کانبان
   effortType?: 'fixed' | 'variable';
   estimatedHours?: number;
+  actualMinutes?: number;
+  progress?: number;
+  qualityProgress?: number;
+  priority?: string;
+  startDate?: string;
+  targetDate?: string;
   blockedByJson?: string; // JSON string of blocked-by project IDs
   noteBlocks?: import('../notes/types').Block[]; // Notion-like rich text blocks
+  // Derived stats
+  taskCount?: number;
+  doneTaskCount?: number;
+  milestoneTotal?: number;
+  milestoneDone?: number;
+  keyTotal?: number;
+  keyDone?: number;
+  trackedMinutes?: number;
+  color?: string;
+  icon?: string;
 }
 
 export interface Milestone {
@@ -627,11 +643,19 @@ export interface Area {
   status?: 'active' | 'inactive' | 'archived';
   sortOrder?: number;
   projectCount?: number;
+  activeProjectCount?: number;
   taskCount?: number;
   goalCount?: number;
   completedTasks?: number;
   completedProjects?: number;
+  milestoneTotal?: number;
+  milestoneDone?: number;
+  keyTotal?: number;
+  keyDone?: number;
   trackedMinutes?: number;
+  projects?: any[];
+  tasks?: any[];
+  goals?: any[];
 }
 
 export interface LifeData {

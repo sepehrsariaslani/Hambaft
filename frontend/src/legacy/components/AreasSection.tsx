@@ -55,7 +55,15 @@ export default function AreasSection({ areas, goals, tasks, onSelectGoal, onSele
         completedGoals,
         totalGoals: areaGoals.length,
         projectCount: area.projectCount ?? areaProjects.length,
+        activeProjectCount: area.activeProjectCount,
         taskCount: area.taskCount ?? areaTasks.length,
+        completedTasks: area.completedTasks,
+        completedProjects: area.completedProjects,
+        milestoneTotal: area.milestoneTotal,
+        milestoneDone: area.milestoneDone,
+        keyTotal: area.keyTotal,
+        keyDone: area.keyDone,
+        goalCount: area.goalCount,
       }
     }).filter((s) => s.area.title.toLowerCase().includes(search.toLowerCase()))
   }, [areas, goals, tasks, search])
@@ -292,6 +300,15 @@ export default function AreasSection({ areas, goals, tasks, onSelectGoal, onSele
                       <>
                         <span className="text-[10px] font-bold bg-[#E8ECE0] dark:bg-[#1E2218] text-[#7C8363] px-2 py-1 rounded-lg">{formatTime(totalTime)}</span>
                         <span className="text-[10px] font-bold bg-[#F9F1D8] dark:bg-[#2B201D] text-[#5A5A40] px-2 py-1 rounded-lg">{completedGoals}/{totalGoals} هدف</span>
+                        {(s.activeProjectCount ?? s.projectCount) != null && (
+                          <span className="text-[10px] font-bold bg-blue-50 text-blue-700 px-2 py-1 rounded-lg">{s.activeProjectCount ?? s.projectCount} پروژه</span>
+                        )}
+                        {(s.milestoneTotal ?? 0) > 0 && (
+                          <span className="text-[10px] font-bold bg-amber-50 text-amber-700 px-2 py-1 rounded-lg">◆ {s.milestoneDone ?? 0}/{s.milestoneTotal}</span>
+                        )}
+                        {(s.keyTotal ?? 0) > 0 && (
+                          <span className="text-[10px] font-bold bg-blue-50 text-blue-700 px-2 py-1 rounded-lg">★ {s.keyDone ?? 0}/{s.keyTotal}</span>
+                        )}
                         <button onClick={() => startEdit(area)} className="p-1.5 text-[#8D7F72] hover:text-[#7C8363] hover:bg-[#E8ECE0] rounded-lg cursor-pointer">
                           <Edit2 className="w-3.5 h-3.5" />
                         </button>

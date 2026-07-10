@@ -35,22 +35,36 @@ class HambaftArea(Document):
         )
 
     def get_tracked_minutes(self):
-        """Compute total tracked minutes across all tasks in this area."""
+        """Compute total tracked minutes across all tasks in this area
+        (direct area tasks + tasks in projects belonging to this area)."""
         # Direct area tasks
-        task_names = frappe.get_all(
+        direct_tasks = frappe.get_all(
             "Task",
             filters={"area": self.name, "user": self.user},
             fields=["name"],
         )
-        if not task_names:
+        # Tasks in projects belonging to this area
+        project_names = frappe.get_all(
+            "Hambaft Project",
+            filters={"area": self.name, "user": self.user},
+            fields=["name"],
+        )
+        project_tasks = []
+        for p in project_names:
+            pt = frappe.get_all("Task", filters={"project": p.name}, fields=["name"])
+            project_tasks.extend(pt)
+
+        all_task_names = list(set(
+            [t.name for t in direct_tasks] + [t.name for t in project_tasks]
+        ))
+        if not all_task_names:
             return 0
-        names = [t.name for t in task_names]
         total = frappe.db.sql(
             """SELECT COALESCE(SUM(duration_minutes), 0)
                FROM `tabHambaft Task Session`
                WHERE task IN (%s) AND status IN ('paused', 'completed')"""
-            % ",".join(["%s"] * len(names)),
-            names,
+            % ",".join(["%s"] * len(all_task_names)),
+            all_task_names,
         )[0][0] or 0
         return int(total)
 
@@ -64,8 +78,15 @@ class HambaftArea(Document):
             filters={"area": self.name, "user": self.user},
             fields=["name", "title", "status", "progress_percent"],
         )
-        completed_tasks = sum(1 for t in tasks if t.get("status") == "done")
-        completed_projects = sum(1 for p in projects if p.get("status") == "تکمیل‌شده")
+        completed_tasks = sum(1 for t in tasks if t.get("status") in {"done", "completed", "انجام‌شده", "انجام شده"})
+        completed_projects = sum(1 for p in projects if p.get("status") in {"تکمیل‌شده", "completed"})
+        active_projects = sum(1 for p in projects if p.get("status") in {"فعال", "برنامه‌ریزی", "active"})
+        # Count milestones and key tasks
+        _done = {"done", "completed", "انجام‌شده", "انجام شده"}
+        milestone_total = sum(1 for t in tasks if (t.get("importance") or "عادی") == "نقطه‌عطف")
+        milestone_done = sum(1 for t in tasks if (t.get("importance") or "عادی") == "نقطه‌عطف" and t.get("status") in _done)
+        key_total = sum(1 for t in tasks if (t.get("importance") or "عادی") == "کلیدی")
+        key_done = sum(1 for t in tasks if (t.get("importance") or "عادی") == "کلیدی" and t.get("status") in _done)
         return {
             "area": {
                 "name": self.name,
@@ -76,9 +97,14 @@ class HambaftArea(Document):
                 "status": self.status,
             },
             "project_count": len(projects),
+            "active_project_count": active_projects,
             "completed_projects": completed_projects,
             "task_count": len(tasks),
             "completed_tasks": completed_tasks,
+            "milestone_total": milestone_total,
+            "milestone_done": milestone_done,
+            "key_total": key_total,
+            "key_done": key_done,
             "goal_count": len(goals),
             "tracked_minutes": tracked_minutes,
             "projects": projects,

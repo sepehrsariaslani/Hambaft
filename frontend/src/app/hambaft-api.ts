@@ -1285,3 +1285,37 @@ export async function resolveBlockedTasks() {
     'hambaft.hambaft.api.resolve_blocked_tasks', {}
   )
 }
+
+// ─── Saved Planner View APIs ──────────────────────────────────
+
+export async function getOverdueTasks(limit = 100) {
+  return callGet<{ data?: { tasks?: any[] } }>(`hambaft.hambaft.api.get_overdue_tasks?limit=${limit}`)
+}
+
+export async function getKeyTasks(limit = 100) {
+  return callGet<{ data?: { tasks?: any[] } }>(`hambaft.hambaft.api.get_key_tasks?limit=${limit}`)
+}
+
+export async function getMilestoneTasks(limit = 100) {
+  return callGet<{ data?: { tasks?: any[] } }>(`hambaft.hambaft.api.get_milestone_tasks?limit=${limit}`)
+}
+
+export async function getUnscheduledTasks(limit = 100) {
+  return callGet<{ data?: { tasks?: any[] } }>(`hambaft.hambaft.api.get_unscheduled_tasks?limit=${limit}`)
+}
+
+export async function getBlockedTasksView(limit = 100) {
+  return callGet<{ data?: { tasks?: any[] } }>(`hambaft.hambaft.api.get_blocked_tasks_view?limit=${limit}`)
+}
+
+export async function getHighImpactTasks(limit = 50) {
+  return callGet<{ data?: { tasks?: any[] } }>(`hambaft.hambaft.api.get_high_impact_tasks?limit=${limit}`)
+}
+
+export async function getAreaBoard(areaName: string) {
+  return callGet<{ data?: any }>(`hambaft.hambaft.api.get_area_board?area_name=${encodeURIComponent(areaName)}`)
+}
+
+export async function getProjectDetailWithTasks(projectName: string) {
+  return callGet<{ data?: any }>(`hambaft.hambaft.api.get_project_detail_with_tasks?project_name=${encodeURIComponent(projectName)}`)
+}

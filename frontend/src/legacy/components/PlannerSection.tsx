@@ -40,11 +40,17 @@ import {
   getAreasWithSummaries,
   updateTaskImportance,
   resolveBlockedTasks,
+  getOverdueTasks,
+  getKeyTasks,
+  getMilestoneTasks,
+  getUnscheduledTasks,
+  getBlockedTasksView,
+  getHighImpactTasks,
 } from '../../app/hambaft-api'
 import { ImportanceBadge, ImportanceSelector, BlockedTaskIndicator, TaskImpactBanner, ImpactScoreBadge, TaskImpactExplanation } from './TaskV2Shared'
 import type { ImportanceLevel } from './TaskV2Shared'
 
-type PlannerBucket = 'inbox' | 'today' | 'next' | 'scheduled' | 'someday'
+type PlannerBucket = 'inbox' | 'today' | 'next' | 'scheduled' | 'someday' | 'overdue' | 'key' | 'milestone' | 'blocked' | 'unscheduled' | 'high_impact'
 type PlannerView = 'buckets' | 'timeline' | 'week' | 'month' | 'board' | 'areas'
 
 const BUCKETS: { id: PlannerBucket; label: string; icon: React.ReactNode; color: string }[] = [
@@ -53,6 +59,13 @@ const BUCKETS: { id: PlannerBucket; label: string; icon: React.ReactNode; color:
   { id: 'next', label: 'بعدی', icon: <ArrowRight className="w-4 h-4" />, color: 'text-blue-600' },
   { id: 'scheduled', label: 'زمان‌بندی‌شده', icon: <CalendarDays className="w-4 h-4" />, color: 'text-purple-600' },
   { id: 'someday', label: 'شاید', icon: <Archive className="w-4 h-4" />, color: 'text-gray-500' },
+  // Saved filter views
+  { id: 'overdue', label: 'تاریخ‌گذشته', icon: <AlertCircle className="w-4 h-4" />, color: 'text-red-600' },
+  { id: 'high_impact', label: 'تأثیر بالا', icon: <BarChart3 className="w-4 h-4" />, color: 'text-amber-700' },
+  { id: 'milestone', label: 'نقاط عطف', icon: <CheckCircle2 className="w-4 h-4" />, color: 'text-amber-600' },
+  { id: 'key', label: 'کلیدی', icon: <SkipForward className="w-4 h-4" />, color: 'text-blue-700' },
+  { id: 'blocked', label: 'مسدود', icon: <AlertCircle className="w-4 h-4" />, color: 'text-orange-600' },
+  { id: 'unscheduled', label: 'بدون برنامه', icon: <Layers className="w-4 h-4" />, color: 'text-gray-400' },
 ]
 
 const VIEW_TABS: { id: PlannerView; label: string; icon: React.ReactNode }[] = [
@@ -141,6 +154,12 @@ export default function PlannerSection() {
         case 'next': resp = await getPlannerNext(); break
         case 'scheduled': resp = await getPlannerScheduled(); break
         case 'someday': resp = await getPlannerSomeday(); break
+        case 'overdue': resp = await getOverdueTasks(); break
+        case 'key': resp = await getKeyTasks(); break
+        case 'milestone': resp = await getMilestoneTasks(); break
+        case 'blocked': resp = await getBlockedTasksView(); break
+        case 'unscheduled': resp = await getUnscheduledTasks(); break
+        case 'high_impact': resp = await getHighImpactTasks(); break
       }
       const rows = (resp as any)?.data?.tasks || []
       setTasks(rows.map(mapBackendTask))

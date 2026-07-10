@@ -153,6 +153,22 @@ export default function ProjectDetailView({
   const totalTasks = tasksList.length;
   const progressPercent = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
 
+  // Quality-aware progress: milestone=3x, key=2x, normal=1x
+  const qualityProgress = (() => {
+    let totalWeight = 0, doneWeight = 0
+    for (const t of tasksList) {
+      const w = t.importance === 'milestone' ? 3 : t.importance === 'key' ? 2 : 1
+      totalWeight += w
+      if (t.completed) doneWeight += w
+    }
+    return totalWeight > 0 ? Math.round((doneWeight / totalWeight) * 100) : 0
+  })()
+
+  const milestoneTasks = tasksList.filter(t => t.importance === 'milestone')
+  const keyTasks = tasksList.filter(t => t.importance === 'key')
+  const milestoneDone = milestoneTasks.filter(t => t.completed).length
+  const keyDone = keyTasks.filter(t => t.completed).length
+
   // Filtered Tasks
   const filteredTasks = tasksList.filter(t => 
     t.title.toLowerCase().includes(searchQuery.toLowerCase())
@@ -451,14 +467,36 @@ export default function ProjectDetailView({
           </div>
 
           {/* Progress */}
-          <div className="bg-[#FDFBF7] dark:bg-[#121411] p-3 rounded-xl border border-[#E6DFD3]/60">
-            <div className="flex justify-between text-[9px] font-extrabold mb-1">
-              <span>میزان پیشرفت کارهای پروژه</span>
+          <div className="bg-[#FDFBF7] dark:bg-[#121411] p-3 rounded-xl border border-[#E6DFD3]/60 space-y-2">
+            <div className="flex justify-between text-[9px] font-extrabold">
+              <span>پیشرفت ساده</span>
               <span>{progressPercent}% ({completedTasks} از {totalTasks})</span>
             </div>
             <div className="w-full bg-[#E6DFD3]/40 h-2 rounded-full overflow-hidden">
               <div className="bg-[#7C8363] h-full transition-all duration-300" style={{ width: `${progressPercent}%` }} />
             </div>
+            {qualityProgress !== progressPercent && (
+              <>
+                <div className="flex justify-between text-[9px] font-extrabold">
+                  <span>پیشرفت کیفی <span className="text-[#8D7F72] font-normal">(نقطه‌عطف ×۳، کلیدی ×۲)</span></span>
+                  <span>{qualityProgress}%</span>
+                </div>
+                <div className="w-full bg-[#E6DFD3]/40 h-2 rounded-full overflow-hidden">
+                  <div className="bg-amber-600 h-full transition-all duration-300" style={{ width: `${qualityProgress}%` }} />
+                </div>
+              </>
+            )}
+            {/* Milestone / Key breakdown */}
+            {(milestoneTasks.length > 0 || keyTasks.length > 0) && (
+              <div className="flex gap-3 text-[9px] font-bold pt-1">
+                {milestoneTasks.length > 0 && (
+                  <span className="bg-amber-50 text-amber-700 px-2 py-0.5 rounded-lg">◆ نقطه‌عطف: {milestoneDone}/{milestoneTasks.length}</span>
+                )}
+                {keyTasks.length > 0 && (
+                  <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded-lg">★ کلیدی: {keyDone}/{keyTasks.length}</span>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>

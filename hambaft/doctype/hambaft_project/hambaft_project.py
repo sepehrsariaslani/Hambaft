@@ -82,13 +82,33 @@ class HambaftProject(Document):
         return False, None
 
     def compute_progress(self):
-        """Compute progress based on linked Task statuses."""
+        """Compute progress based on linked Task statuses.
+        Quality-aware: milestone tasks count as 3x, key tasks as 2x, normal as 1x.
+        Also recognizes Persian done statuses.
+        """
+        _done_statuses = {"done", "completed", "انجام‌شده", "انجام شده"}
         tasks = frappe.get_all(
             "Task",
             filters={"project": self.name},
-            fields=["status"],
+            fields=["status", "importance"],
         )
         if not tasks:
             return 0
-        done_count = sum(1 for t in tasks if t.status == "done")
-        return int((done_count / len(tasks)) * 100)
+
+        total_weight = 0
+        done_weight = 0
+        for t in tasks:
+            imp = t.importance or "عادی"
+            if imp == "نقطه‌عطف":
+                w = 3
+            elif imp == "کلیدی":
+                w = 2
+            else:
+                w = 1
+            total_weight += w
+            if t.status in _done_statuses:
+                done_weight += w
+
+        if total_weight <= 0:
+            return 0
+        return int((done_weight / total_weight) * 100)

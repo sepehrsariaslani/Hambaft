@@ -4289,3 +4289,209 @@ def update_goal_completion_policy(goal_name, completion_policy=None, completion_
     doc.save(ignore_permissions=True)
     frappe.db.commit()
     return _api_response({"goal": _goal_to_frontend(doc)})
+
+
+# ─── Saved Planner View APIs ──────────────────────────────────
+
+@frappe.whitelist()
+def get_overdue_tasks(limit=100):
+    """Tasks with due_date in the past that are not done."""
+    _check_auth()
+    _done = ["done", "completed", "انجام‌شده", "انجام شده", "dropped"]
+    tasks = frappe.get_all(
+        "Task",
+        filters={
+            "user": frappe.session.user,
+            "status": ["not in", _done],
+            "due_date": ["<", today()],
+        },
+        fields="*",
+        limit_page_length=cint(limit),
+    )
+    enriched = [_enrich_task_with_impact(dict(t)) for t in tasks]
+    enriched.sort(key=_impact_sort_key)
+    return _api_response({"tasks": enriched})
+
+
+@frappe.whitelist()
+def get_key_tasks(limit=100):
+    """All key-importance tasks not done."""
+    _check_auth()
+    _done = ["done", "completed", "انجام‌شده", "انجام شده", "dropped"]
+    tasks = frappe.get_all(
+        "Task",
+        filters={
+            "user": frappe.session.user,
+            "status": ["not in", _done],
+            "importance": "کلیدی",
+        },
+        fields="*",
+        limit_page_length=cint(limit),
+    )
+    enriched = [_enrich_task_with_impact(dict(t)) for t in tasks]
+    enriched.sort(key=_impact_sort_key)
+    return _api_response({"tasks": enriched})
+
+
+@frappe.whitelist()
+def get_milestone_tasks(limit=100):
+    """All milestone-importance tasks not done."""
+    _check_auth()
+    _done = ["done", "completed", "انجام‌شده", "انجام شده", "dropped"]
+    tasks = frappe.get_all(
+        "Task",
+        filters={
+            "user": frappe.session.user,
+            "status": ["not in", _done],
+            "importance": "نقطه‌عطف",
+        },
+        fields="*",
+        limit_page_length=cint(limit),
+    )
+    enriched = [_enrich_task_with_impact(dict(t)) for t in tasks]
+    enriched.sort(key=_impact_sort_key)
+    return _api_response({"tasks": enriched})
+
+
+@frappe.whitelist()
+def get_unscheduled_tasks(limit=100):
+    """Open tasks with no scheduled_date and no due_date."""
+    _check_auth()
+    _done = ["done", "completed", "انجام‌شده", "انجام شده", "dropped"]
+    tasks = frappe.get_all(
+        "Task",
+        filters={
+            "user": frappe.session.user,
+            "status": ["not in", _done],
+            "scheduled_date": ["is", "not set"],
+            "due_date": ["is", "not set"],
+        },
+        fields="*",
+        limit_page_length=cint(limit),
+    )
+    enriched = [_enrich_task_with_impact(dict(t)) for t in tasks]
+    enriched.sort(key=_impact_sort_key)
+    return _api_response({"tasks": enriched})
+
+
+@frappe.whitelist()
+def get_blocked_tasks_view(limit=100):
+    """All tasks that have blocked_by dependencies and are not done."""
+    _check_auth()
+    _done = ["done", "completed", "انجام‌شده", "انجام شده", "dropped"]
+    # Get all tasks with blocked_by_json set
+    tasks = frappe.get_all(
+        "Task",
+        filters={
+            "user": frappe.session.user,
+            "status": ["not in", _done],
+            "blocked_by_json": ["is", "set"],
+        },
+        fields="*",
+        limit_page_length=cint(limit),
+    )
+    # Filter to only those with actual incomplete blockers
+    _done_set = _done
+    result = []
+    for t in tasks:
+        blocked = _loads_json(t.blocked_by_json, [])
+        if not blocked:
+            continue
+        has_incomplete = False
+        for dep_id in blocked:
+            dep_status = frappe.db.get_value("Task", dep_id, "status")
+            if dep_status and dep_status not in _done_set:
+                has_incomplete = True
+                break
+        if has_incomplete:
+            result.append(dict(t))
+        else:
+            # All blockers done — mark as resolvable
+            d = dict(t)
+            d["_all_blockers_done"] = True
+            result.append(d)
+    enriched = [_enrich_task_with_impact(t) for t in result]
+    enriched.sort(key=_impact_sort_key)
+    return _api_response({"tasks": enriched})
+
+
+@frappe.whitelist()
+def get_high_impact_tasks(limit=50):
+    """Tasks with highest impact score — for focused execution view."""
+    _check_auth()
+    _done = ["done", "completed", "انجام‌شده", "انجام شده", "dropped"]
+    tasks = frappe.get_all(
+        "Task",
+        filters={
+            "user": frappe.session.user,
+            "status": ["not in", _done],
+        },
+        fields="*",
+        limit_page_length=cint(limit) * 3,  # fetch more, filter by score
+    )
+    enriched = [_enrich_task_with_impact(dict(t)) for t in tasks]
+    enriched.sort(key=_impact_sort_key)
+    # Return top N by impact
+    return _api_response({"tasks": enriched[:cint(limit)]})
+
+
+@frappe.whitelist()
+def get_area_board(area_name):
+    """Get area detail with all projects, tasks, and derived stats."""
+    _check_auth()
+    _require_owner("Hambaft Area", area_name)
+    doc = frappe.get_doc("Hambaft Area", area_name)
+    return _api_response(doc.get_summary())
+
+
+@frappe.whitelist()
+def get_project_detail_with_tasks(project_name):
+    """Get project with full task detail, subprojects, and derived stats."""
+    _check_auth()
+    _require_owner("Hambaft Project", project_name)
+    doc = frappe.get_doc("Hambaft Project", project_name)
+    _done_set = {"done", "completed", "انجام‌شده", "انجام شده"}
+    
+    # Tasks with importance stats
+    tasks = frappe.get_all(
+        "Task",
+        filters={"project": project_name, "user": frappe.session.user},
+        fields="*",
+        order_by="importance asc, priority asc, scheduled_date asc",
+    )
+    
+    total = len(tasks)
+    done = sum(1 for t in tasks if t.status in _done_set)
+    milestones = [t for t in tasks if (t.importance or "عادی") == "نقطه‌عطف"]
+    key_tasks_list = [t for t in tasks if (t.importance or "عادی") == "کلیدی"]
+    
+    # Subprojects
+    subprojects = doc.get_subprojects()
+    blocked_by = doc.get_blocked_by_projects()
+    is_blocked, blocked_reason = doc.is_blocked()
+    
+    # Tracked minutes
+    tracked = doc.actual_minutes or 0
+    
+    # Quality-aware progress
+    quality_progress = doc.compute_progress()
+    
+    return _api_response({
+        "project": _project_to_frontend(doc),
+        "tasks": tasks,
+        "subprojects": subprojects,
+        "blocked_by": blocked_by,
+        "is_blocked": is_blocked,
+        "blocked_reason": blocked_reason,
+        "stats": {
+            "total_tasks": total,
+            "done_tasks": done,
+            "milestone_total": len(milestones),
+            "milestone_done": sum(1 for t in milestones if t.status in _done_set),
+            "key_total": len(key_tasks_list),
+            "key_done": sum(1 for t in key_tasks_list if t.status in _done_set),
+            "tracked_minutes": tracked,
+            "quality_progress": quality_progress,
+            "raw_progress": doc.progress or 0,
+        },
+    })
