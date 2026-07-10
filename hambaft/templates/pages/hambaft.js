@@ -13,7 +13,9 @@ frappe.pages['hambaft'].on_page_load = function (wrapper) {
     if (window.__hambaftAssetsLoaded) return;
     window.__hambaftAssetsLoaded = true;
 
-    fetch('/assets/hambaft/index.html')
+    // Cache-bust the index.html fetch so we always get the latest hashed asset paths.
+    const cacheBust = '_t=' + Date.now();
+    fetch('/assets/hambaft/index.html?' + cacheBust)
         .then(r => {
             if (!r.ok) throw new Error('index.html fetch failed: ' + r.status);
             return r.text();
@@ -43,15 +45,6 @@ frappe.pages['hambaft'].on_page_load = function (wrapper) {
         })
         .catch(err => {
             console.error('[hambaft] failed to load assets from index.html:', err);
-            // Fallback: try to load stable asset paths directly
-            const link = document.createElement('link');
-            link.rel = 'stylesheet';
-            link.href = '/assets/hambaft/assets/index.css';
-            document.head.appendChild(link);
-            const script = document.createElement('script');
-            script.type = 'module';
-            script.src = '/assets/hambaft/assets/index.js';
-            document.body.appendChild(script);
         });
 };
 

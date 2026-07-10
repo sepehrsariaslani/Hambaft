@@ -28,6 +28,9 @@ import {
   createScheduleRecord,
   createSleepLogRecord,
   createTaskRecord,
+  quickAddTask,
+  mapBackendTaskPriority,
+  mapBackendTaskCategory,
   createTransactionRecord,
   createWorkoutRecord,
   deleteContactRecord,
@@ -2001,12 +2004,22 @@ export default function App({
   };
 
   const handleAddTaskToProject = (goalId: string, projectId: string, titleOrTask: string | Task) => {
-    const newTask: Task = typeof titleOrTask === 'object' ? titleOrTask : {
+    const title = typeof titleOrTask === 'string' ? titleOrTask : titleOrTask.title;
+
+    // Find the project's linked goal for the goal field
+    const project = findProjectByIds(goalId, projectId);
+    const goalIdForTask = project?.linkedGoalId || goalId;
+
+    // Optimistically add to project's task list for immediate UI feedback
+    const optimisticTask: Task = typeof titleOrTask === 'object' ? titleOrTask : {
       id: `tk-p-${Date.now()}`,
-      title: titleOrTask,
+      title,
       completed: false,
-      createdAt: TODAY_DATE
+      createdAt: TODAY_DATE,
+      projectId,
+      goalId: goalIdForTask !== goalId ? goalIdForTask : undefined,
     };
+
     setLifeData(prev => {
       const updatedGoals = prev.goals.map(g => {
         if (g.id === goalId) {
@@ -2014,7 +2027,7 @@ export default function App({
             if (p.id === projectId) {
               return {
                 ...p,
-                tasks: [...(p.tasks || []), newTask],
+                tasks: [...(p.tasks || []), optimisticTask],
                 status: p.status === 'waiting' ? 'in_progress' : p.status
               };
             }
@@ -2026,7 +2039,66 @@ export default function App({
       });
       return { ...prev, goals: updatedGoals };
     });
-    syncProjectState(goalId, projectId, 'update project');
+
+    // Create a REAL Task DocType record linked to the project — this makes
+    // the task appear in both the project view AND the main task list.
+    runSync('add task to project', async () => {
+      try {
+        const response: any = await quickAddTask(title, {
+          project: projectId,
+          goal: goalIdForTask !== goalId ? goalIdForTask : undefined,
+          context: 'project_detail',
+        });
+        const saved = response?.data?.task;
+        if (saved?.name) {
+          // Replace optimistic ID with real backend ID in project tasks
+          setLifeData(prev => {
+            const updatedGoals = prev.goals.map(g => {
+              if (g.id === goalId) {
+                const updatedProjects = (g.projects || []).map(p => {
+                  if (p.id === projectId) {
+                    return {
+                      ...p,
+                      tasks: (p.tasks || []).map(t =>
+                        t.id === optimisticTask.id
+                          ? { ...t, id: saved.name, status: saved.status || t.status }
+                          : t
+                      ),
+                    };
+                  }
+                  return p;
+                });
+                return { ...g, projects: updatedProjects };
+              }
+              return g;
+            });
+            // Also add the task to the global task list so it appears in TaskManagerSection
+            const mappedTask = {
+              id: saved.name,
+              title: saved.title || title,
+              completed: ['done', 'completed', 'انجام‌شده', 'انجام شده'].includes(String(saved.status || '')),
+              status: saved.status || 'inbox',
+              createdAt: String(saved.creation || TODAY_DATE).slice(0, 10),
+              description: saved.description || '',
+              priority: mapBackendTaskPriority(saved.priority),
+              category: mapBackendTaskCategory(saved.category),
+              projectId: projectId,
+              goalId: goalIdForTask !== goalId ? goalIdForTask : undefined,
+            } as Task;
+            const taskExists = prev.tasks.some(t => t.id === saved.name);
+            return {
+              ...prev,
+              goals: updatedGoals,
+              tasks: taskExists ? prev.tasks : [mappedTask, ...prev.tasks],
+            };
+          });
+        }
+      } catch (e) {
+        console.error('[hambaft] add task to project failed:', e);
+        // Fallback: sync project state the old way (child table rows)
+        syncProjectState(goalId, projectId, 'update project');
+      }
+    });
   };
 
   const handleToggleTaskInProject = (goalId: string, projectId: string, taskId: string) => {
@@ -2066,7 +2138,7 @@ export default function App({
                   if (nextCompleted) {
                     completedFinanceTask = t;
                   }
-                  return { ...t, completed: nextCompleted };
+                  return { ...t, completed: nextCompleted, status: nextCompleted ? 'done' : 'inbox' };
                 }
                 return t;
               });
@@ -2083,6 +2155,15 @@ export default function App({
           return { ...g, projects: updatedProjects };
         }
         return g;
+      });
+
+      // Also update the global task list for the same task
+      const updatedTasks = prev.tasks.map(t => {
+        if (t.id === taskId) {
+          const nextCompleted = !t.completed;
+          return { ...t, completed: nextCompleted, status: nextCompleted ? 'done' : 'inbox' };
+        }
+        return t;
       });
 
       if (completedFinanceTask) {
@@ -2105,9 +2186,17 @@ export default function App({
         }
       }
 
-      return { ...prev, goals: updatedGoals };
+      return { ...prev, goals: updatedGoals, tasks: updatedTasks };
     });
-    syncProjectState(goalId, projectId, 'update project');
+
+    // Persist to backend: if the task has a real (non-temp) ID, update it directly
+    if (!taskId.startsWith('tk-') && !taskId.startsWith('tk-p-')) {
+      runSync('toggle project task', async () => {
+        await updateTaskRecord({ id: taskId, completed: !projectTask?.completed, status: !projectTask?.completed ? 'done' : 'inbox' } as Task);
+      });
+    } else {
+      syncProjectState(goalId, projectId, 'update project');
+    }
   };
 
   const handleToggleTaskTracking = async (goalId: string, projectId: string, taskId: string) => {
@@ -2149,9 +2238,19 @@ export default function App({
         }
         return g;
       });
-      return { ...prev, goals: updatedGoals };
+      // Also remove from global task list
+      const updatedTasks = prev.tasks.filter(t => t.id !== taskId);
+      return { ...prev, goals: updatedGoals, tasks: updatedTasks };
     });
-    syncProjectState(goalId, projectId, 'update project');
+
+    // Delete the real Task record from backend if it's a persisted task
+    if (!taskId.startsWith('tk-') && !taskId.startsWith('tk-p-')) {
+      runSync('delete task from project', async () => {
+        await deleteTaskRecord(taskId);
+      });
+    } else {
+      syncProjectState(goalId, projectId, 'update project');
+    }
   };
 
   const handleToggleProjectCompletion = (goalId: string, projectId: string) => {
