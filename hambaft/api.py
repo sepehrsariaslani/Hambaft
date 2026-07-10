@@ -29,6 +29,20 @@ _PRIORITY_EN_TO_FA = {
 }
 _VALID_TASK_PRIORITIES = {"پایین", "متوسط", "بالا", "فوری"}
 
+# Valid Task status values per DocType Select field
+_VALID_TASK_STATUSES = {"inbox", "not_started", "next", "today", "in_progress", "done", "on_hold", "someday", "dropped"}
+_STATUS_FA_TO_EN = {
+    "صندوق ورودی": "inbox", "ورودی": "inbox",
+    "امروز": "today",
+    "بعدی": "next",
+    "در حال انجام": "in_progress",
+    "انجام‌شده": "done", "انجام شده": "done", "تکمیل‌شده": "done", "completed": "done",
+    "متوقف": "on_hold",
+    "شاید": "someday", "روزی": "someday",
+    "انجام‌نشده": "not_started",
+    "دورانداخته": "dropped",
+}
+
 
 def _normalize_task_priority(value):
     """Map any priority value to a valid Hambaft Task Persian enum."""
@@ -38,6 +52,45 @@ def _normalize_task_priority(value):
     if mapped:
         return mapped
     return "متوسط"
+
+
+def _normalize_task_status(value):
+    """Map any status value to a valid Task DocType Select option."""
+    if not value:
+        return "inbox"
+    v = str(value).strip()
+    if v in _VALID_TASK_STATUSES:
+        return v
+    mapped = _STATUS_FA_TO_EN.get(v)
+    if mapped:
+        return mapped
+    return "inbox"
+
+
+def _normalize_task_data(data):
+    """Sanitize task data before doc.update() to prevent validation errors."""
+    if not isinstance(data, dict):
+        return data
+    # Normalize status to a valid English Select option
+    if "status" in data:
+        data["status"] = _normalize_task_status(data["status"])
+    # Normalize priority to Persian (DocType accepts both, but Persian is canonical)
+    if "priority" in data:
+        data["priority"] = _normalize_task_priority(data["priority"])
+    # Normalize effort_type
+    _effort_map = {"fixed": "ثابت", "variable": "متغیر", "ثابت": "ثابت", "متغیر": "متغیر"}
+    if "effort_type" in data:
+        data["effort_type"] = _effort_map.get(str(data["effort_type"]).strip(), "متغیر")
+    # Null out empty Link fields to prevent "does not exist" errors
+    for link_field in ("project", "area", "goal", "parent_task"):
+        val = data.get(link_field)
+        if val is not None and val != "":
+            # Reject temp IDs like tk-*, gl-*, ar-*
+            if isinstance(val, str) and any(val.startswith(p) for p in ("tk-", "gl-", "ar-", "pr-")):
+                data[link_field] = None
+        else:
+            data[link_field] = None
+    return data
 
 
 def _unwrap_response(value):
@@ -177,13 +230,15 @@ def _water_note_field():
 def _check_auth():
     if frappe.session.user == "Guest":
         frappe.throw("Authentication required", frappe.AuthenticationError)
-
-    settings = frappe.db.get_value(
-        "Profile Settings",
-        {"user": frappe.session.user},
-        ["onboarding_completed", "onboarding_step"],
-        as_dict=True,
-    )
+    try:
+        settings = frappe.db.get_value(
+            "Profile Settings",
+            {"user": frappe.session.user},
+            ["onboarding_completed", "onboarding_step"],
+            as_dict=True,
+        )
+    except Exception:
+        settings = None
     return settings
 
 
@@ -392,14 +447,28 @@ def _persist_settings_updates(doc, updates):
         return doc
 
     if doc.is_new():
-        doc.update(updates)
+        # For new docs, set each field individually to skip invalid ones gracefully
+        for fieldname, value in updates.items():
+            if hasattr(doc, fieldname):
+                try:
+                    setattr(doc, fieldname, value)
+                except Exception:
+                    pass
         return _save_doc(doc)
 
     allowed_updates = {fieldname: value for fieldname, value in updates.items() if hasattr(doc, fieldname)}
     if not allowed_updates:
         return doc
 
-    frappe.db.set_value("Profile Settings", doc.name, allowed_updates, update_modified=True)
+    try:
+        frappe.db.set_value("Profile Settings", doc.name, allowed_updates, update_modified=True)
+    except Exception:
+        # Fallback: set fields one by one to isolate problematic ones
+        for fieldname, value in allowed_updates.items():
+            try:
+                frappe.db.set_value("Profile Settings", doc.name, fieldname, value, update_modified=True)
+            except Exception:
+                frappe.logger().warning(f"_persist_settings_updates: skipping {fieldname}")
     return frappe.get_doc("Profile Settings", doc.name)
 
 
@@ -1041,11 +1110,17 @@ def get_task(name):
 
 
 @frappe.whitelist()
-def create_task(data):
+def create_task(data=None):
     if frappe.session.user == "Guest":
         frappe.throw("Authentication required", frappe.AuthenticationError)
+    if data is None:
+        data = {}
     if isinstance(data, str):
-        data = json.loads(data)
+        try:
+            data = json.loads(data)
+        except (json.JSONDecodeError, ValueError):
+            data = {}
+    data = _normalize_task_data(data)
     data = _inject_note_blocks(data)
     doc = frappe.new_doc("Task")
     doc.update(data)
@@ -1058,11 +1133,17 @@ def create_task(data):
 
 
 @frappe.whitelist()
-def update_task(name, data):
+def update_task(name, data=None):
     if frappe.session.user == "Guest":
         frappe.throw("Authentication required", frappe.AuthenticationError)
+    if data is None:
+        data = {}
     if isinstance(data, str):
-        data = json.loads(data)
+        try:
+            data = json.loads(data)
+        except (json.JSONDecodeError, ValueError):
+            data = {}
+    data = _normalize_task_data(data)
     data = _inject_note_blocks(data)
     doc = frappe.get_doc("Task", name)
     doc.update(data)
@@ -1078,7 +1159,7 @@ def complete_task(name, actual_minutes=None):
     if frappe.session.user == "Guest":
         frappe.throw("Authentication required", frappe.AuthenticationError)
     doc = frappe.get_doc("Task", name)
-    doc.status = "انجام‌شده"
+    doc.status = "done"
     doc.completed_on = now_datetime()
     if actual_minutes:
         doc.actual_minutes = cint(actual_minutes)
@@ -1851,10 +1932,14 @@ def get_settings():
 
 
 @frappe.whitelist()
-def update_settings(data):
+def update_settings(data=None):
     if frappe.session.user == "Guest":
         frappe.throw("Authentication required", frappe.AuthenticationError)
+    if data is None:
+        data = {}
     data = _normalize_settings_update(data)
+    if not data:
+        return _api_response({"settings": _get_settings_payload()})
     doc = _get_or_create_settings_doc()
     doc = _persist_settings_updates(doc, data)
     frappe.db.commit()
@@ -2974,14 +3059,17 @@ def jalali_convert(date_str=None):
 @frappe.whitelist()
 def get_note_pages(limit=100, offset=0):
     _check_auth()
-    rows = frappe.get_all(
-        "Hambaft Note Page",
-        filters=_owner_filter(),
-        fields="*",
-        limit_page_length=cint(limit),
-        start=cint(offset),
-        order_by="modified desc",
-    )
+    try:
+        rows = frappe.get_all(
+            "Hambaft Note Page",
+            filters=_owner_filter(),
+            fields="*",
+            limit_page_length=cint(limit),
+            start=cint(offset),
+            order_by="modified desc",
+        )
+    except frappe.DoesNotExistError:
+        return _api_response({"pages": []})
     for row in rows:
         row["blocks"] = _loads_json(row.get("blocks_json"), [])
     return _api_response({"pages": rows})
@@ -2997,10 +3085,15 @@ def get_note_page(name):
 
 
 @frappe.whitelist()
-def create_note_page(data):
+def create_note_page(data=None):
     _check_auth()
+    if data is None:
+        data = {}
     if isinstance(data, str):
-        data = json.loads(data)
+        try:
+            data = json.loads(data)
+        except (json.JSONDecodeError, ValueError):
+            data = {}
     data = data or {}
     doc = frappe.new_doc("Hambaft Note Page")
     doc.user = frappe.session.user
@@ -3024,11 +3117,16 @@ def create_note_page(data):
 
 
 @frappe.whitelist()
-def update_note_page(name, data):
+def update_note_page(name, data=None):
     _check_auth()
     _require_owner("Hambaft Note Page", name)
+    if data is None:
+        data = {}
     if isinstance(data, str):
-        data = json.loads(data)
+        try:
+            data = json.loads(data)
+        except (json.JSONDecodeError, ValueError):
+            data = {}
     doc = frappe.get_doc("Hambaft Note Page", name)
     if "title" in data:
         doc.title = data["title"]

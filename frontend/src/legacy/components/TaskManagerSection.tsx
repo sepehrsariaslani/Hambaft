@@ -93,11 +93,18 @@ export default function TaskManagerSection({
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set())
 
   // Task detail drawer
-  const [drawerTaskId, setDrawerTaskId] = useState<string | null>(initialDrawerTaskId)
+  const [drawerTaskId, setDrawerTaskId] = useState<string | null>(() => {
+    // Temp/local IDs (tk-*) are never valid for deep-links — they are client-side
+    // placeholders that get replaced by real backend IDs after persistence.
+    if (initialDrawerTaskId && initialDrawerTaskId.startsWith('tk-')) return null
+    return initialDrawerTaskId
+  })
 
-  // Sync deep-link changes
+  // Sync deep-link changes (ignore temp IDs)
   useEffect(() => {
-    if (initialDrawerTaskId) setDrawerTaskId(initialDrawerTaskId)
+    if (initialDrawerTaskId && !initialDrawerTaskId.startsWith('tk-')) {
+      setDrawerTaskId(initialDrawerTaskId)
+    }
   }, [initialDrawerTaskId])
   const drawerTask = drawerTaskId ? allTasks.find(t => t.id === drawerTaskId) || null : null
 

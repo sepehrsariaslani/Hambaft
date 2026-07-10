@@ -350,7 +350,16 @@ export default function App({
   }, [initialTab]);
 
   useEffect(() => {
-    setSelectedTaskId(initialTaskId);
+    // Temp/local IDs (tk-*) are never valid for deep-links — redirect to tasks
+    if (initialTaskId && initialTaskId.startsWith('tk-')) {
+      setSelectedTaskId(null);
+      if (activeTab === 'task-detail') {
+        setActiveTab('tasks');
+        onNavigate?.('/tasks');
+      }
+    } else {
+      setSelectedTaskId(initialTaskId);
+    }
   }, [initialTaskId]);
 
   useEffect(() => {
@@ -512,6 +521,12 @@ export default function App({
   };
 
   const goToTaskDetail = (taskId: string) => {
+    // Temp IDs should not become deep links — open drawer without URL change
+    if (taskId.startsWith('tk-')) {
+      setSelectedTaskId(taskId);
+      setActiveTab('task-detail');
+      return;
+    }
     setSelectedTaskId(taskId);
     setActiveTab('task-detail');
     onNavigate?.(tabToPath('task-detail', { taskId }));
@@ -2456,7 +2471,7 @@ export default function App({
           ...prev,
           tasks: prev.tasks.map(task => (
             task.id === titleOrTask.id
-              ? { ...task, id: saved.name, createdAt: String(saved.creation || task.createdAt).slice(0, 10) }
+              ? { ...task, id: saved.name, status: saved.status || task.status, createdAt: String(saved.creation || task.createdAt).slice(0, 10) }
               : task
           ))
         }));
@@ -2480,7 +2495,7 @@ export default function App({
           ...prev,
           tasks: prev.tasks.map(task => (
             task.id === newTask.id
-              ? { ...task, id: saved.name, createdAt: String(saved.creation || task.createdAt).slice(0, 10) }
+              ? { ...task, id: saved.name, status: saved.status || task.status, createdAt: String(saved.creation || task.createdAt).slice(0, 10) }
               : task
           ))
         }));
@@ -2515,7 +2530,7 @@ export default function App({
           if (nextCompleted) {
             completedFinanceTask = t;
           }
-          return { ...t, completed: nextCompleted };
+          return { ...t, completed: nextCompleted, status: nextCompleted ? 'done' : 'inbox' };
         }
         return t;
       });

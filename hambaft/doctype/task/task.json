@@ -58,7 +58,7 @@
    "fieldname": "status",
    "fieldtype": "Select",
    "label": "وضعیت",
-   "options": "inbox\nnot_started\nnext\ntoday\nin_progress\ndone\non_hold\nsomeday\ndropped",
+   "options": "inbox\nnot_started\nnext\ntoday\nin_progress\ndone\non_hold\nsomeday\ndropped\nصندوق ورودی\nانجام‌شده\nانجام‌نشده\nدر حال انجام\nمتوقف\nشاید",
    "default": "inbox",
    "in_list_view": 1,
    "in_standard_filter": 1
