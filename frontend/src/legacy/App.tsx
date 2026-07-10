@@ -2434,6 +2434,16 @@ export default function App({
 
   const handleAddTask = (titleOrTask: string | Task) => {
     if (typeof titleOrTask === 'object') {
+      if (!titleOrTask.id.startsWith('tk-')) {
+        setLifeData(prev => ({
+          ...prev,
+          tasks: prev.tasks.some(task => task.id === titleOrTask.id)
+            ? prev.tasks.map(task => (task.id === titleOrTask.id ? titleOrTask : task))
+            : [...prev.tasks, titleOrTask]
+        }));
+        return;
+      }
+
       setLifeData(prev => ({
         ...prev,
         tasks: [...prev.tasks, titleOrTask]

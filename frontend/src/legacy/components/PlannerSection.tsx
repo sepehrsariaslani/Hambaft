@@ -47,6 +47,7 @@ import {
   getBlockedTasksView,
   getHighImpactTasks,
   quickAddTask,
+  updateTaskRecord,
 } from '../../app/hambaft-api'
 import { ImportanceBadge, ImportanceSelector, BlockedTaskIndicator, TaskImpactBanner, ImpactScoreBadge, TaskImpactExplanation } from './TaskV2Shared'
 import type { ImportanceLevel } from './TaskV2Shared'
@@ -444,6 +445,10 @@ export default function PlannerSection({ initialView, onNavigate }: PlannerSecti
               area: data.areaId,
               goal: data.goalId,
               importance: data.importance,
+              status: data.status,
+              priority: data.priority,
+              scheduledDate: data.scheduledDate,
+              dueDate: data.dueDate,
               context: data.status === 'today' ? 'planner_today' : data.status === 'next' ? 'planner_next' : 'planner_inbox',
             })
             fetchBucket(activeBucket)
@@ -956,9 +961,14 @@ export default function PlannerSection({ initialView, onNavigate }: PlannerSecti
         <TaskDetailDrawer
           task={drawerTask}
           areas={areasData}
-          onUpdateTask={() => {
-            // Refresh the current bucket after any update
-            fetchBucket(activeBucket)
+          onUpdateTask={(updatedTask) => {
+            setTasks((prev) => prev.map((task) => (task.id === updatedTask.id ? updatedTask : task)))
+            void updateTaskRecord(updatedTask)
+              .then(() => fetchBucket(activeBucket))
+              .catch((error) => {
+                console.error('[hambaft] planner drawer update failed', error)
+                fetchBucket(activeBucket)
+              })
           }}
           onDeleteTask={(id) => {
             deleteTaskRecord(id)

@@ -227,6 +227,43 @@ export function mapEventToScheduleItem(event: any): ScheduleItem {
   }
 }
 
+export function mapBackendTaskRecord(item: any): Task {
+  return {
+    id: item.name,
+    title: item.title || item.subject || item.name,
+    completed: ['done', 'completed', 'انجام‌شده', 'انجام شده'].includes(String(item.status || '')),
+    status: item.status || undefined,
+    createdAt: (item.creation || item.modified || new Date().toISOString()).slice(0, 10),
+    description: item.description || '',
+    dueDate: item.due_date ? String(item.due_date).slice(0, 10) : undefined,
+    scheduledDate: item.scheduled_date ? String(item.scheduled_date) : undefined,
+    scheduledTime: item.scheduled_time ? String(item.scheduled_time).slice(0, 5) : undefined,
+    priority: mapBackendTaskPriority(item.priority),
+    category: mapBackendTaskCategory(item.category),
+    projectId: item.project || undefined,
+    parentTaskId: item.parent_task || undefined,
+    blockedBy: item.blocked_by_json ? JSON.parse(item.blocked_by_json) : [],
+    blocking: item.blocking_json ? JSON.parse(item.blocking_json) : [],
+    isDailyHighlight: !!item.is_daily_highlight,
+    importance: item.importance === 'کلیدی' ? 'key' : item.importance === 'نقطه‌عطف' ? 'milestone' : item.importance === 'عادی' ? 'normal' : undefined,
+    actualMinutes: item.actual_minutes || undefined,
+    estimatedMinutes: item.estimated_minutes || undefined,
+    areaId: item.area || undefined,
+    effortType: item.effort_type === 'fixed' || item.effort_type === 'ثابت' ? 'fixed' : 'variable',
+    noteBlocks: item.noteBlocks || item.note_blocks_json || [],
+    goalId: item.goal || undefined,
+    impactGoalTitle: item.impact_goal_title || undefined,
+    impactGoalHealth: item.impact_goal_health || undefined,
+    impactGoalProgress: item.impact_goal_progress || undefined,
+    impactScore: item.impact_score || undefined,
+    impactProjectTitle: item.impact_project_title || undefined,
+    impactProjectContributionType: item.impact_project_contribution_type || undefined,
+    impactProjectProgress: item.impact_project_progress || undefined,
+    blockedByTitles: item.blocked_by_titles || undefined,
+    blockedByStatuses: item.blocked_by_statuses || undefined,
+  }
+}
+
 export function toTaskPayload(task: Task): Record<string, unknown> {
   const importanceMap: Record<string, string> = {
     normal: 'عادی',

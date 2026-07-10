@@ -3,7 +3,7 @@ import type { Task, Goal } from '../types'
 import ViewSwitcher, { type ViewMode } from './ViewSwitcher'
 import { ImportanceBadge, ImportanceSelector, BlockedTaskIndicator, TaskImpactBanner, ImpactScoreBadge, sortTasksByImpact } from './TaskV2Shared'
 import type { ImportanceLevel } from './TaskV2Shared'
-import { updateTaskImportance, quickAddTask, bulkUpdateTasks, deleteTaskRecord } from '../../app/hambaft-api'
+import { updateTaskImportance, quickAddTask, bulkUpdateTasks, deleteTaskRecord, mapBackendTaskRecord } from '../../app/hambaft-api'
 import { ColumnConfigurator } from './ColumnConfigurator'
 import { DensityToggle } from './DensityToggle'
 import { type ViewConfig, type DensityMode, type ColumnId, DENSITY_CONFIG, isColumnVisible, getOrInitViewConfig, setViewConfig } from './ViewConfigStore'
@@ -197,15 +197,22 @@ export default function TaskManagerSection({
     scheduledDate?: string; dueDate?: string
   }) => {
     try {
-      const importanceMap: Record<string, string> = { normal: 'عادی', key: 'کلیدی', milestone: 'نقطه‌عطف' }
-      await quickAddTask(data.title, {
+      const response: any = await quickAddTask(data.title, {
         project: data.projectId,
         area: data.areaId,
         goal: data.goalId,
         importance: data.importance,
+        status: data.status,
+        priority: data.priority,
+        scheduledDate: data.scheduledDate,
+        dueDate: data.dueDate,
         context: 'task_manager',
       })
-      // Refresh — call onAddTask to trigger parent refresh
+      const saved = response?.data?.task
+      if (saved?.name) {
+        onAddTask(mapBackendTaskRecord(saved))
+        return
+      }
       onAddTask(data.title)
     } catch (e) {
       // Fallback to legacy add
