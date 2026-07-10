@@ -846,7 +846,13 @@ export default function App({
   };
 
   const handleToggleScheduleItem = (id: string) => {
+    const current = scheduleItems.find(item => item.id === id);
     setScheduleItems(prev => prev.map(item => item.id === id ? { ...item, completed: !item.completed } : item));
+    if (current && !id.startsWith('s-')) {
+      runSync('toggle schedule item', async () => {
+        await updateScheduleRecord(id, { ...current, completed: !current.completed });
+      });
+    }
   };
 
   const handleDeleteScheduleItem = (id: string) => {
@@ -2375,6 +2381,7 @@ export default function App({
   };
 
   const handleToggleDailyHighlight = (id: string) => {
+    const task = lifeData.tasks.find(t => t.id === id) || lifeData.goals.flatMap(g => (g.projects || []).flatMap(p => p.tasks || [])).find(t => t.id === id);
     setLifeData(prev => {
       const updatedTasks = prev.tasks.map(t => t.id === id ? { ...t, isDailyHighlight: !t.isDailyHighlight } : t);
       const updatedGoals = prev.goals.map(g => {
@@ -2386,6 +2393,11 @@ export default function App({
       });
       return { ...prev, tasks: updatedTasks, goals: updatedGoals };
     });
+    if (task) {
+      runSync('toggle daily highlight', async () => {
+        await updateTaskRecord({ ...task, isDailyHighlight: !task.isDailyHighlight });
+      });
+    }
   };
 
   const handleAddTask = (titleOrTask: string | Task) => {
