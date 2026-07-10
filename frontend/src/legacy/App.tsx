@@ -87,6 +87,7 @@ import OccasionsSection from './components/OccasionsSection';
 import NotionNotesSection from './components/NotionNotesSection';
 import TaskManagerSection from './components/TaskManagerSection';
 import AreasSection from './components/AreasSection';
+import PlannerSection from './components/PlannerSection';
 import NotesLayout from '../notes/components/NotesLayout';
 import { useNotesStore, initMockPages } from '../notes/useNotesStore';
 import NutritionSection from './components/NutritionSection';
@@ -149,10 +150,11 @@ const NAVIGATION_GROUPS = [
       { id: 'contacts', label: 'مخاطبان و صمیمیت (CRM)', icon: Users }
     ]
   },
-  {
+    {
     title: 'برنامه‌ریزی و زمان',
     items: [
       { id: 'journal', label: 'دفترچه یادداشت‌ها', icon: BookOpen },
+      { id: 'planner', label: 'برنامه‌ریز شخصی', icon: Layers },
       { id: 'tasks', label: 'مدیریت تسک‌ها', icon: FileText },
       { id: 'inbox', label: 'جعبه ورودی (Inbox)', icon: Info },
       { id: 'calendar', label: 'تقویم توازن زندگی', icon: Calendar },
@@ -3053,6 +3055,8 @@ export default function App({
             todayDate={TODAY_DATE}
           />
         );
+      case 'planner':
+        return <PlannerSection />;
       case 'task-detail':
         const selectedTask = lifeData.tasks.find(t => t.id === selectedTaskId) || (() => {
           for (const g of lifeData.goals) {

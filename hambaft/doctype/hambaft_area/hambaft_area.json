@@ -29,6 +29,20 @@
    "label": "آیکون"
   },
   {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "وضعیت",
+   "options": "فعال\nغیرفعال\nآرشیو",
+   "default": "فعال",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "sort_order",
+   "fieldtype": "Int",
+   "label": "ترتیب",
+   "default": 0
+  },
+  {
    "fieldname": "user",
    "fieldtype": "Link",
    "label": "کاربر",

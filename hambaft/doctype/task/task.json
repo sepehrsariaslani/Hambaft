@@ -1,7 +1,7 @@
 {
  "name": "Task",
  "creation": "2026-01-01 00:00:00",
- "modified": "2026-01-01 00:00:00",
+ "modified": "2026-07-10 00:00:00",
  "modified_by": "Administrator",
  "owner": "Administrator",
  "docstatus": 0,
@@ -35,6 +35,12 @@
    "options": "Goal"
   },
   {
+   "fieldname": "parent_task",
+   "fieldtype": "Link",
+   "label": "تسک والد",
+   "options": "Task"
+  },
+  {
    "fieldname": "priority",
    "fieldtype": "Select",
    "label": "اولویت",
@@ -46,10 +52,20 @@
    "fieldname": "status",
    "fieldtype": "Select",
    "label": "وضعیت",
-   "options": "انجام‌نشده\nدر حال انجام\nانجام‌شده\nلغو‌شده",
-   "default": "انجام‌نشده",
+   "options": "inbox\nnot_started\nnext\ntoday\nin_progress\ndone\non_hold\nsomeday\ndropped",
+   "default": "inbox",
    "in_list_view": 1,
    "in_standard_filter": 1
+  },
+  {
+   "fieldname": "scheduled_date",
+   "fieldtype": "Date",
+   "label": "تاریخ برنامه‌ریزی"
+  },
+  {
+   "fieldname": "scheduled_time",
+   "fieldtype": "Time",
+   "label": "زمان برنامه‌ریزی"
   },
   {
    "fieldname": "due_date",
@@ -71,7 +87,13 @@
   {
    "fieldname": "actual_minutes",
    "fieldtype": "Int",
-   "label": "زمان واقعی (دقیقه)"
+   "label": "زمان واقعی (دقیقه)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "blocked_by_json",
+   "fieldtype": "Text",
+   "label": "تسک‌های پیش‌نیاز (JSON)"
   },
   {
    "fieldname": "is_recurring",

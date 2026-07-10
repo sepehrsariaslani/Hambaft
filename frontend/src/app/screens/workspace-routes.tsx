@@ -26,6 +26,7 @@ export type WorkspaceTab =
   | 'task-detail'
   | 'areas'
   | 'notes'
+  | 'planner'
 
 type WorkspaceRouteConfig = {
   path: string
@@ -58,6 +59,7 @@ export const workspaceRouteConfigs: WorkspaceRouteConfig[] = [
   { path: 'task/:taskId', tab: 'task-detail' },
   { path: 'areas', tab: 'areas' },
   { path: 'notes', tab: 'notes' },
+  { path: 'planner', tab: 'planner' },
 ]
 
 export function buildWorkspaceRoutes(): RouteObject[] {

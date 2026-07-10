@@ -152,24 +152,43 @@ export interface Task {
   id: string;
   title: string;
   completed: boolean;
-  status?: string; // Backend status: 'انجام‌شده' | 'انجام‌نشده' | 'در حال انجام' | 'لغو‌شده'
+  status?: 'inbox' | 'not_started' | 'next' | 'today' | 'in_progress' | 'done' | 'on_hold' | 'someday' | 'dropped';
   createdAt: string;
   description?: string;
   dueDate?: string; // YYYY-MM-DD
+  scheduledDate?: string; // YYYY-MM-DD
+  scheduledTime?: string; // HH:MM
   priority?: 'low' | 'medium' | 'high';
   category?: 'work' | 'personal' | 'health' | 'finance' | 'learning' | 'other';
   subTasks?: SubTask[];
-  totalTimeSpent?: number; // Total spent time in seconds
+  totalTimeSpent?: number; // Total spent time in seconds (derived from sessions)
   isTracking?: boolean;
   trackingStartTime?: number; // Epoch timestamp in ms when tracker started
   milestoneId?: string;
   googleTaskId?: string;
   
-  // ویژگی‌های جدید
+  // Planner hierarchy & dependencies
   projectId?: string; // پیوند به پروژه
+  parentTaskId?: string; // پیوند به تسک والد
+  childTaskIds?: string[]; // شناسه تسک‌های فرزند
+  blockedBy?: string[]; // شناسه تسک‌های پیش‌نیاز
+  isBlocked?: boolean; // derived
   isDailyHighlight?: boolean; // تسک برجسته روزانه
-  dependencies?: string[]; // پیش‌نیازها (شناسه تسک‌های دیگر)
   noteBlocks?: import('../notes/types').Block[]; // Notion-like rich text blocks
+  
+  // Session tracking
+  actualMinutes?: number; // derived from backend sessions
+  activeSessionId?: string;
+}
+
+export interface TaskSession {
+  id: string;
+  taskId: string;
+  startedAt: string;
+  stoppedAt?: string;
+  durationMinutes: number;
+  status: 'active' | 'paused' | 'completed';
+  notes?: string;
 }
 
 export type MoodType = 'excited' | 'happy' | 'neutral' | 'tired' | 'sad' | 'stressed';

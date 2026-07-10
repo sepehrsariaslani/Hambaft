@@ -2586,3 +2586,326 @@ def delete_note_page(name):
     frappe.delete_doc("Hambaft Note Page", name, ignore_permissions=True)
     frappe.db.commit()
     return _api_response({"ok": True})
+
+
+# ─── Planner Task Sessions ──────────────────────────────────────
+
+@frappe.whitelist()
+def start_task_session(task):
+    _check_auth()
+    # Stop any existing active session for this user
+    active = frappe.get_all(
+        "Hambaft Task Session",
+        filters={"user": frappe.session.user, "status": "active"},
+        fields=["name"],
+        limit_page_length=1,
+    )
+    for row in active:
+        s = frappe.get_doc("Hambaft Task Session", row.name)
+        s.status = "paused"
+        s.stopped_at = now_datetime()
+        if s.started_at:
+            delta = datetime.strptime(str(s.stopped_at), "%Y-%m-%d %H:%M:%S.%f") - datetime.strptime(str(s.started_at), "%Y-%m-%d %H:%M:%S.%f")
+            s.duration_minutes = int(delta.total_seconds() / 60)
+        s.save(ignore_permissions=True)
+    # Create new session
+    doc = frappe.new_doc("Hambaft Task Session")
+    doc.task = task
+    doc.user = frappe.session.user
+    doc.started_at = now_datetime()
+    doc.status = "active"
+    doc.duration_minutes = 0
+    doc.insert(ignore_permissions=True)
+    frappe.db.commit()
+    return _api_response({"session": doc.as_dict()})
+
+
+@frappe.whitelist()
+def stop_task_session(session_name):
+    _check_auth()
+    doc = frappe.get_doc("Hambaft Task Session", session_name)
+    _require_owner("Hambaft Task Session", session_name)
+    doc.status = "paused"
+    doc.stopped_at = now_datetime()
+    if doc.started_at:
+        delta = datetime.strptime(str(doc.stopped_at), "%Y-%m-%d %H:%M:%S.%f") - datetime.strptime(str(doc.started_at), "%Y-%m-%d %H:%M:%S.%f")
+        doc.duration_minutes = int(delta.total_seconds() / 60)
+    doc.save(ignore_permissions=True)
+    # Update task actual_minutes
+    _update_task_actual_minutes(doc.task)
+    frappe.db.commit()
+    return _api_response({"session": doc.as_dict()})
+
+
+@frappe.whitelist()
+def resume_task_session(session_name):
+    _check_auth()
+    doc = frappe.get_doc("Hambaft Task Session", session_name)
+    _require_owner("Hambaft Task Session", session_name)
+    # Pause any other active session
+    active = frappe.get_all(
+        "Hambaft Task Session",
+        filters={"user": frappe.session.user, "status": "active", "name": ["!=", session_name]},
+        fields=["name"],
+    )
+    for row in active:
+        s = frappe.get_doc("Hambaft Task Session", row.name)
+        s.status = "paused"
+        s.stopped_at = now_datetime()
+        if s.started_at:
+            delta = datetime.strptime(str(s.stopped_at), "%Y-%m-%d %H:%M:%S.%f") - datetime.strptime(str(s.started_at), "%Y-%m-%d %H:%M:%S.%f")
+            s.duration_minutes = int(delta.total_seconds() / 60)
+        s.save(ignore_permissions=True)
+    doc.status = "active"
+    doc.started_at = now_datetime()
+    doc.stopped_at = None
+    doc.save(ignore_permissions=True)
+    frappe.db.commit()
+    return _api_response({"session": doc.as_dict()})
+
+
+@frappe.whitelist()
+def finish_task_session(session_name):
+    _check_auth()
+    doc = frappe.get_doc("Hambaft Task Session", session_name)
+    _require_owner("Hambaft Task Session", session_name)
+    doc.status = "completed"
+    doc.stopped_at = now_datetime()
+    if doc.started_at:
+        delta = datetime.strptime(str(doc.stopped_at), "%Y-%m-%d %H:%M:%S.%f") - datetime.strptime(str(doc.started_at), "%Y-%m-%d %H:%M:%S.%f")
+        doc.duration_minutes = int(delta.total_seconds() / 60)
+    doc.save(ignore_permissions=True)
+    _update_task_actual_minutes(doc.task)
+    frappe.db.commit()
+    return _api_response({"session": doc.as_dict()})
+
+
+def _update_task_actual_minutes(task_name):
+    total = frappe.db.sql(
+        "SELECT SUM(duration_minutes) FROM `tabHambaft Task Session` WHERE task=%s AND status IN ('paused', 'completed')",
+        task_name
+    )[0][0] or 0
+    frappe.db.set_value("Task", task_name, "actual_minutes", cint(total))
+
+
+@frappe.whitelist()
+def get_task_sessions(task, limit=50):
+    _check_auth()
+    sessions = frappe.get_all(
+        "Hambaft Task Session",
+        filters={"task": task, "user": frappe.session.user},
+        fields="*",
+        limit_page_length=cint(limit),
+        order_by="started_at desc",
+    )
+    return _api_response({"sessions": sessions})
+
+
+@frappe.whitelist()
+def get_active_session():
+    _check_auth()
+    active = frappe.get_all(
+        "Hambaft Task Session",
+        filters={"user": frappe.session.user, "status": "active"},
+        fields="*",
+        limit_page_length=1,
+        order_by="started_at desc",
+    )
+    return _api_response({"session": active[0] if active else None})
+
+
+# ─── Task Hierarchy ─────────────────────────────────────────────
+
+@frappe.whitelist()
+def get_task_children(parent_task):
+    _check_auth()
+    children = frappe.get_all(
+        "Task",
+        filters={"parent_task": parent_task, "user": frappe.session.user},
+        fields="*",
+        order_by="creation asc",
+    )
+    return _api_response({"tasks": children})
+
+
+@frappe.whitelist()
+def get_task_hierarchy(task_name):
+    _check_auth()
+    task = frappe.get_doc("Task", task_name).as_dict()
+    task["children"] = frappe.get_all(
+        "Task",
+        filters={"parent_task": task_name, "user": frappe.session.user},
+        fields="*",
+        order_by="creation asc",
+    )
+    task["blocked_by"] = _loads_json(task.get("blocked_by_json"), [])
+    return _api_response({"task": task})
+
+
+# ─── Task Dependencies ──────────────────────────────────────────
+
+@frappe.whitelist()
+def add_task_dependency(task_name, depends_on_task):
+    _check_auth()
+    doc = frappe.get_doc("Task", task_name)
+    _require_owner("Task", task_name)
+    blocked = _loads_json(doc.blocked_by_json, [])
+    if depends_on_task not in blocked:
+        blocked.append(depends_on_task)
+        doc.blocked_by_json = json.dumps(blocked, ensure_ascii=False)
+        doc.save(ignore_permissions=True)
+        frappe.db.commit()
+    return _api_response({"blocked_by": blocked})
+
+
+@frappe.whitelist()
+def remove_task_dependency(task_name, depends_on_task):
+    _check_auth()
+    doc = frappe.get_doc("Task", task_name)
+    _require_owner("Task", task_name)
+    blocked = _loads_json(doc.blocked_by_json, [])
+    if depends_on_task in blocked:
+        blocked.remove(depends_on_task)
+        doc.blocked_by_json = json.dumps(blocked, ensure_ascii=False)
+        doc.save(ignore_permissions=True)
+        frappe.db.commit()
+    return _api_response({"blocked_by": blocked})
+
+
+@frappe.whitelist()
+def is_task_blocked(task_name):
+    _check_auth()
+    doc = frappe.get_doc("Task", task_name)
+    blocked = _loads_json(doc.blocked_by_json, [])
+    if not blocked:
+        return _api_response({"blocked": False, "reason": None})
+    # Check if any dependency is not done
+    for dep_id in blocked:
+        dep = frappe.db.get_value("Task", dep_id, "status", as_dict=True)
+        if dep and dep.status != "done":
+            return _api_response({"blocked": True, "reason": f"تسک پیش‌نیاز {dep_id} هنوز انجام نشده"})
+    return _api_response({"blocked": False, "reason": None})
+
+
+# ─── Planner Views ──────────────────────────────────────────────
+
+@frappe.whitelist()
+def get_planner_inbox(limit=100):
+    _check_auth()
+    tasks = frappe.get_all(
+        "Task",
+        filters={"user": frappe.session.user, "status": "inbox"},
+        fields="*",
+        limit_page_length=cint(limit),
+        order_by="creation desc",
+    )
+    return _api_response({"tasks": tasks})
+
+
+@frappe.whitelist()
+def get_planner_today(limit=100):
+    _check_auth()
+    today_str = today()
+    # Tasks explicitly marked as today
+    tasks = frappe.get_all(
+        "Task",
+        filters={"user": frappe.session.user, "status": "today"},
+        fields="*",
+        limit_page_length=cint(limit),
+        order_by="scheduled_time asc, priority asc",
+    )
+    # Also include scheduled for today
+    scheduled = frappe.get_all(
+        "Task",
+        filters={"user": frappe.session.user, "scheduled_date": today_str, "status": ["not in", ["done", "dropped"]]},
+        fields="*",
+        limit_page_length=cint(limit),
+        order_by="scheduled_time asc, priority asc",
+    )
+    # Merge without duplicates
+    seen = {t.name for t in tasks}
+    for s in scheduled:
+        if s.name not in seen:
+            tasks.append(s)
+    return _api_response({"tasks": tasks})
+
+
+@frappe.whitelist()
+def get_planner_next(limit=100):
+    _check_auth()
+    tasks = frappe.get_all(
+        "Task",
+        filters={"user": frappe.session.user, "status": "next"},
+        fields="*",
+        limit_page_length=cint(limit),
+        order_by="priority asc, creation desc",
+    )
+    return _api_response({"tasks": tasks})
+
+
+@frappe.whitelist()
+def get_planner_scheduled(from_date=None, to_date=None, limit=100):
+    _check_auth()
+    filters = {"user": frappe.session.user, "status": "not_started", "scheduled_date": ["is", "set"]}
+    if from_date:
+        filters["scheduled_date"] = [">=", from_date]
+    if to_date:
+        if isinstance(filters["scheduled_date"], list):
+            filters["scheduled_date"] = ["between", [from_date, to_date]]
+        else:
+            filters["scheduled_date"] = ["<=", to_date]
+    tasks = frappe.get_all(
+        "Task",
+        filters=filters,
+        fields="*",
+        limit_page_length=cint(limit),
+        order_by="scheduled_date asc, scheduled_time asc",
+    )
+    return _api_response({"tasks": tasks})
+
+
+@frappe.whitelist()
+def get_planner_someday(limit=100):
+    _check_auth()
+    tasks = frappe.get_all(
+        "Task",
+        filters={"user": frappe.session.user, "status": "someday"},
+        fields="*",
+        limit_page_length=cint(limit),
+        order_by="creation desc",
+    )
+    return _api_response({"tasks": tasks})
+
+
+@frappe.whitelist()
+def move_task_to_bucket(task_name, bucket):
+    _check_auth()
+    _require_owner("Task", task_name)
+    valid_buckets = {"inbox", "not_started", "next", "today", "in_progress", "done", "on_hold", "someday", "dropped"}
+    if bucket not in valid_buckets:
+        frappe.throw("Invalid bucket", frappe.ValidationError)
+    updates = {"status": bucket}
+    if bucket == "done":
+        updates["completed_on"] = now_datetime()
+    elif bucket == "today":
+        updates["scheduled_date"] = today()
+    frappe.db.set_value("Task", task_name, updates, update_modified=True)
+    frappe.db.commit()
+    return _api_response({"task": frappe.get_doc("Task", task_name).as_dict()})
+
+
+# ─── Task Status Transition ─────────────────────────────────────
+
+@frappe.whitelist()
+def transition_task_status(task_name, new_status):
+    _check_auth()
+    _require_owner("Task", task_name)
+    valid = {"inbox", "not_started", "next", "today", "in_progress", "done", "on_hold", "someday", "dropped"}
+    if new_status not in valid:
+        frappe.throw("Invalid status", frappe.ValidationError)
+    updates = {"status": new_status}
+    if new_status == "done":
+        updates["completed_on"] = now_datetime()
+    frappe.db.set_value("Task", task_name, updates, update_modified=True)
+    frappe.db.commit()
+    return _api_response({"task": frappe.get_doc("Task", task_name).as_dict()})

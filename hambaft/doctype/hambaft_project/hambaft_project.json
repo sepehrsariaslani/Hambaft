@@ -42,6 +42,12 @@
       "options": "Goal"
     },
     {
+      "fieldname": "parent_project",
+      "fieldtype": "Link",
+      "label": "پروژه والد",
+      "options": "Hambaft Project"
+    },
+    {
       "fieldname": "status",
       "fieldtype": "Select",
       "label": "وضعیت",
@@ -77,6 +83,18 @@
       "label": "پیشرفت",
       "in_list_view": 1,
       "default": "0"
+    },
+    {
+      "fieldname": "effort_type",
+      "fieldtype": "Select",
+      "label": "نوع تلاش",
+      "options": "ثابت\nمتغیر",
+      "default": "متغیر"
+    },
+    {
+      "fieldname": "estimated_hours",
+      "fieldtype": "Float",
+      "label": "ساعت تخمینی"
     },
     {
       "fieldname": "description",

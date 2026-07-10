@@ -228,12 +228,14 @@ export function toTaskPayload(task: Task): Record<string, unknown> {
     title: task.title,
     description: task.description || '',
     due_date: combineDateTime(task.dueDate, '09:00'),
+    scheduled_date: task.scheduledDate || null,
+    scheduled_time: task.scheduledTime || null,
     priority: taskPriorityToBackend[task.priority || 'medium'] || 'متوسط',
     category: taskCategoryToBackend[task.category || 'other'] || 'شخصی',
-    status: (task.status && ['انجام‌شده', 'انجام‌نشده', 'در حال انجام', 'لغو‌شده'].includes(task.status))
-      ? task.status
-      : (task.completed ? 'انجام‌شده' : 'انجام‌نشده'),
+    status: task.status || (task.completed ? 'done' : 'inbox'),
     project: task.projectId || null,
+    parent_task: task.parentTaskId || null,
+    blocked_by_json: JSON.stringify(task.blockedBy || []),
     noteBlocks: task.noteBlocks || [],
   }
 }
@@ -869,4 +871,84 @@ export async function changePassword(oldPassword: string, newPassword: string) {
 
 export async function updateSettingsRecord(data: Record<string, unknown>) {
   return call('hambaft.hambaft.api.update_settings', { data })
+}
+
+// ─── Planner Task Sessions ──────────────────────────────────────
+
+export async function startTaskSession(taskId: string) {
+  return call<{ data?: { session?: any } }>('hambaft.hambaft.api.start_task_session', { task: taskId })
+}
+
+export async function stopTaskSession(sessionId: string) {
+  return call<{ data?: { session?: any } }>('hambaft.hambaft.api.stop_task_session', { session_name: sessionId })
+}
+
+export async function resumeTaskSession(sessionId: string) {
+  return call<{ data?: { session?: any } }>('hambaft.hambaft.api.resume_task_session', { session_name: sessionId })
+}
+
+export async function finishTaskSession(sessionId: string) {
+  return call<{ data?: { session?: any } }>('hambaft.hambaft.api.finish_task_session', { session_name: sessionId })
+}
+
+export async function getTaskSessions(taskId: string, limit = 50) {
+  return call<{ data?: { sessions?: any[] } }>('hambaft.hambaft.api.get_task_sessions', { task: taskId, limit })
+}
+
+export async function getActiveTaskSession() {
+  return call<{ data?: { session?: any } }>('hambaft.hambaft.api.get_active_session', {})
+}
+
+// ─── Task Hierarchy ─────────────────────────────────────────────
+
+export async function getTaskChildren(parentTaskId: string) {
+  return call<{ data?: { tasks?: any[] } }>('hambaft.hambaft.api.get_task_children', { parent_task: parentTaskId })
+}
+
+export async function getTaskHierarchy(taskId: string) {
+  return call<{ data?: { task?: any } }>('hambaft.hambaft.api.get_task_hierarchy', { task_name: taskId })
+}
+
+// ─── Task Dependencies ──────────────────────────────────────────
+
+export async function addTaskDependency(taskId: string, dependsOnTaskId: string) {
+  return call<{ data?: { blocked_by?: string[] } }>('hambaft.hambaft.api.add_task_dependency', { task_name: taskId, depends_on_task: dependsOnTaskId })
+}
+
+export async function removeTaskDependency(taskId: string, dependsOnTaskId: string) {
+  return call<{ data?: { blocked_by?: string[] } }>('hambaft.hambaft.api.remove_task_dependency', { task_name: taskId, depends_on_task: dependsOnTaskId })
+}
+
+export async function isTaskBlocked(taskId: string) {
+  return call<{ data?: { blocked?: boolean; reason?: string } }>('hambaft.hambaft.api.is_task_blocked', { task_name: taskId })
+}
+
+// ─── Planner Views ──────────────────────────────────────────────
+
+export async function getPlannerInbox(limit = 100) {
+  return call<{ data?: { tasks?: any[] } }>('hambaft.hambaft.api.get_planner_inbox', { limit })
+}
+
+export async function getPlannerToday(limit = 100) {
+  return call<{ data?: { tasks?: any[] } }>('hambaft.hambaft.api.get_planner_today', { limit })
+}
+
+export async function getPlannerNext(limit = 100) {
+  return call<{ data?: { tasks?: any[] } }>('hambaft.hambaft.api.get_planner_next', { limit })
+}
+
+export async function getPlannerScheduled(fromDate?: string, toDate?: string, limit = 100) {
+  return call<{ data?: { tasks?: any[] } }>('hambaft.hambaft.api.get_planner_scheduled', { from_date: fromDate, to_date: toDate, limit })
+}
+
+export async function getPlannerSomeday(limit = 100) {
+  return call<{ data?: { tasks?: any[] } }>('hambaft.hambaft.api.get_planner_someday', { limit })
+}
+
+export async function moveTaskToBucket(taskId: string, bucket: Task['status']) {
+  return call<{ data?: { task?: any } }>('hambaft.hambaft.api.move_task_to_bucket', { task_name: taskId, bucket })
+}
+
+export async function transitionTaskStatus(taskId: string, newStatus: Task['status']) {
+  return call<{ data?: { task?: any } }>('hambaft.hambaft.api.transition_task_status', { task_name: taskId, new_status: newStatus })
 }
