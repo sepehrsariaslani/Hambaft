@@ -26,6 +26,8 @@ interface TaskManagerSectionProps {
   todayDate: string
   /** Open the detail drawer for this task on mount (e.g. deep-link) */
   initialDrawerTaskId?: string | null
+  /** Navigate to a related entity (goals, projects, etc.) */
+  onNavigate?: (tab: string, id?: string) => void
 }
 
 type GroupBy = 'none' | 'project' | 'priority' | 'status' | 'category' | 'dueDate' | 'importance'
@@ -74,6 +76,7 @@ export default function TaskManagerSection({
   onViewTaskDetails,
   todayDate,
   initialDrawerTaskId = null,
+  onNavigate,
 }: TaskManagerSectionProps) {
   const [viewMode, setViewMode] = useState<ViewMode>('list')
   const [search, setSearch] = useState('')
@@ -534,6 +537,7 @@ export default function TaskManagerSection({
           onUpdateTask={onUpdateTask}
           onDeleteTask={(id) => { onDeleteTask(id); setDrawerTaskId(null) }}
           onClose={() => setDrawerTaskId(null)}
+          onNavigate={onNavigate}
         />
       )}
     </div>

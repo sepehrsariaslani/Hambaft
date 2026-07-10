@@ -3130,6 +3130,11 @@ export default function App({
               goToTaskDetail(id);
             }}
             todayDate={TODAY_DATE}
+            onNavigate={(tab, id) => {
+              if (tab === 'goals' && id) goToGoal(id);
+              else if (tab === 'projects' && id) goToProject(id);
+              else goToTab(tab);
+            }}
           />
         );
       case 'planner':
