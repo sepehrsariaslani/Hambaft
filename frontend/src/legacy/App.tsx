@@ -3345,6 +3345,13 @@ export default function App({
         );
       case 'coach':
         return (
+          <AiCoachSection 
+            lifeData={lifeData}
+            onImportData={handleImportData}
+          />
+        );
+      case 'profile':
+        return (
           <ProfileSection 
             lifeData={lifeData}
             onUpdateProfile={handleUpdateProfile}
