@@ -2805,10 +2805,10 @@ export default function App({
       ...prev,
       profile: {
         ...(prev.profile || {
-          name: 'پارس سلیمانی',
-          avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=250&auto=format&fit=crop',
-          motto: 'زندگی همبافته‌ای از توازن، آرامش و تلاش هوشمندانه است.',
-          workField: 'طراح ارشد محصول',
+          name: 'کاربر',
+          avatarUrl: '',
+          motto: '',
+          workField: '',
           dailyWaterGoal: 8,
           sleepGoalHours: 7.5
         }),
@@ -3404,8 +3404,8 @@ export default function App({
                 👨‍💻
               </div>
               <div className="text-right flex-1">
-                <h3 className="font-extrabold text-xs text-white">سلام، پارس عزیز</h3>
-                <span className="text-[9px] text-[#DDE2D5]/70 block font-semibold mt-0.5">توازن امروز: ۸۴٪ • فرکانس عالی</span>
+                <h3 className="font-extrabold text-xs text-white">سلام، {lifeData.profile?.name || 'کاربر'} عزیز</h3>
+                <span className="text-[9px] text-[#DDE2D5]/70 block font-semibold mt-0.5">توازن زندگی • هم‌بافت</span>
               </div>
             </button>
 
