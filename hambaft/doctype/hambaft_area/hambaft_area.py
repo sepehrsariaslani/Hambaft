@@ -76,8 +76,13 @@ class HambaftArea(Document):
         goals = frappe.get_all(
             "Goal",
             filters={"area": self.name, "user": self.user},
-            fields=["name", "title", "status", "progress_percent"],
+            fields=["name", "title", "status", "progress_percent", "health_state"],
         )
+        # Aggregate goal health states
+        goal_health_counts = {}
+        for g in goals:
+            hs = g.get("health_state") or "unknown"
+            goal_health_counts[hs] = goal_health_counts.get(hs, 0) + 1
         completed_tasks = sum(1 for t in tasks if t.get("status") in {"done", "completed", "انجام‌شده", "انجام شده"})
         completed_projects = sum(1 for p in projects if p.get("status") in {"تکمیل‌شده", "completed"})
         active_projects = sum(1 for p in projects if p.get("status") in {"فعال", "برنامه‌ریزی", "active"})
@@ -106,6 +111,7 @@ class HambaftArea(Document):
             "key_total": key_total,
             "key_done": key_done,
             "goal_count": len(goals),
+            "goal_health_counts": goal_health_counts,
             "tracked_minutes": tracked_minutes,
             "projects": projects,
             "tasks": tasks,

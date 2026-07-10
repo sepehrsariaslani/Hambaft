@@ -967,12 +967,46 @@ export default function PlannerSection() {
                   <span className="text-[14px] font-black text-[#E26645]">{area.task_count ?? 0}</span>
                   <span className="text-[8px] text-[#8D7F72] block">تسک</span>
                 </div>
-                <div className="bg-[#F9F6EE] dark:bg-[#121411] rounded-xl p-2 text-center col-span-2">
+                <div className="bg-[#F9F6EE] dark:bg-[#121411] rounded-xl p-2 text-center">
                   <span className="text-[12px] font-black text-indigo-600">
                     {area.tracked_minutes ? formatMinutes(area.tracked_minutes) : '۰ دقیقه'}
                   </span>
                   <span className="text-[8px] text-[#8D7F72] block">زمان صرف‌شده</span>
                 </div>
+                {/* Goal health summary */}
+                {area.goal_health_counts && (
+                  <div className="bg-[#F9F6EE] dark:bg-[#121411] rounded-xl p-2 text-center">
+                    <div className="flex flex-wrap justify-center gap-0.5">
+                      {area.goal_health_counts.on_track ? (
+                        <span className="text-[8px] font-bold text-emerald-600">✓{area.goal_health_counts.on_track}</span>
+                      ) : null}
+                      {area.goal_health_counts.at_risk ? (
+                        <span className="text-[8px] font-bold text-amber-600">⚠{area.goal_health_counts.at_risk}</span>
+                      ) : null}
+                      {area.goal_health_counts.off_track ? (
+                        <span className="text-[8px] font-bold text-red-600">⊘{area.goal_health_counts.off_track}</span>
+                      ) : null}
+                      {area.goal_health_counts.needs_review ? (
+                        <span className="text-[8px] font-bold text-yellow-600">?{area.goal_health_counts.needs_review}</span>
+                      ) : null}
+                    </div>
+                    <span className="text-[8px] text-[#8D7F72] block">سلامت اهداف</span>
+                  </div>
+                )}
+                {/* Milestone / Key counts */}
+                {(area.milestone_total > 0 || area.key_total > 0) && (
+                  <div className="bg-[#F9F6EE] dark:bg-[#121411] rounded-xl p-2 text-center col-span-2">
+                    <div className="flex justify-center gap-3">
+                      {area.milestone_total > 0 && (
+                        <span className="text-[10px] font-bold text-amber-700">◆ {area.milestone_done ?? 0}/{area.milestone_total}</span>
+                      )}
+                      {area.key_total > 0 && (
+                        <span className="text-[10px] font-bold text-blue-700">★ {area.key_done ?? 0}/{area.key_total}</span>
+                      )}
+                    </div>
+                    <span className="text-[8px] text-[#8D7F72] block">نقاط عطف و کلیدی</span>
+                  </div>
+                )}
               </div>
             </div>
           ))}
