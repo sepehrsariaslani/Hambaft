@@ -11,6 +11,7 @@ interface MindfulnessSectionProps {
   sessions: MindfulnessSession[];
   onAddSession: (s: Omit<MindfulnessSession, 'id'>) => void;
   onDeleteSession: (id: string) => void;
+  onUpdateSession?: (id: string, updates: Partial<MindfulnessSession>) => void;
 }
 
 type SessionType = MindfulnessSession['type'];
@@ -28,7 +29,7 @@ const BREATHING_PATTERNS = [
   { label: 'آرامش ۴-۴', inhale: 4, hold: 0, exhale: 4, desc: 'ساده و سریع' },
 ];
 
-export default function MindfulnessSection({ sessions, onAddSession, onDeleteSession }: MindfulnessSectionProps) {
+export default function MindfulnessSection({ sessions, onAddSession, onDeleteSession, onUpdateSession }: MindfulnessSectionProps) {
   const [activeTab, setActiveTab] = useState<'timer' | 'breathing' | 'log'>('timer');
 
   // ── MEDITATION TIMER ──────────────────────────────────────────────

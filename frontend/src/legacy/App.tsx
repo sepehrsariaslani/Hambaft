@@ -65,6 +65,7 @@ import {
   updateProfileRecord,
   updateScheduleRecord,
   updateSleepLogRecord,
+  updateMindfulnessRecord,
   updateSettingsRecord,
   updateTaskRecord,
   updateTransactionRecord,
@@ -1500,6 +1501,20 @@ export default function App({
     if (!id.startsWith('ms-')) {
       runSync('delete mindfulness session', async () => {
         await deleteMindfulnessRecord(id);
+      });
+    }
+  };
+
+  const handleUpdateMindfulnessSession = (id: string, updates: Partial<MindfulnessSession>) => {
+    setLifeData(prev => ({
+      ...prev,
+      mindfulnessSessions: (prev.mindfulnessSessions || []).map(s =>
+        s.id === id ? { ...s, ...updates } : s
+      ),
+    }));
+    if (!id.startsWith('ms-')) {
+      runSync('update mindfulness session', async () => {
+        await updateMindfulnessRecord(id, updates);
       });
     }
   };
@@ -3260,6 +3275,7 @@ export default function App({
             sessions={lifeData.mindfulnessSessions || []}
             onAddSession={handleAddMindfulnessSession}
             onDeleteSession={handleDeleteMindfulnessSession}
+            onUpdateSession={handleUpdateMindfulnessSession}
           />
         );
       case 'nutrition':
