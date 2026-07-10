@@ -184,7 +184,8 @@ const NAVIGATION_GROUPS = [
       { id: 'areas', label: 'حوزه‌های زندگی', icon: Layers },
       { id: 'notes', label: 'یادداشت‌ها (Notion)', icon: FileText },
       { id: 'finance', label: 'امور مالی و مخارج', icon: Wallet },
-      { id: 'documents', label: 'مدیریت اسناد', icon: FolderOpen }
+      { id: 'documents', label: 'مدیریت اسناد', icon: FolderOpen },
+      { id: 'profile', label: 'پروفایل و تنظیمات', icon: User }
     ]
   }
 ];
@@ -3426,7 +3427,7 @@ export default function App({
             {/* Quick Profile / Score */}
             <button 
               onClick={() => {
-                goToTab('coach');
+                goToTab('profile');
               }}
               className="p-4 mx-4 my-5 rounded-2xl bg-[#3D4133] hover:bg-[#4E5342] border border-white/5 flex items-center gap-3 shrink-0 cursor-pointer transition-all hover:scale-[1.02] text-right w-[calc(100%-2rem)]"
             >
