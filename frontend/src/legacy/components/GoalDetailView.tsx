@@ -1,6 +1,16 @@
-import React, { useState } from 'react';
-import { Goal, GoalCategory, Milestone, Habit, BankAccount, Project, Task, MetricLog, GoalMetric, WorkoutLog, SleepLog, MindfulnessSession, JournalEntry } from '../types';
+import React, { useState, useEffect } from 'react';
+import { Goal, GoalCategory, GoalType, ProgressMode, ContributionType, ContributionPeriod, GoalHabitLink, GoalFinanceLink, GoalLinkedProject, Milestone, Habit, BankAccount, Project, Task, MetricLog, GoalMetric, WorkoutLog, SleepLog, MindfulnessSession, JournalEntry } from '../types';
 import { GOAL_CATEGORY_LABELS } from '../initialData';
+import { 
+  getGoalDetail, 
+  computeGoalProgress, 
+  linkGoalHabit, 
+  unlinkGoalHabit, 
+  linkGoalFinance, 
+  unlinkGoalFinance, 
+  linkGoalProject, 
+  unlinkGoalProject 
+} from '../../app/hambaft-api';
 import PersianDatePicker from './PersianDatePicker';
 import EntityNoteEditor from '../../notes/components/EntityNoteEditor';
 import { 
@@ -94,6 +104,7 @@ const CATEGORY_COLORS: Record<GoalCategory, string> = {
   career: 'bg-[#F4E9E4] border-[#EDDDD7] text-[#9B6B61]',
   learning: 'bg-[#E6DFD3] border-[#D6CFC3] text-[#8D7F72]',
   personal: 'bg-[#F9F1D8] border-[#EBE3C8] text-[#5A5A40]',
+  relationship: 'bg-[#F4E9E4] border-[#EDDDD7] text-[#9B6B61]',
   other: 'bg-[#FDFBF7] border-[#D6CFC3] text-[#3D3D3D]'
 };
 
@@ -109,6 +120,8 @@ function getCategoryIcon(category: GoalCategory, className = "w-4 h-4") {
       return <BookOpen className={className} />;
     case 'personal':
       return <Compass className={className} />;
+    case 'relationship':
+      return <Heart className={className} />;
     default:
       return <Target className={className} />;
   }
@@ -141,7 +154,7 @@ export default function GoalDetailView({
   onAddBankAccount
 }: GoalDetailViewProps) {
   
-  const [activeTab, setActiveTab] = useState<'projects' | 'habits' | 'milestones' | 'metrics' | 'vision' | 'notes'>('projects');
+  const [activeTab, setActiveTab] = useState<'projects' | 'habits' | 'milestones' | 'metrics' | 'vision' | 'notes' | 'config' | 'finance_links'>('projects');
   
   // Vision Board State
   const [visionInputUrl, setVisionInputUrl] = useState('');
@@ -155,7 +168,36 @@ export default function GoalDetailView({
   const [editDescription, setEditDescription] = useState(goal.description);
   const [editCategory, setEditCategory] = useState<GoalCategory>(goal.category);
   const [editTargetDate, setEditTargetDate] = useState(goal.targetDate);
-  const [editGoalLevel, setEditGoalLevel] = useState<'annual' | 'quarterly' | 'monthly' | 'none'>(goal.goalLevel || 'none');
+  const [editGoalLevel, setEditGoalLevel] = useState<string>(goal.goalLevel || 'none');
+  
+  // Advanced config states
+  const [editGoalType, setEditGoalType] = useState<GoalType>(goal.goalType || 'outcome');
+  const [editProgressMode, setEditProgressMode] = useState<ProgressMode>(goal.progressMode || 'manual');
+  const [editPriority, setEditPriority] = useState<'low' | 'medium' | 'high' | 'urgent'>(goal.priority || 'medium');
+  const [editTargetValue, setEditTargetValue] = useState(String(goal.targetValue || ''));
+  const [editCurrentValue, setEditCurrentValue] = useState(String(goal.currentValue || ''));
+  const [editUnit, setEditUnit] = useState(goal.unit || '');
+  
+  // Goal habit link states
+  const [linkHabitId, setLinkHabitId] = useState('');
+  const [linkContributionType, setLinkContributionType] = useState<ContributionType>('completion_count');
+  const [linkContributionPeriod, setLinkContributionPeriod] = useState<ContributionPeriod>('monthly');
+  const [linkTargetValue, setLinkTargetValue] = useState('');
+  const [linkWeight, setLinkWeight] = useState('100');
+  const [isLinkingHabit, setIsLinkingHabit] = useState(false);
+  const [isUnlinkingHabit, setIsUnlinkingHabit] = useState<string | null>(null);
+  
+  // Finance link states
+  const [linkFinanceAccountId, setLinkFinanceAccountId] = useState('');
+  const [linkFinanceType, setLinkFinanceType] = useState<GoalFinanceLink['financeType']>('balance');
+  const [linkFinanceInitialAmount, setLinkFinanceInitialAmount] = useState('');
+  const [linkFinanceTargetAmount, setLinkFinanceTargetAmount] = useState('');
+  const [isLinkingFinance, setIsLinkingFinance] = useState(false);
+  const [isUnlinkingFinance, setIsUnlinkingFinance] = useState<string | null>(null);
+  
+  // Computed progress state
+  const [computedProgress, setComputedProgress] = useState<{percent: number; detail: any} | null>(null);
+  const [isComputing, setIsComputing] = useState(false);
   
   // Local states for inputs
   const [newMilestoneText, setNewMilestoneText] = useState('');
@@ -203,10 +245,184 @@ export default function GoalDetailView({
 
   const habitsTotal = goal.habits?.length || 0;
 
-  // Calculation for progress percentage
-  const percentage = milestonesTotal > 0 
-    ? Math.round((milestonesDone / milestonesTotal) * 100) 
-    : (goal.completed ? 100 : 0);
+  // Calculation for progress percentage — use backend progress_percent if available
+  const percentage = goal.progressPercent != null 
+    ? Math.round(goal.progressPercent) 
+    : (milestonesTotal > 0 
+        ? Math.round((milestonesDone / milestonesTotal) * 100) 
+        : (goal.completed ? 100 : 0));
+
+  // Handle compute progress
+  const handleComputeProgress = async () => {
+    if (goal.id.startsWith('synthetic-') || goal.id.startsWith('goal-')) return;
+    setIsComputing(true);
+    try {
+      const result = await computeGoalProgress(goal.id);
+      const data = result?.data ?? result as any;
+      if (data?.progress_percent != null) {
+        setComputedProgress({ percent: data.progress_percent, detail: data.detail });
+        // Update the goal with new progress
+        const updatedGoal: Goal = {
+          ...goal,
+          progressPercent: data.progress_percent,
+          derivedProgressDetail: JSON.stringify(data.detail),
+        };
+        if (data.goal) {
+          if (data.goal.linked_habits) {
+            updatedGoal.linkedHabits = data.goal.linked_habits.map((h: any) => ({
+              habit: h.habit,
+              habitTitle: h.habit_title,
+              contributionType: h.contribution_type,
+              weight: h.weight,
+              period: h.period,
+              targetValue: h.target_value,
+              capValue: h.cap_value,
+              isNegative: !!h.is_negative,
+              notes: h.notes,
+            }));
+          }
+          if (data.goal.linked_projects) {
+            updatedGoal.linkedProjects = data.goal.linked_projects.map((p: any) => ({
+              name: p.name,
+              title: p.title,
+              status: p.status,
+              progress: p.progress,
+            }));
+          }
+        }
+        onUpdateGoal(updatedGoal);
+      }
+    } catch (err) {
+      console.error('Failed to compute goal progress:', err);
+    } finally {
+      setIsComputing(false);
+    }
+  };
+
+  // Handle link habit
+  const handleLinkHabit = async () => {
+    if (!linkHabitId || (goal.id.startsWith('synthetic-') || goal.id.startsWith('goal-'))) return;
+    setIsLinkingHabit(true);
+    try {
+      const contribTypeMap: Record<string, string> = {
+        completion_count: 'تعداد_انجام', completion_rate: 'نرخ_انجام', streak: 'رکورد',
+        quantity_sum: 'مجموع_مقدار', average_value: 'میانگین_مقدار', boolean_success: 'بله_خیر',
+      };
+      const periodMap: Record<string, string> = {
+        daily: 'روزانه', weekly: 'هفتگی', monthly: 'ماهانه', all: 'کل',
+      };
+      await linkGoalHabit(
+        goal.id,
+        linkHabitId,
+        contribTypeMap[linkContributionType] || 'تعداد_انجام',
+        Number(linkWeight) || 100,
+        periodMap[linkContributionPeriod] || 'ماهانه',
+        linkTargetValue ? Number(linkTargetValue) : undefined,
+      );
+      // Refresh goal detail
+      const detail = await getGoalDetail(goal.id);
+      const g = detail?.data?.goal ?? (detail as any)?.goal;
+      if (g) {
+        onUpdateGoal({
+          ...goal,
+          linkedHabits: (g.linked_habits || []).map((h: any) => ({
+            habit: h.habit,
+            habitTitle: h.habit_title,
+            contributionType: h.contribution_type,
+            weight: h.weight,
+            period: h.period,
+            targetValue: h.target_value,
+            capValue: h.cap_value,
+            isNegative: !!h.is_negative,
+            notes: h.notes,
+          })),
+        });
+      }
+      setLinkHabitId('');
+      setLinkTargetValue('');
+      setLinkWeight('100');
+    } catch (err) {
+      console.error('Failed to link habit:', err);
+    } finally {
+      setIsLinkingHabit(false);
+    }
+  };
+
+  // Handle unlink habit
+  const handleUnlinkHabit = async (habitId: string) => {
+    if (goal.id.startsWith('synthetic-') || goal.id.startsWith('goal-')) return;
+    setIsUnlinkingHabit(habitId);
+    try {
+      await unlinkGoalHabit(goal.id, habitId);
+      onUpdateGoal({
+        ...goal,
+        linkedHabits: (goal.linkedHabits || []).filter(h => h.habit !== habitId),
+      });
+    } catch (err) {
+      console.error('Failed to unlink habit:', err);
+    } finally {
+      setIsUnlinkingHabit(null);
+    }
+  };
+
+  // Handle link finance
+  const handleLinkFinance = async () => {
+    if (!linkFinanceAccountId || (goal.id.startsWith('synthetic-') || goal.id.startsWith('goal-'))) return;
+    setIsLinkingFinance(true);
+    try {
+      const finTypeMap: Record<string, string> = {
+        balance: 'موجودی_حساب', savings: 'پس‌انداز', debt: 'بدهی', investment: 'سرمایه‌گذاری', income_accumulated: 'درآمد_انباشته',
+      };
+      await linkGoalFinance(
+        goal.id,
+        linkFinanceAccountId,
+        finTypeMap[linkFinanceType] || 'موجودی_حساب',
+        linkFinanceInitialAmount ? Number(linkFinanceInitialAmount) : undefined,
+        linkFinanceTargetAmount ? Number(linkFinanceTargetAmount) : undefined,
+      );
+      const detail = await getGoalDetail(goal.id);
+      const g = detail?.data?.goal ?? (detail as any)?.goal;
+      if (g) {
+        onUpdateGoal({
+          ...goal,
+          linkedFinanceAccounts: (g.linked_finance_accounts || []).map((f: any) => ({
+            financeAccount: f.finance_account,
+            accountName: f.account_name,
+            currentBalance: f.current_balance,
+            financeType: f.finance_type,
+            initialAmount: f.initial_amount,
+            targetAmount: f.target_amount,
+            weight: f.weight,
+            notes: f.notes,
+          })),
+        });
+      }
+      setLinkFinanceAccountId('');
+      setLinkFinanceInitialAmount('');
+      setLinkFinanceTargetAmount('');
+    } catch (err) {
+      console.error('Failed to link finance:', err);
+    } finally {
+      setIsLinkingFinance(false);
+    }
+  };
+
+  // Handle unlink finance
+  const handleUnlinkFinance = async (accountId: string) => {
+    if (goal.id.startsWith('synthetic-') || goal.id.startsWith('goal-')) return;
+    setIsUnlinkingFinance(accountId);
+    try {
+      await unlinkGoalFinance(goal.id, accountId);
+      onUpdateGoal({
+        ...goal,
+        linkedFinanceAccounts: (goal.linkedFinanceAccounts || []).filter(f => f.financeAccount !== accountId),
+      });
+    } catch (err) {
+      console.error('Failed to unlink finance:', err);
+    } finally {
+      setIsUnlinkingFinance(null);
+    }
+  };
 
   // Linked bank account if any
   const linkedAccount = bankAccounts.find(acc => acc.id === goal.linkedBankAccountId);
@@ -587,7 +803,7 @@ export default function GoalDetailView({
       description: editDescription.trim(),
       category: editCategory,
       targetDate: editTargetDate,
-      goalLevel: editGoalLevel !== 'none' ? editGoalLevel : undefined
+      goalLevel: editGoalLevel !== 'none' ? (editGoalLevel as 'annual' | 'quarterly' | 'monthly' | 'custom') : undefined
     });
 
     setShowEditGoalModal(false);
@@ -955,6 +1171,30 @@ export default function GoalDetailView({
           >
             <FileText className="w-4 h-4" />
             <span>یادداشت‌ها (Notion)</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('config')}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 text-xs font-extrabold rounded-xl transition-all cursor-pointer whitespace-nowrap ${
+              activeTab === 'config'
+                ? 'bg-[#7C8363] text-white shadow-xs'
+                : 'text-[#8D7F72] hover:bg-[#E6DFD3]/40'
+            }`}
+          >
+            <Layers className="w-4 h-4" />
+            <span>پیکربندی هدف</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('finance_links')}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 text-xs font-extrabold rounded-xl transition-all cursor-pointer whitespace-nowrap ${
+              activeTab === 'finance_links'
+                ? 'bg-[#7C8363] text-white shadow-xs'
+                : 'text-[#8D7F72] hover:bg-[#E6DFD3]/40'
+            }`}
+          >
+            <CreditCard className="w-4 h-4" />
+            <span>پیوند مالی ({(goal.linkedFinanceAccounts || []).length})</span>
           </button>
         </div>
 
@@ -2464,6 +2704,434 @@ export default function GoalDetailView({
               initialBlocks={goal.noteBlocks}
               onSave={(blocks) => onUpdateGoal({ ...goal, noteBlocks: blocks })}
             />
+          </div>
+        )}
+
+        {/* WORKSPACE CONTENT: GOAL CONFIGURATION */}
+        {activeTab === 'config' && (
+          <div className="space-y-5 animate-fade-in" id="goal-config-panel">
+            {/* Goal Type & Progress Mode */}
+            <div className="bg-[#FDFBF7] p-5 rounded-3xl border border-[#E6DFD3] space-y-4">
+              <h4 className="text-xs font-black text-[#2D3025] flex items-center gap-1.5">
+                <Layers className="w-4 h-4 text-[#7C8363]" />
+                <span>نوع هدف و حالت محاسبه پیشرفت</span>
+              </h4>
+              <p className="text-[10px] text-[#8D7F72] leading-relaxed">
+                نوع هدف نحوه دسته‌بندی و رهگیری آن را مشخص می‌کند. حالت پیشرفت تعیین می‌کند پیشرفت هدف چگونه محاسبه شود: دستی، بر اساس سنجه عددی، تجمیع از عادت‌ها، پروژه‌ها، حساب‌های مالی یا ترکیب وزنی.
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1.5 text-right">
+                  <label className="text-[10px] font-bold text-[#8D7F72] block">نوع هدف</label>
+                  <select
+                    value={editGoalType}
+                    onChange={e => setEditGoalType(e.target.value as GoalType)}
+                    className="w-full px-3 py-2 text-xs bg-white border border-[#D6CFC3] rounded-xl focus:outline-none focus:border-[#7C8363]"
+                  >
+                    <option value="outcome">نتیجه‌ای (خروجی محور)</option>
+                    <option value="metric">سنجه‌ای (عددی کمی)</option>
+                    <option value="habit_driven">مبتنی بر عادت</option>
+                    <option value="project_delivery">تحویل پروژه</option>
+                    <option value="savings">پس‌انداز مالی</option>
+                    <option value="investment">سرمایه‌گذاری</option>
+                    <option value="debt_payoff">پرداخت بدهی</option>
+                    <option value="health">سلامت</option>
+                    <option value="learning">یادگیری</option>
+                    <option value="consistency">ثبات و استمرار</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5 text-right">
+                  <label className="text-[10px] font-bold text-[#8D7F72] block">حالت محاسبه پیشرفت</label>
+                  <select
+                    value={editProgressMode}
+                    onChange={e => setEditProgressMode(e.target.value as ProgressMode)}
+                    className="w-full px-3 py-2 text-xs bg-white border border-[#D6CFC3] rounded-xl focus:outline-none focus:border-[#7C8363]"
+                  >
+                    <option value="manual">دستی</option>
+                    <option value="metric_value">مقدار سنجه (عددی)</option>
+                    <option value="habit_rollup">تجمیع از عادت‌ها</option>
+                    <option value="project_rollup">تجمیع از پروژه‌ها</option>
+                    <option value="finance_balance">موجودی مالی</option>
+                    <option value="finance_savings">پس‌انداز مالی</option>
+                    <option value="debt_paydown">پرداخت بدهی</option>
+                    <option value="weighted_composite">ترکیب وزنی (مرکب)</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5 text-right">
+                  <label className="text-[10px] font-bold text-[#8D7F72] block">اولویت</label>
+                  <select
+                    value={editPriority}
+                    onChange={e => setEditPriority(e.target.value as any)}
+                    className="w-full px-3 py-2 text-xs bg-white border border-[#D6CFC3] rounded-xl focus:outline-none focus:border-[#7C8363]"
+                  >
+                    <option value="low">پایین</option>
+                    <option value="medium">متوسط</option>
+                    <option value="high">بالا</option>
+                    <option value="urgent">فوری</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5 text-right">
+                  <label className="text-[10px] font-bold text-[#8D7F72] block">سطح هدف</label>
+                  <select
+                    value={editGoalLevel}
+                    onChange={e => setEditGoalLevel(e.target.value as any)}
+                    className="w-full px-3 py-2 text-xs bg-white border border-[#D6CFC3] rounded-xl focus:outline-none focus:border-[#7C8363]"
+                  >
+                    <option value="none">بدون سطح‌بندی</option>
+                    <option value="annual">سالانه</option>
+                    <option value="quarterly">فصلی</option>
+                    <option value="monthly">ماهانه</option>
+                    <option value="custom">سفارشی</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Target / Current Values for metric goals */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-t border-[#E6DFD3]/40 pt-4">
+                <div className="space-y-1.5 text-right">
+                  <label className="text-[10px] font-bold text-[#8D7F72] block">مقدار هدف (تارگت)</label>
+                  <input 
+                    type="number"
+                    step="any"
+                    placeholder="مثلاً: 84"
+                    value={editTargetValue}
+                    onChange={e => setEditTargetValue(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-white border border-[#D6CFC3] rounded-xl focus:outline-none focus:border-[#7C8363] font-mono text-left"
+                  />
+                </div>
+                <div className="space-y-1.5 text-right">
+                  <label className="text-[10px] font-bold text-[#8D7F72] block">مقدار فعلی</label>
+                  <input 
+                    type="number"
+                    step="any"
+                    placeholder="مثلاً: 90"
+                    value={editCurrentValue}
+                    onChange={e => setEditCurrentValue(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-white border border-[#D6CFC3] rounded-xl focus:outline-none focus:border-[#7C8363] font-mono text-left"
+                  />
+                </div>
+                <div className="space-y-1.5 text-right">
+                  <label className="text-[10px] font-bold text-[#8D7F72] block">واحد اندازه‌گیری</label>
+                  <input 
+                    type="text"
+                    placeholder="مثلاً: کیلوگرم، ساعت، تومان"
+                    value={editUnit}
+                    onChange={e => setEditUnit(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-white border border-[#D6CFC3] rounded-xl focus:outline-none focus:border-[#7C8363]"
+                  />
+                </div>
+              </div>
+
+              <button
+                onClick={() => {
+                  onUpdateGoal({
+                    ...goal,
+                    goalType: editGoalType,
+                    progressMode: editProgressMode,
+                    priority: editPriority,
+                    goalLevel: editGoalLevel !== 'none' ? (editGoalLevel as any) : undefined,
+                    targetValue: editTargetValue ? Number(editTargetValue) : undefined,
+                    currentValue: editCurrentValue ? Number(editCurrentValue) : undefined,
+                    unit: editUnit || undefined,
+                  });
+                }}
+                className="w-full py-2.5 bg-[#7C8363] hover:bg-[#5A5A40] text-white text-xs font-black rounded-xl shadow-xs transition-all cursor-pointer"
+              >
+                ذخیره تنظیمات پیکربندی
+              </button>
+            </div>
+
+            {/* Computed Progress Section */}
+            <div className="bg-[#E8ECE0]/30 p-5 rounded-3xl border border-[#DDE2D5] space-y-4">
+              <div className="flex justify-between items-center">
+                <h4 className="text-xs font-black text-[#2D3025] flex items-center gap-1.5">
+                  <Activity className="w-4 h-4 text-[#7C8363]" />
+                  <span>پیشرفت محاسبه‌شده (از بک‌اند)</span>
+                </h4>
+                <button
+                  onClick={handleComputeProgress}
+                  disabled={isComputing}
+                  className={`px-4 py-1.5 text-xs font-bold text-white rounded-xl flex items-center gap-1 cursor-pointer transition-all ${
+                    isComputing ? 'bg-[#D6CFC3] cursor-not-allowed' : 'bg-[#7C8363] hover:bg-[#5A5A40]'
+                  }`}
+                >
+                  <TrendingUp className="w-3.5 h-3.5" />
+                  <span>{isComputing ? 'در حال محاسبه...' : 'محاسبه مجدد پیشرفت'}</span>
+                </button>
+              </div>
+
+              <div className="bg-white p-4 rounded-2xl border border-[#E6DFD3] space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-[10px] font-bold text-[#8D7F72]">درصد پیشرفت فعلی:</span>
+                  <span className="text-sm font-black text-[#7C8363] font-mono">{goal.progressPercent?.toFixed(1) ?? percentage}%</span>
+                </div>
+                <div className="w-full h-3 bg-[#F9F6EE] rounded-full overflow-hidden border border-[#E6DFD3]/60">
+                  <div 
+                    className="h-full bg-gradient-to-l from-[#7C8363] to-[#5A5A40] transition-all duration-700 rounded-full"
+                    style={{ width: `${Math.min(100, goal.progressPercent ?? percentage)}%` }}
+                  />
+                </div>
+
+                {computedProgress && (
+                  <div className="bg-[#F9F6EE] p-3 rounded-xl border border-[#DDE2D5] text-[9px] font-mono text-[#8D7F72] max-h-40 overflow-y-auto" dir="ltr">
+                    {JSON.stringify(computedProgress.detail, null, 2)}
+                  </div>
+                )}
+
+                {goal.derivedProgressDetail && !computedProgress && (
+                  <details className="text-[9px]">
+                    <summary className="text-[10px] font-bold text-[#8D7F72] cursor-pointer hover:text-[#5A5A40]">جزئیات محاسبه ذخیره‌شده</summary>
+                    <div className="mt-2 bg-[#F9F6EE] p-3 rounded-xl border border-[#DDE2D5] font-mono text-[#8D7F72] max-h-40 overflow-y-auto" dir="ltr">
+                      {(() => { try { return JSON.stringify(JSON.parse(goal.derivedProgressDetail), null, 2); } catch { return goal.derivedProgressDetail; } })()}
+                    </div>
+                  </details>
+                )}
+              </div>
+
+              {/* Linked Habits from backend */}
+              {(goal.linkedHabits || []).length > 0 && (
+                <div className="space-y-2">
+                  <h5 className="text-[11px] font-black text-[#2D3025] flex items-center gap-1">
+                    <Flame className="w-3.5 h-3.5 text-amber-500" />
+                    <span>عادت‌های پیوندی ({goal.linkedHabits!.length})</span>
+                  </h5>
+                  <div className="grid grid-cols-1 gap-2">
+                    {goal.linkedHabits!.map((lh, idx) => (
+                      <div key={idx} className="bg-white p-3 rounded-xl border border-[#E6DFD3] flex items-center justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs font-bold text-[#2D3025]">{lh.habitTitle || lh.habit}</span>
+                            <span className="text-[8px] font-bold bg-[#E8ECE0] text-[#7C8363] px-1.5 py-0.5 rounded-md">{lh.contributionType}</span>
+                            <span className="text-[8px] font-bold bg-[#F9F1D8] text-[#5A5A40] px-1.5 py-0.5 rounded-md">{lh.period} · وزن: {lh.weight}%</span>
+                          </div>
+                          {lh.targetValue && (
+                            <span className="text-[9px] text-[#8D7F72] block mt-0.5">هدف: {lh.targetValue} {lh.isNegative ? '(معکوس)' : ''}</span>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => handleUnlinkHabit(lh.habit)}
+                          disabled={!!isUnlinkingHabit}
+                          className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all cursor-pointer disabled:opacity-50"
+                          title="قطع پیوند عادت"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Linked Projects from backend */}
+              {(goal.linkedProjects || []).length > 0 && (
+                <div className="space-y-2">
+                  <h5 className="text-[11px] font-black text-[#2D3025] flex items-center gap-1">
+                    <FolderKanban className="w-3.5 h-3.5 text-[#9B6B61]" />
+                    <span>پروژه‌های پیوندی ({goal.linkedProjects!.length})</span>
+                  </h5>
+                  <div className="grid grid-cols-1 gap-2">
+                    {goal.linkedProjects!.map((lp, idx) => (
+                      <div key={idx} className="bg-white p-3 rounded-xl border border-[#E6DFD3] flex items-center justify-between gap-3">
+                        <div>
+                          <span className="text-xs font-bold text-[#2D3025]">{lp.title}</span>
+                          {lp.progress != null && (
+                            <span className="text-[9px] text-[#8D7F72] mr-2">پیشرفت: {lp.progress}%</span>
+                          )}
+                        </div>
+                        <span className="text-[8px] font-bold bg-[#E8ECE0] text-[#7C8363] px-1.5 py-0.5 rounded-md">{lp.status || 'نامشخص'}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Add Habit Link Form */}
+              <div className="bg-[#FDFBF7] p-4 rounded-2xl border border-[#E6DFD3] space-y-3">
+                <h5 className="text-[10px] font-black text-[#2D3025] flex items-center gap-1">
+                  <PlusCircle className="w-3.5 h-3.5 text-[#7C8363]" />
+                  <span>پیوند عادت جدید (با تنظیمات مشارکت)</span>
+                </h5>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="space-y-1 text-right">
+                    <label className="text-[9px] font-bold text-[#8D7F72]">انتخاب عادت</label>
+                    <select
+                      value={linkHabitId}
+                      onChange={e => setLinkHabitId(e.target.value)}
+                      className="w-full text-xs px-2.5 py-1.5 bg-white border border-[#D6CFC3] rounded-xl focus:outline-none focus:border-[#7C8363]"
+                    >
+                      <option value="">-- انتخاب عادت --</option>
+                      {globalHabits.map(h => (
+                        <option key={h.id} value={h.id}>{h.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1 text-right">
+                    <label className="text-[9px] font-bold text-[#8D7F72]">نوع مشارکت</label>
+                    <select
+                      value={linkContributionType}
+                      onChange={e => setLinkContributionType(e.target.value as ContributionType)}
+                      className="w-full text-xs px-2.5 py-1.5 bg-white border border-[#D6CFC3] rounded-xl focus:outline-none focus:border-[#7C8363]"
+                    >
+                      <option value="completion_count">تعداد انجام</option>
+                      <option value="completion_rate">نرخ انجام</option>
+                      <option value="streak">رکورد (زنجیره)</option>
+                      <option value="quantity_sum">مجموع مقدار</option>
+                      <option value="average_value">میانگین مقدار</option>
+                      <option value="boolean_success">بله/خیر</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1 text-right">
+                    <label className="text-[9px] font-bold text-[#8D7F72]">دوره سنجش</label>
+                    <select
+                      value={linkContributionPeriod}
+                      onChange={e => setLinkContributionPeriod(e.target.value as ContributionPeriod)}
+                      className="w-full text-xs px-2.5 py-1.5 bg-white border border-[#D6CFC3] rounded-xl focus:outline-none focus:border-[#7C8363]"
+                    >
+                      <option value="daily">روزانه</option>
+                      <option value="weekly">هفتگی</option>
+                      <option value="monthly">ماهانه</option>
+                      <option value="all">کل دوره</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1 text-right">
+                    <label className="text-[9px] font-bold text-[#8D7F72]">مقدار هدف (اختیاری)</label>
+                    <input 
+                      type="number" step="any" placeholder="مثلاً: 30"
+                      value={linkTargetValue}
+                      onChange={e => setLinkTargetValue(e.target.value)}
+                      className="w-full px-2.5 py-1.5 text-xs bg-white border border-[#D6CFC3] rounded-xl focus:outline-none focus:border-[#7C8363] font-mono text-left"
+                    />
+                  </div>
+                </div>
+                <button
+                  onClick={handleLinkHabit}
+                  disabled={!linkHabitId || isLinkingHabit}
+                  className={`w-full py-2 text-xs font-bold text-white rounded-xl flex items-center justify-center gap-1 cursor-pointer transition-all ${
+                    linkHabitId && !isLinkingHabit ? 'bg-[#7C8363] hover:bg-[#5A5A40]' : 'bg-[#D6CFC3] cursor-not-allowed'
+                  }`}
+                >
+                  <Link className="w-3.5 h-3.5" />
+                  <span>{isLinkingHabit ? 'در حال پیوند...' : 'پیوند عادت به هدف'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* WORKSPACE CONTENT: FINANCE LINKS */}
+        {activeTab === 'finance_links' && (
+          <div className="space-y-5 animate-fade-in" id="goal-finance-links-panel">
+            <div className="bg-[#F9F1D8]/30 p-5 rounded-3xl border border-[#EBE3C8] space-y-4">
+              <h4 className="text-xs font-black text-[#2D3025] flex items-center gap-1.5">
+                <DollarSign className="w-4 h-4 text-[#5A5A40]" />
+                <span>حساب‌های مالی پیوندی به هدف</span>
+              </h4>
+              <p className="text-[10px] text-[#8D7F72] leading-relaxed">
+                با پیوند حساب‌های مالی به این هدف، پیشرفت به صورت خودکار از روی موجودی، پس‌انداز یا پرداخت بدهی محاسبه می‌شود.
+              </p>
+
+              {/* Existing Finance Links */}
+              {(goal.linkedFinanceAccounts || []).length > 0 ? (
+                <div className="grid grid-cols-1 gap-3">
+                  {goal.linkedFinanceAccounts!.map((fl, idx) => (
+                    <div key={idx} className="bg-white p-4 rounded-2xl border border-[#E6DFD3] flex items-center justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs font-bold text-[#2D3025]">{fl.accountName || fl.financeAccount}</span>
+                          <span className="text-[8px] font-bold bg-[#E8ECE0] text-[#7C8363] px-1.5 py-0.5 rounded-md">{fl.financeType}</span>
+                          <span className="text-[8px] font-bold bg-[#F9F1D8] text-[#5A5A40] px-1.5 py-0.5 rounded-md">وزن: {fl.weight}%</span>
+                        </div>
+                        <div className="flex gap-4 mt-1 text-[9px] text-[#8D7F72]">
+                          {fl.initialAmount != null && <span>ابتدایی: {fl.initialAmount.toLocaleString('fa-IR')}</span>}
+                          {fl.targetAmount != null && <span>هدف: {fl.targetAmount.toLocaleString('fa-IR')}</span>}
+                          {fl.currentBalance != null && <span>موجودی فعلی: {fl.currentBalance.toLocaleString('fa-IR')}</span>}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleUnlinkFinance(fl.financeAccount)}
+                        disabled={!!isUnlinkingFinance}
+                        className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all cursor-pointer disabled:opacity-50"
+                        title="قطع پیوند حساب مالی"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-6 bg-white/40 border border-dashed border-[#D6CFC3] rounded-3xl text-[10px] text-[#8D7F72]">
+                  هنوز حساب مالی به این هدف پیوند نخورده است.
+                </div>
+              )}
+
+              {/* Add Finance Link Form */}
+              <div className="bg-[#FDFBF7] p-4 rounded-2xl border border-[#E6DFD3] space-y-3">
+                <h5 className="text-[10px] font-black text-[#2D3025] flex items-center gap-1">
+                  <PlusCircle className="w-3.5 h-3.5 text-[#7C8363]" />
+                  <span>پیوند حساب مالی جدید</span>
+                </h5>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="space-y-1 text-right">
+                    <label className="text-[9px] font-bold text-[#8D7F72]">انتخاب حساب</label>
+                    <select
+                      value={linkFinanceAccountId}
+                      onChange={e => setLinkFinanceAccountId(e.target.value)}
+                      className="w-full text-xs px-2.5 py-1.5 bg-white border border-[#D6CFC3] rounded-xl focus:outline-none focus:border-[#7C8363]"
+                    >
+                      <option value="">-- انتخاب حساب مالی --</option>
+                      {bankAccounts.map(acc => (
+                        <option key={acc.id} value={acc.id}>{acc.bankName} - {acc.accountName}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1 text-right">
+                    <label className="text-[9px] font-bold text-[#8D7F72]">نوع ارتباط مالی</label>
+                    <select
+                      value={linkFinanceType}
+                      onChange={e => setLinkFinanceType(e.target.value as GoalFinanceLink['financeType'])}
+                      className="w-full text-xs px-2.5 py-1.5 bg-white border border-[#D6CFC3] rounded-xl focus:outline-none focus:border-[#7C8363]"
+                    >
+                      <option value="balance">موجودی حساب</option>
+                      <option value="savings">پس‌انداز</option>
+                      <option value="debt">بدهی</option>
+                      <option value="investment">سرمایه‌گذاری</option>
+                      <option value="income_accumulated">درآمد انباشته</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1 text-right">
+                    <label className="text-[9px] font-bold text-[#8D7F72]">مبلغ اولیه (اختیاری)</label>
+                    <input 
+                      type="number" step="any" placeholder="مثلاً: 50000000"
+                      value={linkFinanceInitialAmount}
+                      onChange={e => setLinkFinanceInitialAmount(e.target.value)}
+                      className="w-full px-2.5 py-1.5 text-xs bg-white border border-[#D6CFC3] rounded-xl focus:outline-none focus:border-[#7C8363] font-mono text-left"
+                    />
+                  </div>
+                  <div className="space-y-1 text-right">
+                    <label className="text-[9px] font-bold text-[#8D7F72]">مبلغ هدف (اختیاری)</label>
+                    <input 
+                      type="number" step="any" placeholder="مثلاً: 100000000"
+                      value={linkFinanceTargetAmount}
+                      onChange={e => setLinkFinanceTargetAmount(e.target.value)}
+                      className="w-full px-2.5 py-1.5 text-xs bg-white border border-[#D6CFC3] rounded-xl focus:outline-none focus:border-[#7C8363] font-mono text-left"
+                    />
+                  </div>
+                </div>
+                <button
+                  onClick={handleLinkFinance}
+                  disabled={!linkFinanceAccountId || isLinkingFinance}
+                  className={`w-full py-2 text-xs font-bold text-white rounded-xl flex items-center justify-center gap-1 cursor-pointer transition-all ${
+                    linkFinanceAccountId && !isLinkingFinance ? 'bg-[#7C8363] hover:bg-[#5A5A40]' : 'bg-[#D6CFC3] cursor-not-allowed'
+                  }`}
+                >
+                  <CreditCard className="w-3.5 h-3.5" />
+                  <span>{isLinkingFinance ? 'در حال پیوند...' : 'پیوند حساب مالی'}</span>
+                </button>
+              </div>
+            </div>
           </div>
         )}
 

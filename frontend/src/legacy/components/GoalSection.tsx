@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Goal, GoalCategory, Milestone } from '../types';
+import { Goal, GoalCategory, GoalType, ProgressMode, Milestone } from '../types';
 import { GOAL_CATEGORY_LABELS } from '../initialData';
 import PersianDatePicker from './PersianDatePicker';
 import { 
@@ -33,6 +33,7 @@ const CATEGORY_COLORS: Record<GoalCategory, string> = {
   career: 'bg-[#F4E9E4] border-[#EDDDD7] text-[#9B6B61]',
   learning: 'bg-[#E6DFD3] border-[#D6CFC3] text-[#8D7F72]',
   personal: 'bg-[#F9F1D8] border-[#EBE3C8] text-[#5A5A40]',
+  relationship: 'bg-[#F4E9E4] border-[#EDDDD7] text-[#9B6B61]',
   other: 'bg-[#FDFBF7] border-[#D6CFC3] text-[#3D3D3D]'
 };
 
@@ -282,7 +283,19 @@ export default function GoalSection({
               const completedMilestonesCount = goal.milestones.filter(m => m.completed).length;
               const pct = totalMilestonesCount > 0 
                 ? Math.round((completedMilestonesCount / totalMilestonesCount) * 100) 
-                : (goal.completed ? 100 : 0);
+                : (goal.progressPercent != null ? Math.round(goal.progressPercent) : (goal.completed ? 100 : 0));
+
+              // Goal type / progress mode labels
+              const goalTypeLabels: Record<string, string> = {
+                outcome: 'نتیجه‌ای', metric: 'سنجه‌ای', habit_driven: 'مبتنی بر عادت',
+                project_delivery: 'تحویل پروژه', savings: 'پس‌انداز', investment: 'سرمایه‌گذاری',
+                debt_payoff: 'پرداخت بدهی', health: 'سلامت', learning: 'یادگیری', consistency: 'ثبات',
+              };
+              const progressModeLabels: Record<string, string> = {
+                manual: 'دستی', metric_value: 'سنجه', habit_rollup: 'عادت',
+                project_rollup: 'پروژه', finance_balance: 'موجودی', finance_savings: 'پس‌انداز',
+                debt_paydown: 'بدهی', weighted_composite: 'ترکیبی',
+              };
               const isActive = activeGoalId === goal.id;
 
               return (
@@ -304,6 +317,26 @@ export default function GoalSection({
                         {goal.completed && (
                           <span className="bg-[#E8ECE0] text-[#7C8363] px-2.5 py-0.5 rounded-full text-[10px] font-bold border border-[#DDE2D5]">
                             کامل شد 🎉
+                          </span>
+                        )}
+                        {goal.goalType && goal.goalType !== 'outcome' && (
+                          <span className="bg-[#F9F1D8] text-[#5A5A40] px-2 py-0.5 rounded-full text-[9px] font-bold border border-[#EBE3C8]">
+                            {goalTypeLabels[goal.goalType] || goal.goalType}
+                          </span>
+                        )}
+                        {goal.progressMode && goal.progressMode !== 'manual' && (
+                          <span className="bg-[#E6DFD3] text-[#8D7F72] px-2 py-0.5 rounded-full text-[9px] font-bold border border-[#D6CFC3]">
+                            محاسبه: {progressModeLabels[goal.progressMode] || goal.progressMode}
+                          </span>
+                        )}
+                        {(goal.linkedHabits?.length || 0) > 0 && (
+                          <span className="bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full text-[9px] font-bold border border-amber-200 flex items-center gap-0.5">
+                            🔥 {goal.linkedHabits!.length} عادت
+                          </span>
+                        )}
+                        {(goal.linkedFinanceAccounts?.length || 0) > 0 && (
+                          <span className="bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full text-[9px] font-bold border border-emerald-200 flex items-center gap-0.5">
+                            💳 {goal.linkedFinanceAccounts!.length} حساب
                           </span>
                         )}
                         <span className="text-[10px] text-[#8D7F72] font-semibold flex items-center gap-1 font-mono">

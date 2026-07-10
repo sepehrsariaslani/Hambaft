@@ -1,0 +1,62 @@
+{
+ "name": "Goal Finance Link",
+ "doctype": "DocType",
+ "module": "Hambaft",
+ "custom": 0,
+ "istable": 1,
+ "issingle": 0,
+ "fields": [
+  {
+   "fieldname": "finance_account",
+   "fieldtype": "Link",
+   "label": "حساب مالی",
+   "options": "Hambaft Finance Account",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "finance_type",
+   "fieldtype": "Select",
+   "label": "نوع منبع مالی",
+   "options": "موجودی_حساب\nپس‌انداز\nبدهی\nسرمایه‌گذاری\nدرآمد_انباشته",
+   "default": "موجودی_حساب",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "initial_amount",
+   "fieldtype": "Currency",
+   "label": "مبلغ اولیه",
+   "description": "مبلغ شروع (خودکار از حساب یا دستی)"
+  },
+  {
+   "fieldname": "target_amount",
+   "fieldtype": "Currency",
+   "label": "مبلغ هدف"
+  },
+  {
+   "fieldname": "current_derived_amount",
+   "fieldtype": "Currency",
+   "label": "مبلغ فعلی (محاسبه‌شده)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "weight",
+   "fieldtype": "Percent",
+   "label": "وزن",
+   "default": 100
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "توضیحات"
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1
+  }
+ ]
+}

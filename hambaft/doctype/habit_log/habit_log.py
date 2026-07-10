@@ -25,6 +25,10 @@ class HabitLog(Document):
 
     def on_update(self):
         self._recalculate_streaks()
+        self._trigger_linked_goal_progress()
+
+    def after_insert(self):
+        self._trigger_linked_goal_progress()
 
     def _recalculate_streaks(self):
         habit = frappe.get_doc("Habit", self.habit)
@@ -60,6 +64,38 @@ class HabitLog(Document):
             habit.streak_current = 0
         habit.streak_best = max(best, habit.streak_best or 0)
         habit.save(ignore_permissions=True)
+
+    def _trigger_linked_goal_progress(self):
+        """When a habit log is created/updated, recompute progress for all
+        goals that have this habit linked via Goal Habit Link child table."""
+        try:
+            import json
+            # Find all Goal Habit Link rows referencing this habit
+            links = frappe.get_all(
+                "Goal Habit Link",
+                filters={"habit": self.habit},
+                fields=["parent"],
+                distinct=True,
+            )
+            if not links:
+                return
+            goal_names = list({row.parent for row in links})
+            for goal_name in goal_names:
+                try:
+                    goal = frappe.get_doc("Goal", goal_name)
+                    pct, detail = goal.compute_progress()
+                    goal.progress_percent = pct
+                    goal.derived_progress_detail = json.dumps(detail, ensure_ascii=False)
+                    if pct >= 100:
+                        goal.status = "تکمیل‌شده"
+                    goal.save(ignore_permissions=True)
+                except Exception:
+                    frappe.log_error(f"Auto-trigger goal progress failed for {goal_name}")
+            if goal_names:
+                frappe.db.commit()
+        except Exception:
+            # Never let goal recomputation break habit logging
+            frappe.log_error("habit_goal_trigger_error", f"Failed to trigger goal progress for habit {self.habit}")
 
 
 def has_permission(doc, ptype="read", user=None):

@@ -1,22 +1,26 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import {
   Inbox,
   CalendarDays,
   ArrowRight,
-  CircleDot,
   Play,
   Pause,
   CheckCircle2,
   Clock,
   ChevronDown,
   ChevronLeft,
-  AlertCircle,
   Layers,
   Archive,
-  Zap,
   Sunrise,
   Timer,
+  LayoutGrid,
+  Calendar,
+  BarChart3,
+  FolderKanban,
+  Grid3X3,
+  AlertCircle,
+  SkipForward,
 } from 'lucide-react'
 import type { Task, TaskSession } from '../types'
 import {
@@ -29,17 +33,31 @@ import {
   startTaskSession,
   stopTaskSession,
   getActiveTaskSession,
-  getTaskSessions,
+  getPlannerDailyTimeline,
+  getPlannerWeek,
+  getPlannerMonth,
+  getTasksGroupedByStatus,
+  getAreasWithSummaries,
 } from '../../app/hambaft-api'
 
 type PlannerBucket = 'inbox' | 'today' | 'next' | 'scheduled' | 'someday'
+type PlannerView = 'buckets' | 'timeline' | 'week' | 'month' | 'board' | 'areas'
 
 const BUCKETS: { id: PlannerBucket; label: string; icon: React.ReactNode; color: string }[] = [
   { id: 'inbox', label: 'صندوق ورودی', icon: <Inbox className="w-4 h-4" />, color: 'text-amber-600' },
   { id: 'today', label: 'امروز', icon: <Sunrise className="w-4 h-4" />, color: 'text-emerald-600' },
   { id: 'next', label: 'بعدی', icon: <ArrowRight className="w-4 h-4" />, color: 'text-blue-600' },
   { id: 'scheduled', label: 'زمان‌بندی‌شده', icon: <CalendarDays className="w-4 h-4" />, color: 'text-purple-600' },
-  { id: 'someday', label: 'شاید someday', icon: <Archive className="w-4 h-4" />, color: 'text-gray-500' },
+  { id: 'someday', label: 'شاید', icon: <Archive className="w-4 h-4" />, color: 'text-gray-500' },
+]
+
+const VIEW_TABS: { id: PlannerView; label: string; icon: React.ReactNode }[] = [
+  { id: 'buckets', label: 'بخش‌ها', icon: <Layers className="w-3.5 h-3.5" /> },
+  { id: 'timeline', label: 'تایم‌لاین', icon: <Clock className="w-3.5 h-3.5" /> },
+  { id: 'week', label: 'هفتگی', icon: <Calendar className="w-3.5 h-3.5" /> },
+  { id: 'month', label: 'ماهانه', icon: <CalendarDays className="w-3.5 h-3.5" /> },
+  { id: 'board', label: 'بورد', icon: <LayoutGrid className="w-3.5 h-3.5" /> },
+  { id: 'areas', label: 'حوزه‌ها', icon: <Grid3X3 className="w-3.5 h-3.5" /> },
 ]
 
 const STATUS_LABELS: Record<string, string> = {
@@ -66,7 +84,22 @@ const STATUS_COLORS: Record<string, string> = {
   dropped: 'bg-red-50 text-red-700 border-red-200 line-through',
 }
 
+const PRIORITY_LABELS: Record<string, string> = {
+  low: 'پایین',
+  medium: 'متوسط',
+  high: 'بالا',
+  urgent: 'فوری',
+}
+
+const PRIORITY_COLORS: Record<string, string> = {
+  low: 'bg-gray-50 text-gray-500',
+  medium: 'bg-amber-50 text-amber-600',
+  high: 'bg-red-50 text-red-600',
+  urgent: 'bg-red-100 text-red-700 font-black',
+}
+
 export default function PlannerSection() {
+  const [activeView, setActiveView] = useState<PlannerView>('buckets')
   const [activeBucket, setActiveBucket] = useState<PlannerBucket>('today')
   const [tasks, setTasks] = useState<Task[]>([])
   const [loading, setLoading] = useState(false)
@@ -74,26 +107,36 @@ export default function PlannerSection() {
   const [sessionTaskTitle, setSessionTaskTitle] = useState('')
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null)
 
+  // Timeline view state
+  const [timelineDate, setTimelineDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [timelineData, setTimelineData] = useState<any>(null)
+
+  // Week view state
+  const [weekStartDate, setWeekStartDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [weekData, setWeekData] = useState<Record<string, any[]>>({})
+
+  // Month view state
+  const [monthYear, setMonthYear] = useState(new Date().getFullYear())
+  const [monthMonth, setMonthMonth] = useState(new Date().getMonth() + 1)
+  const [monthData, setMonthData] = useState<Record<string, any[]>>({})
+
+  // Board view state
+  const [boardData, setBoardData] = useState<Record<string, any[]>>({})
+
+  // Areas view state
+  const [areasData, setAreasData] = useState<any[]>([])
+
+  // ─── Bucket data fetching ──────────────────────────────────
   const fetchBucket = useCallback(async (bucket: PlannerBucket) => {
     setLoading(true)
     try {
       let resp
       switch (bucket) {
-        case 'inbox':
-          resp = await getPlannerInbox()
-          break
-        case 'today':
-          resp = await getPlannerToday()
-          break
-        case 'next':
-          resp = await getPlannerNext()
-          break
-        case 'scheduled':
-          resp = await getPlannerScheduled()
-          break
-        case 'someday':
-          resp = await getPlannerSomeday()
-          break
+        case 'inbox': resp = await getPlannerInbox(); break
+        case 'today': resp = await getPlannerToday(); break
+        case 'next': resp = await getPlannerNext(); break
+        case 'scheduled': resp = await getPlannerScheduled(); break
+        case 'someday': resp = await getPlannerSomeday(); break
       }
       const rows = (resp as any)?.data?.tasks || []
       setTasks(rows.map(mapBackendTask))
@@ -104,6 +147,7 @@ export default function PlannerSection() {
     }
   }, [])
 
+  // ─── Active session ────────────────────────────────────────
   const fetchActiveSession = useCallback(async () => {
     try {
       const resp = await getActiveTaskSession()
@@ -118,9 +162,12 @@ export default function PlannerSection() {
           status: sess.status,
           notes: sess.notes,
         })
-        // Find task title
         const t = tasks.find(x => x.id === sess.task)
         if (t) setSessionTaskTitle(t.title)
+        else {
+          // Try to find from title in active session data
+          setSessionTaskTitle(sess.task_title || 'جلسه فعال')
+        }
       } else {
         setActiveSession(null)
       }
@@ -129,9 +176,97 @@ export default function PlannerSection() {
     }
   }, [tasks])
 
+  // ─── Timeline fetching ─────────────────────────────────────
+  const fetchTimeline = useCallback(async (date?: string) => {
+    setLoading(true)
+    try {
+      const resp = await getPlannerDailyTimeline(date)
+      const data = (resp as any)?.data
+      if (data) {
+        setTimelineData(data)
+        const mapped = (data.tasks || []).map(mapBackendTask)
+        setTasks(mapped)
+      }
+    } catch (e) {
+      console.error('fetchTimeline error:', e)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  // ─── Week fetching ─────────────────────────────────────────
+  const fetchWeek = useCallback(async (startDate?: string) => {
+    setLoading(true)
+    try {
+      const resp = await getPlannerWeek(startDate)
+      const data = (resp as any)?.data
+      if (data?.days) {
+        setWeekData(data.days)
+      }
+    } catch (e) {
+      console.error('fetchWeek error:', e)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  // ─── Month fetching ────────────────────────────────────────
+  const fetchMonth = useCallback(async (year?: number, month?: number) => {
+    setLoading(true)
+    try {
+      const resp = await getPlannerMonth(year, month)
+      const data = (resp as any)?.data
+      if (data?.days) {
+        setMonthData(data.days)
+      }
+    } catch (e) {
+      console.error('fetchMonth error:', e)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  // ─── Board fetching ────────────────────────────────────────
+  const fetchBoard = useCallback(async () => {
+    setLoading(true)
+    try {
+      const resp = await getTasksGroupedByStatus()
+      const data = (resp as any)?.data
+      if (data?.status_groups) {
+        setBoardData(data.status_groups)
+      }
+    } catch (e) {
+      console.error('fetchBoard error:', e)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  // ─── Areas fetching ────────────────────────────────────────
+  const fetchAreas = useCallback(async () => {
+    setLoading(true)
+    try {
+      const resp = await getAreasWithSummaries()
+      const data = (resp as any)?.data
+      if (data?.areas) {
+        setAreasData(data.areas)
+      }
+    } catch (e) {
+      console.error('fetchAreas error:', e)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  // ─── Effects ───────────────────────────────────────────────
   useEffect(() => {
-    fetchBucket(activeBucket)
-  }, [activeBucket, fetchBucket])
+    if (activeView === 'buckets') fetchBucket(activeBucket)
+    else if (activeView === 'timeline') fetchTimeline(timelineDate)
+    else if (activeView === 'week') fetchWeek(weekStartDate)
+    else if (activeView === 'month') fetchMonth(monthYear, monthMonth)
+    else if (activeView === 'board') fetchBoard()
+    else if (activeView === 'areas') fetchAreas()
+  }, [activeView, activeBucket, timelineDate, weekStartDate, monthYear, monthMonth, fetchBucket, fetchTimeline, fetchWeek, fetchMonth, fetchBoard, fetchAreas])
 
   useEffect(() => {
     fetchActiveSession()
@@ -139,10 +274,13 @@ export default function PlannerSection() {
     return () => clearInterval(interval)
   }, [fetchActiveSession])
 
+  // ─── Handlers ──────────────────────────────────────────────
   const handleMove = async (taskId: string, bucket: Task['status']) => {
     try {
       await moveTaskToBucket(taskId, bucket)
-      fetchBucket(activeBucket)
+      if (activeView === 'buckets') fetchBucket(activeBucket)
+      else if (activeView === 'timeline') fetchTimeline(timelineDate)
+      else if (activeView === 'board') fetchBoard()
     } catch (e) {
       console.error(e)
     }
@@ -152,7 +290,8 @@ export default function PlannerSection() {
     try {
       await startTaskSession(taskId)
       fetchActiveSession()
-      fetchBucket(activeBucket)
+      if (activeView === 'buckets') fetchBucket(activeBucket)
+      else if (activeView === 'timeline') fetchTimeline(timelineDate)
     } catch (e) {
       console.error(e)
     }
@@ -163,7 +302,8 @@ export default function PlannerSection() {
     try {
       await stopTaskSession(activeSession.id)
       fetchActiveSession()
-      fetchBucket(activeBucket)
+      if (activeView === 'buckets') fetchBucket(activeBucket)
+      else if (activeView === 'timeline') fetchTimeline(timelineDate)
     } catch (e) {
       console.error(e)
     }
@@ -173,6 +313,536 @@ export default function PlannerSection() {
     setExpandedTaskId(prev => prev === taskId ? null : taskId)
   }
 
+  // ─── Helpers ───────────────────────────────────────────────
+  const getPersianDayName = (dateStr: string) => {
+    const dayNames = ['یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنجشنبه', 'جمعه', 'شنبه']
+    const d = new Date(dateStr + 'T12:00:00')
+    return dayNames[d.getDay()]
+  }
+
+  const formatMinutes = (mins: number) => {
+    if (mins < 60) return `${mins} دقیقه`
+    const h = Math.floor(mins / 60)
+    const m = mins % 60
+    return m ? `${h}س ${m}د` : `${h} ساعت`
+  }
+
+  // ─── Render Task Card ──────────────────────────────────────
+  const renderTaskCard = (task: Task, compact = false) => (
+    <motion.div
+      key={task.id}
+      initial={{ opacity: 0, y: 4 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, x: 30 }}
+      className="bg-white dark:bg-[#1C1D17] rounded-2xl border border-[#E6DFD3] dark:border-[#3D4133]/50 overflow-hidden"
+    >
+      <div className={`p-3 flex items-center gap-3 ${compact ? 'py-2 px-3' : ''}`}>
+        <button
+          onClick={() => handleMove(task.id, task.status === 'done' ? 'inbox' : 'done')}
+          className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
+            task.status === 'done'
+              ? 'bg-emerald-500 border-emerald-500 text-white'
+              : 'border-[#D6CFC3] hover:border-[#7C8363]'
+          }`}
+        >
+          {task.status === 'done' && <CheckCircle2 className="w-3.5 h-3.5" />}
+        </button>
+
+        <div className="flex-1 min-w-0" onClick={() => toggleExpand(task.id)}>
+          <div className={`text-xs font-bold truncate ${task.status === 'done' ? 'line-through text-gray-400' : 'text-[#2D3025] dark:text-[#E8ECE0]'}`}>
+            {task.title}
+          </div>
+          {!compact && (
+            <div className="flex items-center gap-2 mt-1 flex-wrap">
+              <span className={`text-[8px] px-1.5 py-0.5 rounded-md border font-bold ${STATUS_COLORS[task.status || 'inbox']}`}>
+                {STATUS_LABELS[task.status || 'inbox']}
+              </span>
+              {task.priority && (
+                <span className={`text-[8px] px-1.5 py-0.5 rounded ${PRIORITY_COLORS[task.priority] || PRIORITY_COLORS.medium}`}>
+                  {PRIORITY_LABELS[task.priority] || task.priority}
+                </span>
+              )}
+              {task.scheduledDate && (
+                <span className="text-[8px] text-[#8D7F72] flex items-center gap-0.5">
+                  <CalendarDays className="w-2.5 h-2.5" />
+                  {task.scheduledDate}
+                </span>
+              )}
+              {task.actualMinutes ? (
+                <span className="text-[8px] text-indigo-600 flex items-center gap-0.5">
+                  <Clock className="w-2.5 h-2.5" />
+                  {formatMinutes(task.actualMinutes)}
+                </span>
+              ) : null}
+              {task.blockedBy && task.blockedBy.length > 0 && (
+                <span className="text-[8px] text-amber-600 flex items-center gap-0.5">
+                  <AlertCircle className="w-2.5 h-2.5" />
+                  {task.blockedBy.length} پیش‌نیاز
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center gap-1 shrink-0">
+          {activeSession?.taskId === task.id ? (
+            <button
+              onClick={handleStopSession}
+              className="p-1.5 bg-red-50 text-red-600 rounded-lg border border-red-200"
+              title="توقف"
+            >
+              <Pause className="w-3.5 h-3.5" />
+            </button>
+          ) : task.status !== 'done' ? (
+            <button
+              onClick={() => handleStartSession(task.id)}
+              className="p-1.5 bg-[#E8ECE0] text-[#7C8363] rounded-lg hover:bg-[#7C8363] hover:text-white transition-colors"
+              title="شروع زمان‌سنج"
+            >
+              <Play className="w-3.5 h-3.5" />
+            </button>
+          ) : null}
+          {!compact && (
+            <button onClick={() => toggleExpand(task.id)}>
+              {expandedTaskId === task.id ? (
+                <ChevronDown className="w-4 h-4 text-[#8D7F72]" />
+              ) : (
+                <ChevronLeft className="w-4 h-4 text-[#8D7F72]" />
+              )}
+            </button>
+          )}
+        </div>
+      </div>
+
+      <AnimatePresence>
+        {expandedTaskId === task.id && !compact && (
+          <motion.div
+            initial={{ height: 0 }}
+            animate={{ height: 'auto' }}
+            exit={{ height: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="px-3 pb-3 pt-1 border-t border-[#E6DFD3]/40 space-y-2">
+              {task.description && (
+                <p className="text-[10px] text-[#8D7F72]">{task.description}</p>
+              )}
+              <div className="flex flex-wrap gap-1">
+                {(['inbox', 'today', 'next', 'in_progress', 'on_hold', 'someday', 'done'] as const).map(b => (
+                  <button
+                    key={b}
+                    onClick={() => handleMove(task.id, b)}
+                    className={`px-2 py-1 text-[8px] font-bold rounded-lg border transition-colors ${
+                      task.status === b
+                        ? 'bg-[#7C8363] text-white border-[#7C8363]'
+                        : 'bg-white dark:bg-[#121411] text-[#8D7F72] border-[#D6CFC3] hover:border-[#7C8363]'
+                    }`}
+                  >
+                    {STATUS_LABELS[b]}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  )
+
+  // ─── Render: Buckets View ──────────────────────────────────
+  const renderBuckets = () => (
+    <div className="space-y-3">
+      {/* Bucket Tabs */}
+      <div className="flex gap-1 overflow-x-auto pb-1">
+        {BUCKETS.map(bucket => (
+          <button
+            key={bucket.id}
+            onClick={() => setActiveBucket(bucket.id)}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-[10px] font-black whitespace-nowrap transition-all ${
+              activeBucket === bucket.id
+                ? 'bg-[#7C8363] text-white shadow-sm'
+                : 'bg-white dark:bg-[#1C1D17] text-[#8D7F72] border border-[#E6DFD3] dark:border-[#3D4133]/50'
+            }`}
+          >
+            {bucket.icon}
+            <span>{bucket.label}</span>
+            {activeBucket === bucket.id && tasks.length > 0 && (
+              <span className="bg-white/20 px-1.5 py-0.5 rounded-full text-[9px]">{tasks.length}</span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* Task List */}
+      {loading ? (
+        <div className="text-center py-8 text-[10px] text-[#8D7F72]">در حال بارگذاری...</div>
+      ) : tasks.length === 0 ? (
+        <div className="text-center py-12 bg-white dark:bg-[#1C1D17] rounded-3xl border border-[#E6DFD3] dark:border-[#3D4133]/50">
+          <Inbox className="w-8 h-8 text-[#D6CFC3] mx-auto mb-2" />
+          <p className="text-[10px] text-[#8D7F72]">هیچ تسکی در این بخش نیست</p>
+        </div>
+      ) : (
+        <AnimatePresence>
+          {tasks.map(task => renderTaskCard(task))}
+        </AnimatePresence>
+      )}
+    </div>
+  )
+
+  // ─── Render: Timeline View ─────────────────────────────────
+  const renderTimeline = () => (
+    <div className="space-y-3">
+      {/* Date Picker */}
+      <div className="flex items-center gap-2">
+        <input
+          type="date"
+          value={timelineDate}
+          onChange={e => setTimelineDate(e.target.value)}
+          className="text-xs px-3 py-2 border border-[#E6DFD3] dark:border-[#3D4133] rounded-xl bg-white dark:bg-[#1C1D17] text-[#2D3025] dark:text-[#E8ECE0]"
+        />
+        <button
+          onClick={() => setTimelineDate(new Date().toISOString().slice(0, 10))}
+          className="px-3 py-2 text-[10px] font-bold bg-[#7C8363] text-white rounded-xl"
+        >
+          امروز
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="text-center py-8 text-[10px] text-[#8D7F72]">در حال بارگذاری...</div>
+      ) : (
+        <>
+          {/* Active Session Banner */}
+          {timelineData?.active_session && (
+            <div className="bg-indigo-50 dark:bg-indigo-950/20 border border-indigo-200 dark:border-indigo-800 rounded-2xl p-3 flex items-center gap-3">
+              <Timer className="w-5 h-5 text-indigo-600 animate-pulse" />
+              <div className="flex-1">
+                <span className="text-[10px] font-black text-indigo-700">جلسه فعال</span>
+                <p className="text-[8px] text-indigo-500">از {String(timelineData.active_session.started_at || '').slice(11, 16)}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Time Blocks */}
+          {timelineData?.time_blocks?.length > 0 && (
+            <div className="space-y-1">
+              <h4 className="text-[10px] font-black text-[#8D7F72] flex items-center gap-1">
+                <Clock className="w-3 h-3" /> بلوک‌های زمانی
+              </h4>
+              {timelineData.time_blocks.map((block: any) => (
+                <div key={block.name} className="bg-[#F9F6EE] dark:bg-[#1B1D16] rounded-xl p-2 flex items-center gap-2 border border-[#E6DFD3]/50">
+                  <span className="text-[10px] font-mono font-bold text-[#7C8363]">{block.start_time?.slice(0, 5)}</span>
+                  <span className="text-[10px] text-[#2D3025] dark:text-[#E8ECE0] truncate">{block.title}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Tasks */}
+          <div className="space-y-1">
+            <h4 className="text-[10px] font-black text-[#8D7F72] flex items-center gap-1">
+              <Layers className="w-3 h-3" /> تسک‌های امروز
+            </h4>
+            {tasks.length === 0 ? (
+              <p className="text-[10px] text-[#8D7F72] text-center py-6">تسکی برای این روز نیست</p>
+            ) : (
+              <AnimatePresence>
+                {tasks.map(task => renderTaskCard(task))}
+              </AnimatePresence>
+            )}
+          </div>
+
+          {/* Calendar Events */}
+          {timelineData?.events?.length > 0 && (
+            <div className="space-y-1">
+              <h4 className="text-[10px] font-black text-[#8D7F72] flex items-center gap-1">
+                <CalendarDays className="w-3 h-3" /> رویدادها
+              </h4>
+              {timelineData.events.map((ev: any) => (
+                <div key={ev.name} className="bg-purple-50 dark:bg-purple-950/10 rounded-xl p-2 flex items-center gap-2 border border-purple-200/50">
+                  <span className="text-[10px] font-mono font-bold text-purple-600">
+                    {String(ev.starts_at || '').slice(11, 16)}
+                  </span>
+                  <span className="text-[10px] text-purple-800 dark:text-purple-300 truncate">{ev.title}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+
+  // ─── Render: Week View ─────────────────────────────────────
+  const renderWeek = () => {
+    const dates = []
+    const base = new Date(weekStartDate + 'T12:00:00')
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(base.getTime() + i * 86400000)
+      dates.push(d.toISOString().slice(0, 10))
+    }
+
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              const prev = new Date(base.getTime() - 7 * 86400000)
+              setWeekStartDate(prev.toISOString().slice(0, 10))
+            }}
+            className="p-2 bg-white dark:bg-[#1C1D17] border border-[#E6DFD3] dark:border-[#3D4133] rounded-xl"
+          >
+            <SkipForward className="w-3.5 h-3.5 rotate-180" />
+          </button>
+          <span className="text-xs font-bold text-[#2D3025] dark:text-[#E8ECE0]">
+            از {dates[0]} تا {dates[6]}
+          </span>
+          <button
+            onClick={() => {
+              const next = new Date(base.getTime() + 7 * 86400000)
+              setWeekStartDate(next.toISOString().slice(0, 10))
+            }}
+            className="p-2 bg-white dark:bg-[#1C1D17] border border-[#E6DFD3] dark:border-[#3D4133] rounded-xl"
+          >
+            <SkipForward className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={() => setWeekStartDate(new Date().toISOString().slice(0, 10))}
+            className="px-3 py-2 text-[10px] font-bold bg-[#7C8363] text-white rounded-xl"
+          >
+            این هفته
+          </button>
+        </div>
+
+        {loading ? (
+          <div className="text-center py-8 text-[10px] text-[#8D7F72]">در حال بارگذاری...</div>
+        ) : (
+          <div className="space-y-4">
+            {dates.map(date => {
+              const dayTasks = (weekData[date] || []).map(mapBackendTask)
+              const isToday = date === new Date().toISOString().slice(0, 10)
+              return (
+                <div key={date} className={`rounded-2xl border p-3 space-y-2 ${
+                  isToday
+                    ? 'bg-[#E8ECE0]/40 dark:bg-[#1E2218]/40 border-[#7C8363]/50'
+                    : 'bg-white dark:bg-[#1C1D17] border-[#E6DFD3] dark:border-[#3D4133]/50'
+                }`}>
+                  <div className="flex items-center justify-between">
+                    <span className={`text-[10px] font-black ${isToday ? 'text-[#7C8363]' : 'text-[#8D7F72]'}`}>
+                      {getPersianDayName(date)} — {date}
+                    </span>
+                    <span className="text-[8px] font-bold bg-[#F9F6EE] dark:bg-[#121411] px-2 py-0.5 rounded text-[#8D7F72]">
+                      {dayTasks.length} تسک
+                    </span>
+                  </div>
+                  {dayTasks.length === 0 ? (
+                    <p className="text-[9px] text-[#D6CFC3]">بدون تسک</p>
+                  ) : (
+                    <div className="space-y-1">
+                      {dayTasks.map(task => renderTaskCard(task, true))}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // ─── Render: Month View ────────────────────────────────────
+  const renderMonth = () => {
+    const days = Object.keys(monthData).sort()
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              let m = monthMonth - 1, y = monthYear
+              if (m < 1) { m = 12; y-- }
+              setMonthMonth(m); setMonthYear(y)
+            }}
+            className="p-2 bg-white dark:bg-[#1C1D17] border border-[#E6DFD3] dark:border-[#3D4133] rounded-xl"
+          >
+            <SkipForward className="w-3.5 h-3.5 rotate-180" />
+          </button>
+          <span className="text-xs font-bold text-[#2D3025] dark:text-[#E8ECE0]">
+            {monthYear} / {monthMonth}
+          </span>
+          <button
+            onClick={() => {
+              let m = monthMonth + 1, y = monthYear
+              if (m > 12) { m = 1; y++ }
+              setMonthMonth(m); setMonthYear(y)
+            }}
+            className="p-2 bg-white dark:bg-[#1C1D17] border border-[#E6DFD3] dark:border-[#3D4133] rounded-xl"
+          >
+            <SkipForward className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={() => {
+              const now = new Date()
+              setMonthYear(now.getFullYear())
+              setMonthMonth(now.getMonth() + 1)
+            }}
+            className="px-3 py-2 text-[10px] font-bold bg-[#7C8363] text-white rounded-xl"
+          >
+            این ماه
+          </button>
+        </div>
+
+        {loading ? (
+          <div className="text-center py-8 text-[10px] text-[#8D7F72]">در حال بارگذاری...</div>
+        ) : days.length === 0 ? (
+          <div className="text-center py-12 bg-white dark:bg-[#1C1D17] rounded-3xl border border-[#E6DFD3]">
+            <CalendarDays className="w-8 h-8 text-[#D6CFC3] mx-auto mb-2" />
+            <p className="text-[10px] text-[#8D7F72]">تسکی در این ماه نیست</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-7 gap-1">
+            {/* Day headers */}
+            {['ش', 'ی', 'د', 'س', 'چ', 'پ', 'ج'].map(d => (
+              <div key={d} className="text-center text-[8px] font-black text-[#8D7F72] py-1">{d}</div>
+            ))}
+            {/* Fill empty cells before first day */}
+            {(() => {
+              const firstDay = new Date(days[0] + 'T12:00:00').getDay()
+              // Saturday=6, Sunday=0... convert to Sat-first
+              const offset = (firstDay + 1) % 7
+              return Array.from({ length: offset }, (_, i) => (
+                <div key={`empty-${i}`} className="min-h-[48px]" />
+              ))
+            })()}
+            {/* Day cells */}
+            {days.map(date => {
+              const dayTasks = (monthData[date] || []).map(mapBackendTask)
+              const isToday = date === new Date().toISOString().slice(0, 10)
+              const dayNum = date.slice(8, 10)
+              return (
+                <div
+                  key={date}
+                  className={`min-h-[48px] rounded-xl p-1 text-center ${
+                    isToday
+                      ? 'bg-[#7C8363]/10 border border-[#7C8363]/40'
+                      : 'bg-white/50 dark:bg-[#1C1D17]/50 border border-transparent'
+                  }`}
+                >
+                  <span className={`text-[9px] font-bold ${isToday ? 'text-[#7C8363]' : 'text-[#8D7F72]'}`}>
+                    {dayNum}
+                  </span>
+                  {dayTasks.length > 0 && (
+                    <div className="mt-0.5 flex justify-center gap-0.5 flex-wrap">
+                      {dayTasks.slice(0, 3).map((t, i) => (
+                        <span
+                          key={i}
+                          className={`w-1.5 h-1.5 rounded-full ${
+                            t.status === 'done' ? 'bg-emerald-400' :
+                            t.status === 'today' ? 'bg-[#7C8363]' :
+                            t.status === 'in_progress' ? 'bg-indigo-400' :
+                            'bg-amber-400'
+                          }`}
+                        />
+                      ))}
+                      {dayTasks.length > 3 && (
+                        <span className="text-[7px] text-[#8D7F72]">+{dayTasks.length - 3}</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // ─── Render: Board View ────────────────────────────────────
+  const renderBoard = () => {
+    const statusOrder = ['inbox', 'today', 'next', 'in_progress', 'on_hold', 'someday', 'done']
+
+    return (
+      <div className="space-y-3">
+        {loading ? (
+          <div className="text-center py-8 text-[10px] text-[#8D7F72]">در حال بارگذاری...</div>
+        ) : (
+          <div className="flex gap-3 overflow-x-auto pb-2">
+            {statusOrder.map(status => {
+              const group = (boardData[status] || []).map(mapBackendTask)
+              return (
+                <div
+                  key={status}
+                  className="min-w-[220px] max-w-[280px] flex-1 bg-[#F9F6EE] dark:bg-[#1B1D16] rounded-2xl p-3 space-y-2 border border-[#E6DFD3]/50 dark:border-[#3D4133]/30"
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <span className={`text-[10px] font-black px-2 py-1 rounded-lg border ${STATUS_COLORS[status]}`}>
+                      {STATUS_LABELS[status]}
+                    </span>
+                    <span className="text-[9px] font-bold text-[#8D7F72]">{group.length}</span>
+                  </div>
+                  <div className="space-y-2">
+                    {group.map(task => renderTaskCard(task, true))}
+                  </div>
+                  {group.length === 0 && (
+                    <p className="text-[9px] text-[#D6CFC3] text-center py-4">خالی</p>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // ─── Render: Areas Gallery ─────────────────────────────────
+  const renderAreas = () => (
+    <div className="space-y-3">
+      {loading ? (
+        <div className="text-center py-8 text-[10px] text-[#8D7F72]">در حال بارگذاری...</div>
+      ) : areasData.length === 0 ? (
+        <div className="text-center py-12 bg-white dark:bg-[#1C1D17] rounded-3xl border border-[#E6DFD3]">
+          <Grid3X3 className="w-8 h-8 text-[#D6CFC3] mx-auto mb-2" />
+          <p className="text-[10px] text-[#8D7F72]">هیچ حوزه‌ای ثبت نشده</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+          {areasData.map((area: any) => (
+            <div
+              key={area.name || area.id}
+              className="bg-white dark:bg-[#1C1D17] rounded-2xl border border-[#E6DFD3] dark:border-[#3D4133]/50 p-4 space-y-3"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">{area.icon || '🎯'}</span>
+                <div>
+                  <h4 className="text-xs font-black text-[#2D3025] dark:text-[#E8ECE0]">{area.title}</h4>
+                  {area.description && <p className="text-[8px] text-[#8D7F72] truncate max-w-[120px]">{area.description}</p>}
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="bg-[#F9F6EE] dark:bg-[#121411] rounded-xl p-2 text-center">
+                  <span className="text-[14px] font-black text-[#7C8363]">{area.project_count ?? 0}</span>
+                  <span className="text-[8px] text-[#8D7F72] block">پروژه</span>
+                </div>
+                <div className="bg-[#F9F6EE] dark:bg-[#121411] rounded-xl p-2 text-center">
+                  <span className="text-[14px] font-black text-[#E26645]">{area.task_count ?? 0}</span>
+                  <span className="text-[8px] text-[#8D7F72] block">تسک</span>
+                </div>
+                <div className="bg-[#F9F6EE] dark:bg-[#121411] rounded-xl p-2 text-center col-span-2">
+                  <span className="text-[12px] font-black text-indigo-600">
+                    {area.tracked_minutes ? formatMinutes(area.tracked_minutes) : '۰ دقیقه'}
+                  </span>
+                  <span className="text-[8px] text-[#8D7F72] block">زمان صرف‌شده</span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+
+  // ─── Main Render ───────────────────────────────────────────
   return (
     <div className="space-y-4 text-right" dir="rtl">
       {/* Header */}
@@ -192,157 +862,31 @@ export default function PlannerSection() {
         )}
       </div>
 
-      {/* Bucket Tabs */}
+      {/* View Tabs */}
       <div className="flex gap-1 overflow-x-auto pb-1">
-        {BUCKETS.map(bucket => (
+        {VIEW_TABS.map(tab => (
           <button
-            key={bucket.id}
-            onClick={() => setActiveBucket(bucket.id)}
+            key={tab.id}
+            onClick={() => setActiveView(tab.id)}
             className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-[10px] font-black whitespace-nowrap transition-all ${
-              activeBucket === bucket.id
+              activeView === tab.id
                 ? 'bg-[#7C8363] text-white shadow-sm'
                 : 'bg-white dark:bg-[#1C1D17] text-[#8D7F72] border border-[#E6DFD3] dark:border-[#3D4133]/50'
             }`}
           >
-            {bucket.icon}
-            <span>{bucket.label}</span>
-            {bucket.id === activeBucket && tasks.length > 0 && (
-              <span className="bg-white/20 px-1.5 py-0.5 rounded-full text-[9px]">{tasks.length}</span>
-            )}
+            {tab.icon}
+            <span>{tab.label}</span>
           </button>
         ))}
       </div>
 
-      {/* Task List */}
-      <div className="space-y-2">
-        {loading ? (
-          <div className="text-center py-8 text-[10px] text-[#8D7F72]">در حال بارگذاری...</div>
-        ) : tasks.length === 0 ? (
-          <div className="text-center py-12 bg-white dark:bg-[#1C1D17] rounded-3xl border border-[#E6DFD3] dark:border-[#3D4133]/50">
-            <Inbox className="w-8 h-8 text-[#D6CFC3] mx-auto mb-2" />
-            <p className="text-[10px] text-[#8D7F72]">هیچ تسکی در این بخش نیست</p>
-          </div>
-        ) : (
-          <AnimatePresence>
-            {tasks.map(task => (
-              <motion.div
-                key={task.id}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, x: 50 }}
-                className="bg-white dark:bg-[#1C1D17] rounded-2xl border border-[#E6DFD3] dark:border-[#3D4133]/50 overflow-hidden"
-              >
-                <div className="p-3 flex items-center gap-3">
-                  {/* Status indicator */}
-                  <button
-                    onClick={() => handleMove(task.id, task.status === 'done' ? 'inbox' : 'done')}
-                    className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
-                      task.status === 'done'
-                        ? 'bg-emerald-500 border-emerald-500 text-white'
-                        : 'border-[#D6CFC3] hover:border-[#7C8363]'
-                    }`}
-                  >
-                    {task.status === 'done' && <CheckCircle2 className="w-3.5 h-3.5" />}
-                  </button>
-
-                  {/* Title & meta */}
-                  <div className="flex-1 min-w-0" onClick={() => toggleExpand(task.id)}>
-                    <div className={`text-xs font-bold truncate ${task.status === 'done' ? 'line-through text-gray-400' : 'text-[#2D3025] dark:text-[#E8ECE0]'}`}>
-                      {task.title}
-                    </div>
-                    <div className="flex items-center gap-2 mt-1 flex-wrap">
-                      <span className={`text-[8px] px-1.5 py-0.5 rounded-md border font-bold ${STATUS_COLORS[task.status || 'inbox']}`}>
-                        {STATUS_LABELS[task.status || 'inbox']}
-                      </span>
-                      {task.priority && (
-                        <span className={`text-[8px] px-1.5 py-0.5 rounded ${
-                          task.priority === 'high' ? 'bg-red-50 text-red-600' : task.priority === 'medium' ? 'bg-amber-50 text-amber-600' : 'bg-gray-50 text-gray-500'
-                        }`}>
-                          {task.priority === 'high' ? 'فوری' : task.priority === 'medium' ? 'متوسط' : 'پایین'}
-                        </span>
-                      )}
-                      {task.scheduledDate && (
-                        <span className="text-[8px] text-[#8D7F72] flex items-center gap-0.5">
-                          <CalendarDays className="w-2.5 h-2.5" />
-                          {task.scheduledDate}
-                        </span>
-                      )}
-                      {task.actualMinutes ? (
-                        <span className="text-[8px] text-indigo-600 flex items-center gap-0.5">
-                          <Clock className="w-2.5 h-2.5" />
-                          {task.actualMinutes} دقیقه
-                        </span>
-                      ) : null}
-                    </div>
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex items-center gap-1 shrink-0">
-                    {activeSession?.taskId === task.id ? (
-                      <button
-                        onClick={handleStopSession}
-                        className="p-1.5 bg-red-50 text-red-600 rounded-lg border border-red-200"
-                        title="توقف"
-                      >
-                        <Pause className="w-3.5 h-3.5" />
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => handleStartSession(task.id)}
-                        className="p-1.5 bg-[#E8ECE0] text-[#7C8363] rounded-lg hover:bg-[#7C8363] hover:text-white transition-colors"
-                        title="شروع زمان‌سنج"
-                      >
-                        <Play className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                    <button onClick={() => toggleExpand(task.id)}>
-                      {expandedTaskId === task.id ? (
-                        <ChevronDown className="w-4 h-4 text-[#8D7F72]" />
-                      ) : (
-                        <ChevronLeft className="w-4 h-4 text-[#8D7F72]" />
-                      )}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Expanded detail */}
-                <AnimatePresence>
-                  {expandedTaskId === task.id && (
-                    <motion.div
-                      initial={{ height: 0 }}
-                      animate={{ height: 'auto' }}
-                      exit={{ height: 0 }}
-                      className="overflow-hidden"
-                    >
-                      <div className="px-3 pb-3 pt-1 border-t border-[#E6DFD3]/40 space-y-2">
-                        {task.description && (
-                          <p className="text-[10px] text-[#8D7F72]">{task.description}</p>
-                        )}
-                        {/* Quick bucket moves */}
-                        <div className="flex flex-wrap gap-1">
-                          {(['inbox', 'today', 'next', 'in_progress', 'on_hold', 'someday', 'done'] as const).map(b => (
-                            <button
-                              key={b}
-                              onClick={() => handleMove(task.id, b)}
-                              className={`px-2 py-1 text-[8px] font-bold rounded-lg border transition-colors ${
-                                task.status === b
-                                  ? 'bg-[#7C8363] text-white border-[#7C8363]'
-                                  : 'bg-white dark:bg-[#121411] text-[#8D7F72] border-[#D6CFC3] hover:border-[#7C8363]'
-                              }`}
-                            >
-                              {STATUS_LABELS[b]}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </motion.div>
-            ))}
-          </AnimatePresence>
-        )}
-      </div>
+      {/* Active View Content */}
+      {activeView === 'buckets' && renderBuckets()}
+      {activeView === 'timeline' && renderTimeline()}
+      {activeView === 'week' && renderWeek()}
+      {activeView === 'month' && renderMonth()}
+      {activeView === 'board' && renderBoard()}
+      {activeView === 'areas' && renderAreas()}
     </div>
   )
 }
@@ -362,10 +906,36 @@ function mapBackendTask(row: any): Task {
     category: mapBackendTaskCategory(row.category),
     projectId: row.project,
     parentTaskId: row.parent_task,
-    blockedBy: row.blocked_by_json ? JSON.parse(row.blocked_by_json) : [],
-    actualMinutes: row.actual_minutes,
-    noteBlocks: row.note_blocks_json ? JSON.parse(row.note_blocks_json) : [],
+    blockedBy: row.blocked_by_json ? (typeof row.blocked_by_json === 'string' ? JSON.parse(row.blocked_by_json) : row.blocked_by_json) : [],
+    blocking: row.blocking_json ? (typeof row.blocking_json === 'string' ? JSON.parse(row.blocking_json) : row.blocking_json) : [],
+    isDailyHighlight: !!row.is_daily_highlight,
+    actualMinutes: row.actual_minutes || undefined,
+    estimatedMinutes: row.estimated_minutes || undefined,
+    areaId: row.area || undefined,
+    effortType: row.effort_type === 'fixed' || row.effort_type === 'ثابت' ? 'fixed' : row.effort_type === 'variable' || row.effort_type === 'متغیر' ? 'variable' : undefined,
+    noteBlocks: row.note_blocks_json ? (typeof row.note_blocks_json === 'string' ? JSON.parse(row.note_blocks_json) : row.note_blocks_json) : [],
   }
+}
+
+function mapBackendTaskPriority(value?: string | null): Task['priority'] {
+  const map: Record<string, Task['priority']> = {
+    'پایین': 'low',
+    'متوسط': 'medium',
+    'بالا': 'high',
+    'فوری': 'urgent',
+  }
+  return map[String(value || '')] || 'medium'
+}
+
+function mapBackendTaskCategory(value?: string | null): Task['category'] {
+  const map: Record<string, Task['category']> = {
+    'شغلی': 'work',
+    'شخصی': 'personal',
+    'سلامت': 'health',
+    'مالی': 'finance',
+    'آموزشی': 'learning',
+  }
+  return map[String(value || '')] || 'other'
 }
 
 function today(): string {

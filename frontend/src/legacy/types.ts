@@ -65,7 +65,12 @@ export interface Project {
   createdAt: string;
   milestones?: Milestone[];
   linkedGoalId?: string; // پیوند به هدف (Goal Tree)
+  areaId?: string; // پیوند به حوزه
+  parentProjectId?: string; // پروژه والد
   status?: 'waiting' | 'in_progress' | 'paused' | 'completed'; // ستون بورد کانبان
+  effortType?: 'fixed' | 'variable';
+  estimatedHours?: number;
+  blockedByJson?: string; // JSON string of blocked-by project IDs
   noteBlocks?: import('../notes/types').Block[]; // Notion-like rich text blocks
 }
 
@@ -76,46 +81,75 @@ export interface Milestone {
   dueDate?: string;
 }
 
-export type GoalCategory = 'financial' | 'health' | 'career' | 'learning' | 'personal' | 'other';
+export type GoalCategory = 'financial' | 'health' | 'career' | 'learning' | 'personal' | 'relationship' | 'other';
 
-export interface BankAccount {
-  id: string;
-  bankName: string; // e.g., 'بانک سامان'
-  accountName: string; // e.g., 'سپرده پس‌انداز بلندمدت'
-  balance: number; // e.g., 45000000 (For credit cards, this can be available credit or just regular balance)
-  cardNumber?: string; // e.g., '۶۲۱۹-****-****-۱۲۳۴'
-  color?: string; // e.g., '#0D47A1'
-  isCredit?: boolean; // Is this a credit card/account?
-  creditLimit?: number; // Total credit limit
-  creditDebt?: number; // Spent credit/outstanding debt
-  creditDueDate?: string; // تاریخ سررسید بدهی کارت اعتباری (e.g., '۲۵ام هر ماه' or '1405-05-25')
+export type GoalType = 'outcome' | 'metric' | 'habit_driven' | 'project_delivery' | 'savings' | 'investment' | 'debt_payoff' | 'health' | 'learning' | 'consistency';
+
+export type ProgressMode = 'manual' | 'metric_value' | 'habit_rollup' | 'project_rollup' | 'finance_balance' | 'finance_savings' | 'debt_paydown' | 'weighted_composite';
+
+export type ContributionType = 'completion_count' | 'completion_rate' | 'streak' | 'quantity_sum' | 'average_value' | 'boolean_success';
+
+export type ContributionPeriod = 'daily' | 'weekly' | 'monthly' | 'all';
+
+export interface GoalHabitLink {
+  habit: string;
+  habitTitle?: string;
+  contributionType: ContributionType;
+  weight: number;
+  period: ContributionPeriod;
+  targetValue?: number;
+  capValue?: number;
+  isNegative?: boolean;
+  notes?: string;
+}
+
+export interface GoalFinanceLink {
+  financeAccount: string;
+  accountName?: string;
+  currentBalance?: number;
+  financeType: 'balance' | 'savings' | 'debt' | 'investment' | 'income_accumulated';
+  initialAmount?: number;
+  targetAmount?: number;
+  weight: number;
+  notes?: string;
+}
+
+export interface GoalLinkedProject {
+  name: string;
+  title: string;
+  status?: string;
+  progress?: number;
 }
 
 export interface MetricLog {
   id: string;
-  date: string; // YYYY-MM-DD
+  date: string;
   value: number;
   note?: string;
 }
 
-export interface GoalMetric {
-  name: string; // e.g., 'وزن', 'ساعت مطالعه'
-  targetValue: number; // e.g., 84
-  startValue: number; // e.g., 95
-  currentValue: number; // e.g., 88
-  unit: string; // e.g., 'کیلوگرم', 'ساعت', 'صفحه'
-  logs: MetricLog[];
-  autoTrackSource?: 'workout_count' | 'workout_calories' | 'workout_distance' | 'strength_max_weight' | 'sleep_hours' | 'sleep_quality' | 'meditation_minutes' | 'journal_mood' | 'bank_balance' | 'composite_health' | 'none'; // منبع ردیابی خودکار سنجه
-  autoTrackExerciseName?: string; // نام تمرین باشگاه برای ردیابی رکورد وزنه
+export interface BankAccount {
+  id: string;
+  bankName: string;
+  accountName: string;
+  balance: number;
+  cardNumber?: string;
+  color?: string;
+  isCredit?: boolean;
+  creditLimit?: number;
+  creditDebt?: number;
+  creditDueDate?: string;
 }
 
-export interface KeyResult {
-  id: string;
-  title: string;
-  startValue: number;
+export interface GoalMetric {
+  name: string;
   targetValue: number;
+  startValue: number;
   currentValue: number;
   unit: string;
+  logs: MetricLog[];
+  autoTrackSource?: 'workout_count' | 'workout_calories' | 'workout_distance' | 'strength_max_weight' | 'sleep_hours' | 'sleep_quality' | 'meditation_minutes' | 'journal_mood' | 'bank_balance' | 'composite_health' | 'none';
+  autoTrackExerciseName?: string;
 }
 
 export interface Goal {
@@ -123,23 +157,45 @@ export interface Goal {
   title: string;
   description: string;
   category: GoalCategory;
-  areaId?: string; // Link to Hambaft Area
-  targetDate: string; // YYYY-MM-DD
+  goalType?: GoalType;
+  progressMode?: ProgressMode;
+  areaId?: string;
+  targetDate: string;
   milestones: Milestone[];
   createdAt: string;
   completed: boolean;
   projects?: Project[];
   habits?: Habit[];
-  linkedBankAccountId?: string; // Optional linked bank account for financial goals
-  metric?: GoalMetric; // Optional quantitative progress metrics
+  linkedBankAccountId?: string;
+  metric?: GoalMetric;
   
-  // ارتقای OKR و درخت اهداف و برد تصویرسازی
+  // Advanced goal fields
+  parentGoalId?: string;
+  goalLevel?: 'annual' | 'quarterly' | 'monthly' | 'custom';
+  targetValue?: number;
+  currentValue?: number;
+  unit?: string;
+  progressPercent?: number;
+  derivedProgressDetail?: string;
+  priority?: 'low' | 'medium' | 'high' | 'urgent';
+  color?: string;
+  icon?: string;
+  startDate?: string;
+  status?: string;
+  
+  // Habit links
+  linkedHabits?: GoalHabitLink[];
+  
+  // Finance links
+  linkedFinanceAccounts?: GoalFinanceLink[];
+  
+  // Linked projects (from backend)
+  linkedProjects?: GoalLinkedProject[];
+  
   keyResults?: KeyResult[];
-  visionImages?: string[]; // آدرس تصاویر انگیزشی
-  visionAffirmation?: string; // جمله انگیزشی اختصاصی
-  parentGoalId?: string; // شناسه هدف بالاتر (درخت اهداف)
-  goalLevel?: 'annual' | 'quarterly' | 'monthly' | 'none'; // سطح هدف
-  noteBlocks?: import('../notes/types').Block[]; // Notion-like rich text blocks
+  visionImages?: string[];
+  visionAffirmation?: string;
+  noteBlocks?: import('../notes/types').Block[];
 }
 
 export interface SubTask {
@@ -158,7 +214,7 @@ export interface Task {
   dueDate?: string; // YYYY-MM-DD
   scheduledDate?: string; // YYYY-MM-DD
   scheduledTime?: string; // HH:MM
-  priority?: 'low' | 'medium' | 'high';
+  priority?: 'low' | 'medium' | 'high' | 'urgent';
   category?: 'work' | 'personal' | 'health' | 'finance' | 'learning' | 'other';
   subTasks?: SubTask[];
   totalTimeSpent?: number; // Total spent time in seconds (derived from sessions)
@@ -172,13 +228,21 @@ export interface Task {
   parentTaskId?: string; // پیوند به تسک والد
   childTaskIds?: string[]; // شناسه تسک‌های فرزند
   blockedBy?: string[]; // شناسه تسک‌های پیش‌نیاز
+  blocking?: string[]; // شناسه تسک‌هایی که این تسک مانع آنهاست
   isBlocked?: boolean; // derived
   isDailyHighlight?: boolean; // تسک برجسته روزانه
   noteBlocks?: import('../notes/types').Block[]; // Notion-like rich text blocks
   
   // Session tracking
   actualMinutes?: number; // derived from backend sessions
+  estimatedMinutes?: number; // planned effort
   activeSessionId?: string;
+  
+  // Area relation (direct or inherited from project)
+  areaId?: string;
+  
+  // Effort type
+  effortType?: 'fixed' | 'variable';
 }
 
 export interface TaskSession {
@@ -488,6 +552,14 @@ export interface Area {
   description?: string;
   color?: string;
   icon?: string;
+  status?: 'active' | 'inactive' | 'archived';
+  sortOrder?: number;
+  projectCount?: number;
+  taskCount?: number;
+  goalCount?: number;
+  completedTasks?: number;
+  completedProjects?: number;
+  trackedMinutes?: number;
 }
 
 export interface LifeData {

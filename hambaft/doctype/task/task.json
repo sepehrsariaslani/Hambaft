@@ -29,6 +29,12 @@
    "options": "Hambaft Project"
   },
   {
+   "fieldname": "area",
+   "fieldtype": "Link",
+   "label": "حوزه",
+   "options": "Hambaft Area"
+  },
+  {
    "fieldname": "goal",
    "fieldtype": "Link",
    "label": "هدف",
@@ -44,8 +50,8 @@
    "fieldname": "priority",
    "fieldtype": "Select",
    "label": "اولویت",
-   "options": "پایین\nمتوسط\nبالا\nفوری",
-   "default": "متوسط",
+   "options": "low\nmedium\nhigh\nurgent\nپایین\nمتوسط\nبالا\nفوری",
+   "default": "medium",
    "in_list_view": 1
   },
   {
@@ -96,6 +102,11 @@
    "label": "تسک‌های پیش‌نیاز (JSON)"
   },
   {
+   "fieldname": "blocking_json",
+   "fieldtype": "Text",
+   "label": "تسک‌های مسدودشده (JSON)"
+  },
+  {
    "fieldname": "is_recurring",
    "fieldtype": "Check",
    "label": "تکراری",
@@ -111,6 +122,19 @@
    "fieldtype": "Select",
    "label": "دسته‌بندی",
    "options": "سلامت\nمالی\nشغلی\nشخصی\nآموزشی"
+  },
+  {
+   "fieldname": "effort_type",
+   "fieldtype": "Select",
+   "label": "نوع تلاش",
+   "options": "fixed\nvariable\nثابت\nمتغیر",
+   "default": "variable"
+  },
+  {
+   "fieldname": "is_daily_highlight",
+   "fieldtype": "Check",
+   "label": "برجسته روزانه",
+   "default": 0
   },
   {
    "fieldname": "note_blocks_json",

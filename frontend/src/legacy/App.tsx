@@ -563,10 +563,12 @@ export default function App({
   const [quickAssetBuyPrice, setQuickAssetBuyPrice] = useState('');
   const [quickAssetCurrentPrice, setQuickAssetCurrentPrice] = useState('');
 
-  // Time Tracker State
+  // ─── Session-based Time Tracker ────────────────────────────
+  // Replaces local timer with backend session API
   const [activeTimerTaskId, setActiveTimerTaskId] = useState<string | null>(null);
   const [activeTimerSeconds, setActiveTimerSeconds] = useState<number>(0);
   const [isTimerRunning, setIsTimerRunning] = useState<boolean>(false);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
 
   // State to prompt the user to log a financial transaction when a related task is completed
   const [financePrompt, setFinancePrompt] = useState<{
@@ -598,99 +600,118 @@ export default function App({
     };
   }, [activeTimerTaskId, isTimerRunning]);
 
-  // Time Tracker handlers
-  const handleStartTimer = (taskId: string) => {
-    if (activeTimerTaskId && activeTimerTaskId !== taskId) {
-      const secondsToSave = activeTimerSeconds;
-      const prevTaskId = activeTimerTaskId;
-      setLifeData(prev => {
-        const updatedTasks = prev.tasks.map(t => {
-          if (t.id === prevTaskId) {
-            return {
-              ...t,
-              totalTimeSpent: (t.totalTimeSpent || 0) + secondsToSave
-            };
-          }
-          return t;
-        });
-        return { ...prev, tasks: updatedTasks };
-      });
+  // Restore active session on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const { getActiveTaskSession } = await import('../app/hambaft-api');
+        const resp: any = await getActiveTaskSession();
+        const sess = resp?.data?.session;
+        if (sess) {
+          setActiveSessionId(sess.name);
+          setActiveTimerTaskId(sess.task);
+          setActiveTimerSeconds(0);
+          setIsTimerRunning(true);
+        }
+      } catch {
+        // no active session
+      }
+    })();
+  }, []);
+
+  // Time Tracker handlers — now using backend session API
+  const handleStartTimer = async (taskId: string) => {
+    try {
+      // If there's already an active session, stop it first
+      if (activeSessionId) {
+        const { stopTaskSession } = await import('../app/hambaft-api');
+        await stopTaskSession(activeSessionId);
+      }
+      const { startTaskSession } = await import('../app/hambaft-api');
+      const resp: any = await startTaskSession(taskId);
+      const sess = resp?.data?.session;
+      if (sess) {
+        setActiveSessionId(sess.name);
+        setActiveTimerTaskId(taskId);
+        setActiveTimerSeconds(0);
+        setIsTimerRunning(true);
+      }
+    } catch (e) {
+      console.error('startTaskSession error:', e);
     }
-
-    setActiveTimerTaskId(taskId);
-    setActiveTimerSeconds(0);
-    setIsTimerRunning(true);
   };
 
-  const handlePauseTimer = () => {
-    if (!activeTimerTaskId) return;
-    setIsTimerRunning(false);
-    
-    const secondsToSave = activeTimerSeconds;
-    const currentTaskId = activeTimerTaskId;
-    setLifeData(prev => {
-      const updatedTasks = prev.tasks.map(t => {
-        if (t.id === currentTaskId) {
-          return {
-            ...t,
-            totalTimeSpent: (t.totalTimeSpent || 0) + secondsToSave
-          };
+  const handlePauseTimer = async () => {
+    if (!activeSessionId) return;
+    try {
+      const { stopTaskSession } = await import('../app/hambaft-api');
+      await stopTaskSession(activeSessionId);
+      setIsTimerRunning(false);
+      // Keep the task as active but paused
+    } catch (e) {
+      console.error('pauseTaskSession error:', e);
+    }
+  };
+
+  const handleResumeTimer = async () => {
+    if (!activeSessionId) return;
+    try {
+      const { resumeTaskSession } = await import('../app/hambaft-api');
+      await resumeTaskSession(activeSessionId);
+      setIsTimerRunning(true);
+      setActiveTimerSeconds(0);
+    } catch (e) {
+      console.error('resumeTaskSession error:', e);
+    }
+  };
+
+  const handleStopTimer = async () => {
+    if (!activeSessionId) return;
+    try {
+      const { finishTaskSession } = await import('../app/hambaft-api');
+      const resp: any = await finishTaskSession(activeSessionId);
+      // Update task's actualMinutes from the session result
+      const sess = resp?.data?.session;
+      if (sess?.task) {
+        const { getTaskTrackedMinutes } = await import('../app/hambaft-api');
+        const minsResp: any = await getTaskTrackedMinutes(sess.task);
+        const totalMinutes = minsResp?.data?.tracked_minutes;
+        if (totalMinutes !== undefined) {
+          setLifeData(prev => {
+            const updatedTasks = prev.tasks.map(t => {
+              if (t.id === sess.task) {
+                return { ...t, actualMinutes: totalMinutes, totalTimeSpent: totalMinutes * 60 };
+              }
+              return t;
+            });
+            return { ...prev, tasks: updatedTasks };
+          });
         }
-        return t;
-      });
-      return { ...prev, tasks: updatedTasks };
-    });
-    
-    setActiveTimerSeconds(0);
+      }
+      setActiveSessionId(null);
+      setActiveTimerTaskId(null);
+      setActiveTimerSeconds(0);
+      setIsTimerRunning(false);
+    } catch (e) {
+      console.error('stopTaskSession error:', e);
+    }
   };
 
-  const handleResumeTimer = () => {
-    if (!activeTimerTaskId) return;
-    setIsTimerRunning(true);
-  };
-
-  const handleStopTimer = () => {
-    if (!activeTimerTaskId) return;
-    
-    const secondsToSave = activeTimerSeconds;
-    const currentTaskId = activeTimerTaskId;
-    setLifeData(prev => {
-      const updatedTasks = prev.tasks.map(t => {
-        if (t.id === currentTaskId) {
-          return {
-            ...t,
-            totalTimeSpent: (t.totalTimeSpent || 0) + secondsToSave
-          };
-        }
-        return t;
-      });
-      return { ...prev, tasks: updatedTasks };
-    });
-    
-    setActiveTimerTaskId(null);
-    setActiveTimerSeconds(0);
-    setIsTimerRunning(false);
-  };
-
-  const handleResetTimerForTask = (taskId: string) => {
-    if (activeTimerTaskId === taskId) {
+  const handleResetTimerForTask = async (taskId: string) => {
+    if (activeSessionId && activeTimerTaskId === taskId) {
+      try {
+        const { stopTaskSession } = await import('../app/hambaft-api');
+        await stopTaskSession(activeSessionId);
+      } catch (e) {
+        console.error('resetTimer stop error:', e);
+      }
+      setActiveSessionId(null);
       setActiveTimerSeconds(0);
       setIsTimerRunning(false);
       setActiveTimerTaskId(null);
     }
-    
-    setLifeData(prev => {
-      const updatedTasks = prev.tasks.map(t => {
-        if (t.id === taskId) {
-          return {
-            ...t,
-            totalTimeSpent: 0
-          };
-        }
-        return t;
-      });
-      return { ...prev, tasks: updatedTasks };
-    });
+    // Note: We don't reset actualMinutes from backend — that would need a separate API
+    // The session duration is already recorded. Reset only clears the UI state.
   };
 
   // Auto-process subscription renewals on mount
@@ -2037,43 +2058,24 @@ export default function App({
     syncProjectState(goalId, projectId, 'update project');
   };
 
-  const handleToggleTaskTracking = (goalId: string, projectId: string, taskId: string) => {
-    setLifeData(prev => {
-      const updatedGoals = prev.goals.map(g => {
-        if (g.id === goalId) {
-          const updatedProjects = (g.projects || []).map(p => {
-            if (p.id === projectId) {
-              const updatedTasks = p.tasks.map(t => {
-                if (t.id === taskId) {
-                  const now = Date.now();
-                  if (t.isTracking) {
-                    const elapsed = Math.floor((now - (t.trackingStartTime || now)) / 1000);
-                    return {
-                      ...t,
-                      isTracking: false,
-                      totalTimeSpent: (t.totalTimeSpent || 0) + elapsed,
-                      trackingStartTime: undefined
-                    };
-                  } else {
-                    return {
-                      ...t,
-                      isTracking: true,
-                      trackingStartTime: now
-                    };
-                  }
-                }
-                return t;
-              });
-              return { ...p, tasks: updatedTasks };
-            }
-            return p;
-          });
-          return { ...g, projects: updatedProjects };
-        }
-        return g;
-      });
-      return { ...prev, goals: updatedGoals };
-    });
+  const handleToggleTaskTracking = async (goalId: string, projectId: string, taskId: string) => {
+    // Use backend session API for tracking
+    const task = lifeData.goals
+      .filter(g => g.id === goalId)
+      .flatMap(g => (g.projects || []))
+      .filter(p => p.id === projectId)
+      .flatMap(p => p.tasks || [])
+      .find(t => t.id === taskId);
+
+    if (task?.isTracking) {
+      // Stop tracking — use the global timer stop
+      if (activeTimerTaskId === taskId) {
+        await handleStopTimer();
+      }
+    } else {
+      // Start tracking — use the global timer start
+      await handleStartTimer(taskId);
+    }
   };
 
   const handleDeleteTaskFromProject = (goalId: string, projectId: string, taskId: string) => {
@@ -2320,8 +2322,8 @@ export default function App({
   };
 
   const checkTaskDependencies = (task: Task): string | null => {
-    if (!task.dependencies || task.dependencies.length === 0) return null;
-    for (const depId of task.dependencies) {
+    if (!task.blockedBy || task.blockedBy.length === 0) return null;
+    for (const depId of task.blockedBy) {
       const depTask = findTaskById(depId);
       if (depTask && !depTask.completed) {
         return depTask.title;

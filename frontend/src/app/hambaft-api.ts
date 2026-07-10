@@ -25,13 +25,14 @@ const taskPriorityToBackend: Record<string, string> = {
   low: 'پایین',
   medium: 'متوسط',
   high: 'بالا',
+  urgent: 'فوری',
 }
 
 const taskPriorityFromBackend: Record<string, Task['priority']> = {
   پایین: 'low',
   متوسط: 'medium',
   بالا: 'high',
-  فوری: 'high',
+  فوری: 'urgent',
 }
 
 const taskCategoryToBackend: Record<string, string> = {
@@ -57,7 +58,8 @@ const goalCategoryToBackend: Record<string, string> = {
   career: 'شغلی',
   learning: 'آموزشی',
   personal: 'شخصی',
-  other: 'شخصی',
+  relationship: 'رابطه',
+  other: 'سفارشی',
 }
 
 const goalCategoryFromBackend: Record<string, Goal['category']> = {
@@ -66,6 +68,8 @@ const goalCategoryFromBackend: Record<string, Goal['category']> = {
   شغلی: 'career',
   آموزشی: 'learning',
   شخصی: 'personal',
+  رابطه: 'relationship',
+  سفارشی: 'other',
 }
 
 const habitCategoryToBackend: Record<string, string> = {
@@ -242,18 +246,71 @@ export function toTaskPayload(task: Task): Record<string, unknown> {
 
 export function toGoalPayload(goal: Goal): Record<string, unknown> {
   const metric = goal.metric
+  const goalTypeMap: Record<string, string> = {
+    outcome: 'نتیجه‌ای', metric: 'سنجه‌ای', habit_driven: 'مبتنی‌بر_عادت',
+    project_delivery: 'تحویل_پروژه', savings: 'پس‌انداز_مالی', investment: 'سرمایه‌گذاری',
+    debt_payoff: 'پرداخت_بدهی', health: 'سلامت', learning: 'یادگیری', consistency: 'ثبات',
+  }
+  const progressModeMap: Record<string, string> = {
+    manual: 'دستی', metric_value: 'مقدار_سنجه', habit_rollup: 'تجمیع_عادت',
+    project_rollup: 'تجمیع_پروژه', finance_balance: 'موجودی_مالی', finance_savings: 'پس‌انداز_مالی',
+    debt_paydown: 'پرداخت_بدهی', weighted_composite: 'مرکب_وزنی',
+  }
+  const priorityMap: Record<string, string> = {
+    low: 'پایین', medium: 'متوسط', high: 'بالا', urgent: 'فوری',
+  }
+  const goalLevelMap: Record<string, string> = {
+    annual: 'سالانه', quarterly: 'فصلی', monthly: 'ماهانه', custom: 'سفارشی',
+  }
+  const contribTypeMap: Record<string, string> = {
+    completion_count: 'تعداد_انجام', completion_rate: 'نرخ_انجام', streak: 'رکورد',
+    quantity_sum: 'مجموع_مقدار', average_value: 'میانگین_مقدار', boolean_success: 'بله_خیر',
+  }
+  const contribPeriodMap: Record<string, string> = {
+    daily: 'روزانه', weekly: 'هفتگی', monthly: 'ماهانه', all: 'کل',
+  }
+  const finTypeMap: Record<string, string> = {
+    balance: 'موجودی_حساب', savings: 'پس‌انداز', debt: 'بدهی', investment: 'سرمایه‌گذاری', income_accumulated: 'درآمد_انباشته',
+  }
+
   return {
     title: goal.title,
     description: goal.description || '',
     category: goalCategoryToBackend[goal.category || 'personal'] || 'شخصی',
+    goal_type: goalTypeMap[goal.goalType || 'outcome'] || 'نتیجه‌ای',
+    progress_mode: progressModeMap[goal.progressMode || 'manual'] || 'دستی',
     area: goal.areaId || null,
+    parent_goal: goal.parentGoalId || null,
+    goal_level: goalLevelMap[goal.goalLevel || 'annual'] || 'سالانه',
     target_date: goal.targetDate || null,
-    status: goal.completed ? 'تکمیل‌شده' : 'فعال',
-    target_value: metric?.targetValue ?? null,
-    current_value: metric?.currentValue ?? null,
-    unit: metric?.unit ?? null,
+    start_date: goal.startDate || null,
+    status: goal.status || (goal.completed ? 'تکمیل‌شده' : 'فعال'),
+    target_value: goal.targetValue ?? metric?.targetValue ?? null,
+    current_value: goal.currentValue ?? metric?.currentValue ?? null,
+    unit: goal.unit ?? metric?.unit ?? null,
+    priority: priorityMap[goal.priority || 'medium'] || 'متوسط',
+    color: goal.color || undefined,
+    icon: goal.icon || undefined,
     notes: goal.visionAffirmation || '',
     noteBlocks: goal.noteBlocks || [],
+    linked_habits: (goal.linkedHabits || []).map(h => ({
+      habit: h.habit,
+      contribution_type: contribTypeMap[h.contributionType] || 'تعداد_انجام',
+      weight: h.weight ?? 100,
+      period: contribPeriodMap[h.period || 'monthly'] || 'ماهانه',
+      target_value: h.targetValue ?? null,
+      cap_value: h.capValue ?? null,
+      is_negative: h.isNegative ? 1 : 0,
+      notes: h.notes || '',
+    })),
+    linked_finance_accounts: (goal.linkedFinanceAccounts || []).map(f => ({
+      finance_account: f.financeAccount,
+      finance_type: finTypeMap[f.financeType] || 'موجودی_حساب',
+      initial_amount: f.initialAmount ?? null,
+      target_amount: f.targetAmount ?? null,
+      weight: f.weight ?? 100,
+      notes: f.notes || '',
+    })),
   }
 }
 
@@ -509,19 +566,24 @@ export function toProjectPayload(project: Project, goalId?: string | null) {
     description: project.description || '',
     notes: project.notes || '',
     goal: normalizedGoalId,
+    area: project.areaId || null,
+    parent_project: project.parentProjectId || null,
     status: project.status ? projectStatusToBackend[project.status] || 'فعال' : (project.completed ? 'تکمیل‌شده' : 'فعال'),
     priority: 'متوسط',
     start_date: project.createdAt || undefined,
     target_date: undefined,
     progress: project.tasks?.length ? Math.round((project.tasks.filter((task) => task.completed).length / project.tasks.length) * 100) : 0,
     noteBlocks: project.noteBlocks || [],
+    effort_type: project.effortType || undefined,
+    estimated_hours: project.estimatedHours || undefined,
+    blocked_by_json: project.blockedByJson || undefined,
     tasks: (project.tasks || []).map((task) => ({
       id: task.id,
       title: task.title,
       description: task.description || '',
       completed: task.completed,
       dueDate: task.dueDate,
-      priority: task.priority || 'medium',
+      priority: taskPriorityToBackend[task.priority || 'medium'] || 'متوسط',
       status: task.completed ? 'انجام‌شده' : 'انجام‌نشده',
     })),
   }
@@ -766,7 +828,6 @@ export async function updateNutritionRecord(id: string, log: Partial<Omit<MealLo
       carbs: log.carbs,
       fat: log.fat,
       water_glasses: log.waterGlasses,
-      notes: log.notes,
     },
   })
 }
@@ -951,4 +1012,163 @@ export async function moveTaskToBucket(taskId: string, bucket: Task['status']) {
 
 export async function transitionTaskStatus(taskId: string, newStatus: Task['status']) {
   return call<{ data?: { task?: any } }>('hambaft.hambaft.api.transition_task_status', { task_name: taskId, new_status: newStatus })
+}
+
+// ─── Area CRUD ──────────────────────────────────────────────
+
+export async function createAreaRecord(data: Record<string, unknown>) {
+  return call<{ data?: { area?: any } }>('hambaft.hambaft.api.create_area', { data })
+}
+
+export async function updateAreaRecord(name: string, data: Record<string, unknown>) {
+  return call<{ data?: { area?: any } }>('hambaft.hambaft.api.update_area', { name, data })
+}
+
+export async function deleteAreaRecord(name: string) {
+  return call<{ data?: { ok?: boolean } }>('hambaft.hambaft.api.delete_area', { name })
+}
+
+export async function getAreaSummary(name: string) {
+  return callGet<{ data?: { summary?: any } }>(`hambaft.hambaft.api.get_area_summary?name=${encodeURIComponent(name)}`)
+}
+
+export async function getAreasWithSummaries(limit = 50) {
+  return callGet<{ data?: { areas?: any[] } }>(`hambaft.hambaft.api.get_areas_with_summaries?limit=${limit}`)
+}
+
+// ─── Project Dependencies ──────────────────────────────────
+
+export async function addProjectDependency(projectName: string, dependsOn: string) {
+  return call<{ data?: { blocked_by?: string[] } }>('hambaft.hambaft.api.add_project_dependency', { project_name: projectName, depends_on_project: dependsOn })
+}
+
+export async function removeProjectDependency(projectName: string, dependsOn: string) {
+  return call<{ data?: { blocked_by?: string[] } }>('hambaft.hambaft.api.remove_project_dependency', { project_name: projectName, depends_on_project: dependsOn })
+}
+
+export async function isProjectBlocked(projectName: string) {
+  return call<{ data?: { blocked?: boolean; reason?: string } }>('hambaft.hambaft.api.is_project_blocked', { project_name: projectName })
+}
+
+export async function getProjectSubprojects(projectName: string) {
+  return call<{ data?: { projects?: any[] } }>('hambaft.hambaft.api.get_project_subprojects', { project_name: projectName })
+}
+
+export async function getProjectTrackedMinutes(projectName: string) {
+  return callGet<{ data?: { tracked_minutes?: number } }>(`hambaft.hambaft.api.get_project_tracked_minutes?project_name=${encodeURIComponent(projectName)}`)
+}
+
+// ─── Planner Calendar / Timeline Feeds ─────────────────────
+
+export async function getPlannerDailyTimeline(date?: string) {
+  const params = date ? `date=${encodeURIComponent(date)}` : ''
+  return callGet<{ data?: { date?: string; tasks?: any[]; time_blocks?: any[]; active_session?: any; events?: any[] } }>(`hambaft.hambaft.api.get_planner_daily_timeline${params ? '?' + params : ''}`)
+}
+
+export async function getPlannerWeek(startDate?: string) {
+  const params = startDate ? `start_date=${encodeURIComponent(startDate)}` : ''
+  return callGet<{ data?: { start_date?: string; days?: Record<string, any[]> } }>(`hambaft.hambaft.api.get_planner_week${params ? '?' + params : ''}`)
+}
+
+export async function getPlannerMonth(year?: number, month?: number) {
+  const params: string[] = []
+  if (year) params.push(`year=${year}`)
+  if (month) params.push(`month=${month}`)
+  return callGet<{ data?: { year?: number; month?: number; from_date?: string; to_date?: string; days?: Record<string, any[]> } }>(`hambaft.hambaft.api.get_planner_month${params.length ? '?' + params.join('&') : ''}`)
+}
+
+// ─── Project Board ─────────────────────────────────────────
+
+export async function getProjectBoard(projectName: string) {
+  return callGet<{ data?: { project?: any; status_groups?: Record<string, any[]>; total_tasks?: number; completed_tasks?: number } }>(`hambaft.hambaft.api.get_project_board?project_name=${encodeURIComponent(projectName)}`)
+}
+
+// ─── Projects by Area ─────────────────────────────────────
+
+export async function getProjectsByArea(areaName: string) {
+  return callGet<{ data?: { projects?: any[] } }>(`hambaft.hambaft.api.get_projects_by_area?area_name=${encodeURIComponent(areaName)}`)
+}
+
+// ─── Tracked Time Rollups ─────────────────────────────────
+
+export async function getTaskTrackedMinutes(taskName: string) {
+  return callGet<{ data?: { tracked_minutes?: number } }>(`hambaft.hambaft.api.get_task_tracked_minutes?task_name=${encodeURIComponent(taskName)}`)
+}
+
+export async function getAreaTrackedMinutes(areaName: string) {
+  return callGet<{ data?: { tracked_minutes?: number } }>(`hambaft.hambaft.api.get_area_tracked_minutes?area_name=${encodeURIComponent(areaName)}`)
+}
+
+// ─── Planner Board Views ──────────────────────────────────
+
+export async function getTasksByProject(limit = 100) {
+  return callGet<{ data?: { by_project?: Record<string, any[]> } }>(`hambaft.hambaft.api.get_tasks_by_project?limit=${limit}`)
+}
+
+export async function getTasksGroupedByStatus(limit = 200) {
+  return callGet<{ data?: { status_groups?: Record<string, any[]> } }>(`hambaft.hambaft.api.get_tasks_grouped_by_status?limit=${limit}`)
+}
+
+// ─── Advanced Goal APIs ──────────────────────────────────────
+
+export async function getGoalDetail(name: string) {
+  return call<{ data?: { goal?: any } }>('hambaft.hambaft.api.get_goal_detail', { name })
+}
+
+export async function computeGoalProgress(name: string) {
+  return call<{ data?: { progress_percent?: number; detail?: any; goal?: any } }>('hambaft.hambaft.api.compute_goal_progress', { name })
+}
+
+export async function linkGoalHabit(goalName: string, habit: string, contributionType?: string, weight?: number, period?: string, targetValue?: number, capValue?: number, isNegative?: number, notes?: string) {
+  return call<{ data?: { goal?: any } }>('hambaft.hambaft.api.link_goal_habit', {
+    goal_name: goalName,
+    habit,
+    contribution_type: contributionType || 'تعداد_انجام',
+    weight: weight ?? 100,
+    period: period || 'ماهانه',
+    target_value: targetValue,
+    cap_value: capValue,
+    is_negative: isNegative ?? 0,
+    notes,
+  })
+}
+
+export async function unlinkGoalHabit(goalName: string, habit: string) {
+  return call<{ data?: { goal?: any } }>('hambaft.hambaft.api.unlink_goal_habit', { goal_name: goalName, habit })
+}
+
+export async function linkGoalFinance(goalName: string, financeAccount: string, financeType?: string, initialAmount?: number, targetAmount?: number, weight?: number, notes?: string) {
+  return call<{ data?: { goal?: any } }>('hambaft.hambaft.api.link_goal_finance', {
+    goal_name: goalName,
+    finance_account: financeAccount,
+    finance_type: financeType || 'موجودی_حساب',
+    initial_amount: initialAmount,
+    target_amount: targetAmount,
+    weight: weight ?? 100,
+    notes,
+  })
+}
+
+export async function unlinkGoalFinance(goalName: string, financeAccount: string) {
+  return call<{ data?: { goal?: any } }>('hambaft.hambaft.api.unlink_goal_finance', { goal_name: goalName, finance_account: financeAccount })
+}
+
+export async function linkGoalProject(goalName: string, projectName: string) {
+  return call<{ data?: { ok?: boolean } }>('hambaft.hambaft.api.link_goal_project', { goal_name: goalName, project_name: projectName })
+}
+
+export async function unlinkGoalProject(goalName: string, projectName: string) {
+  return call<{ data?: { ok?: boolean } }>('hambaft.hambaft.api.unlink_goal_project', { goal_name: goalName, project_name: projectName })
+}
+
+export async function getGoalsWithDetails(limit = 100) {
+  return callGet<{ data?: { goals?: any[] } }>(`hambaft.hambaft.api.get_goals_with_details?limit=${limit}`)
+}
+
+export async function recomputeAllGoalProgress() {
+  return call<{ data?: { recomputed?: number; results?: any[] } }>('hambaft.hambaft.api.recompute_all_goal_progress', {})
+}
+
+export async function getAreaDetail(name: string) {
+  return callGet<{ data?: any }>(`hambaft.hambaft.api.get_area_detail?name=${encodeURIComponent(name)}`)
 }

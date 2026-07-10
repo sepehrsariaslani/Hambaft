@@ -23,6 +23,14 @@ import type {
   Document,
   CategoryDef,
   Goal,
+  GoalCategory,
+  GoalHabitLink,
+  GoalFinanceLink,
+  GoalLinkedProject,
+  GoalType,
+  ProgressMode,
+  ContributionType,
+  ContributionPeriod,
   Habit,
   JournalEntry,
   LifeData,
@@ -69,37 +77,124 @@ function mapTasks(items: any[]): Task[] {
     createdAt: (item.creation || item.modified || new Date().toISOString()).slice(0, 10),
     description: item.description || '',
     dueDate: item.due_date ? String(item.due_date).slice(0, 10) : undefined,
+    scheduledDate: item.scheduled_date ? String(item.scheduled_date) : undefined,
+    scheduledTime: item.scheduled_time ? String(item.scheduled_time).slice(0, 5) : undefined,
     priority: mapBackendTaskPriority(item.priority),
     category: mapBackendTaskCategory(item.category),
     projectId: item.project || undefined,
+    parentTaskId: item.parent_task || undefined,
+    blockedBy: item.blocked_by_json ? JSON.parse(item.blocked_by_json) : [],
+    blocking: item.blocking_json ? JSON.parse(item.blocking_json) : [],
+    isDailyHighlight: !!item.is_daily_highlight,
+    actualMinutes: item.actual_minutes || undefined,
+    estimatedMinutes: item.estimated_minutes || undefined,
+    areaId: item.area || undefined,
+    effortType: item.effort_type === 'fixed' || item.effort_type === 'ثابت' ? 'fixed' : 'variable',
     noteBlocks: parseNoteBlocks(item.note_blocks_json),
   }))
 }
 
 function mapGoals(items: any[]): Goal[] {
-  return items.map((item) => ({
-    id: item.name,
-    title: item.title || item.goal_name || item.name,
-    description: item.description || '',
-    category: mapBackendGoalCategory(item.category),
-    areaId: item.area || undefined,
-    targetDate: item.target_date ? String(item.target_date).slice(0, 10) : '',
-    milestones: [],
-    createdAt: (item.creation || item.modified || new Date().toISOString()).slice(0, 10),
-    completed: ['done', 'completed', 'تکمیل‌شده', 'تکمیل شده'].includes(String(item.status || '')),
-    metric:
-      item.target_value || item.current_value || item.unit
-        ? {
-            name: item.title || item.goal_name || item.name,
-            targetValue: Number(item.target_value || 0),
-            startValue: 0,
-            currentValue: Number(item.current_value || 0),
-            unit: item.unit || '',
-            logs: [],
-          }
-        : undefined,
-    noteBlocks: parseNoteBlocks(item.note_blocks_json),
-  }))
+  const goalTypeMap: Record<string, GoalType> = {
+    'نتیجه‌ای': 'outcome', 'سنجه‌ای': 'metric', 'مبتنی‌بر_عادت': 'habit_driven',
+    'تحویل_پروژه': 'project_delivery', 'پس‌انداز_مالی': 'savings', 'سرمایه‌گذاری': 'investment',
+    'پرداخت_بدهی': 'debt_payoff', 'سلامت': 'health', 'یادگیری': 'learning', 'ثبات': 'consistency',
+  }
+  const progressModeMap: Record<string, ProgressMode> = {
+    'دستی': 'manual', 'مقدار_سنجه': 'metric_value', 'تجمیع_عادت': 'habit_rollup',
+    'تجمیع_پروژه': 'project_rollup', 'موجودی_مالی': 'finance_balance', 'پس‌انداز_مالی': 'finance_savings',
+    'پرداخت_بدهی': 'debt_paydown', 'مرکب_وزنی': 'weighted_composite',
+  }
+  const priorityMap: Record<string, 'low' | 'medium' | 'high' | 'urgent'> = {
+    'پایین': 'low', 'متوسط': 'medium', 'بالا': 'high', 'فوری': 'urgent',
+  }
+  const goalLevelMap: Record<string, 'annual' | 'quarterly' | 'monthly' | 'custom'> = {
+    'سالانه': 'annual', 'فصلی': 'quarterly', 'ماهانه': 'monthly', 'سفارشی': 'custom',
+  }
+  const contribTypeMap: Record<string, ContributionType> = {
+    'تعداد_انجام': 'completion_count', 'نرخ_انجام': 'completion_rate', 'رکورد': 'streak',
+    'مجموع_مقدار': 'quantity_sum', 'میانگین_مقدار': 'average_value', 'بله_خیر': 'boolean_success',
+  }
+  const contribPeriodMap: Record<string, ContributionPeriod> = {
+    'روزانه': 'daily', 'هفتگی': 'weekly', 'ماهانه': 'monthly', 'کل': 'all',
+  }
+  const finTypeMap: Record<string, 'balance' | 'savings' | 'debt' | 'investment' | 'income_accumulated'> = {
+    'موجودی_حساب': 'balance', 'پس‌انداز': 'savings', 'بدهی': 'debt', 'سرمایه‌گذاری': 'investment', 'درآمد_انباشته': 'income_accumulated',
+  }
+
+  return items.map((item) => {
+    const linkedHabits: GoalHabitLink[] = (item.linked_habits || []).map((h: any) => ({
+      habit: h.habit,
+      habitTitle: h.habit_title,
+      contributionType: contribTypeMap[h.contribution_type] || 'completion_count',
+      weight: h.weight ?? 100,
+      period: contribPeriodMap[h.period] || 'monthly',
+      targetValue: h.target_value ?? undefined,
+      capValue: h.cap_value ?? undefined,
+      isNegative: !!h.is_negative,
+      notes: h.notes,
+    }))
+
+    const linkedFinanceAccounts: GoalFinanceLink[] = (item.linked_finance_accounts || []).map((f: any) => ({
+      financeAccount: f.finance_account,
+      accountName: f.account_name,
+      currentBalance: f.current_balance,
+      financeType: finTypeMap[f.finance_type] || 'balance',
+      initialAmount: f.initial_amount ?? undefined,
+      targetAmount: f.target_amount ?? undefined,
+      weight: f.weight ?? 100,
+      notes: f.notes,
+    }))
+
+    const linkedProjects: GoalLinkedProject[] = (item.linked_projects || []).map((p: any) => ({
+      name: p.name,
+      title: p.title,
+      status: p.status,
+      progress: p.progress,
+    }))
+
+    const goal: Goal = {
+      id: item.name,
+      title: item.title || item.goal_name || item.name,
+      description: item.description || '',
+      category: mapBackendGoalCategory(item.category),
+      goalType: goalTypeMap[item.goal_type] || undefined,
+      progressMode: progressModeMap[item.progress_mode] || undefined,
+      areaId: item.area || undefined,
+      parentGoalId: item.parent_goal || undefined,
+      goalLevel: goalLevelMap[item.goal_level] || undefined,
+      targetDate: item.target_date ? String(item.target_date).slice(0, 10) : '',
+      startDate: item.start_date ? String(item.start_date).slice(0, 10) : undefined,
+      milestones: [],
+      createdAt: (item.creation || item.modified || new Date().toISOString()).slice(0, 10),
+      completed: ['done', 'completed', 'تکمیل‌شده', 'تکمیل شده'].includes(String(item.status || '')),
+      targetValue: item.target_value ?? undefined,
+      currentValue: item.current_value ?? undefined,
+      unit: item.unit || undefined,
+      progressPercent: item.progress_percent ?? undefined,
+      derivedProgressDetail: item.derived_progress_detail || undefined,
+      priority: priorityMap[item.priority] || undefined,
+      color: item.color || undefined,
+      icon: item.icon || undefined,
+      status: item.status || undefined,
+      metric:
+        item.target_value || item.current_value || item.unit
+          ? {
+              name: item.title || item.goal_name || item.name,
+              targetValue: Number(item.target_value || 0),
+              startValue: 0,
+              currentValue: Number(item.current_value || 0),
+              unit: item.unit || '',
+              logs: [],
+            }
+          : undefined,
+      linkedHabits,
+      linkedFinanceAccounts,
+      linkedProjects,
+      noteBlocks: parseNoteBlocks(item.note_blocks_json),
+    }
+    return goal
+  })
 }
 
 function mapHabits(items: any[], logs: any[]): Habit[] {
@@ -216,8 +311,10 @@ function mapProjects(items: any[]): Project[] {
     })),
     createdAt: (item.creation || item.modified || new Date().toISOString()).slice(0, 10),
     linkedGoalId: item.goal || undefined,
+    areaId: item.area || undefined,
+    parentProjectId: item.parent_project || undefined,
     status:
-      item.status === 'برنامه‌ریزی'
+      (item.status === 'برنامه‌ریزی'
         ? 'waiting'
         : item.status === 'فعال'
           ? 'in_progress'
@@ -225,7 +322,7 @@ function mapProjects(items: any[]): Project[] {
             ? 'paused'
             : item.status === 'تکمیل‌شده'
               ? 'completed'
-              : 'in_progress',
+              : 'in_progress') as Project['status'],
     noteBlocks: parseNoteBlocks(item.note_blocks_json),
   }))
 }
@@ -608,6 +705,14 @@ export function useBootstrapLifeData() {
             description: item.description || '',
             color: item.color || undefined,
             icon: item.icon || undefined,
+            status: item.status === 'فعال' ? 'active' : item.status === 'غیرفعال' ? 'inactive' : item.status === 'بایگانی' ? 'archived' : (item.status || undefined),
+            sortOrder: item.sort_order || undefined,
+            projectCount: item.project_count || undefined,
+            taskCount: item.task_count || undefined,
+            goalCount: item.goal_count || undefined,
+            completedTasks: item.completed_tasks || undefined,
+            completedProjects: item.completed_projects || undefined,
+            trackedMinutes: item.tracked_minutes || undefined,
           })),
         }
 

@@ -1,8 +1,8 @@
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
-import { Target, FolderKanban, FileText, Layers, Grid3X3, Plus, Trash2, Edit2, X, Check } from 'lucide-react'
+import { Target, FolderKanban, FileText, Layers, Grid3X3, Plus, Trash2, Edit2, X, Check, Clock } from 'lucide-react'
 import ViewSwitcher, { type ViewMode } from './ViewSwitcher'
-import { createDoc, updateDoc, deleteDoc } from '../../app/frappe'
+import { createAreaRecord, updateAreaRecord, deleteAreaRecord, getAreasWithSummaries } from '../../app/hambaft-api'
 import type { Area, Goal, Task } from '../types'
 
 interface AreasSectionProps {
@@ -38,10 +38,13 @@ export default function AreasSection({ areas, goals, tasks, onSelectGoal, onSele
       const areaGoals = goals.filter((g) => g.areaId === area.id)
       const areaProjects = areaGoals.flatMap((g) => g.projects || [])
       const areaTasks = tasks.filter((t) => areaGoals.some((g) => (g.projects || []).some((p) => (p.tasks || []).some((pt) => pt.id === t.id))))
-      const totalTime = areaProjects.reduce((sum, p) => {
-        const projectTasks = p.tasks || []
-        return sum + projectTasks.reduce((tsum, t) => tsum + (t.totalTimeSpent || 0), 0)
-      }, 0)
+      // Use backend trackedMinutes if available, otherwise compute from frontend data
+      const totalTime = area.trackedMinutes
+        ? area.trackedMinutes * 60  // Convert minutes to seconds for display compatibility
+        : areaProjects.reduce((sum, p) => {
+            const projectTasks = p.tasks || []
+            return sum + projectTasks.reduce((tsum, t) => tsum + (t.totalTimeSpent || 0), 0)
+          }, 0)
       const completedGoals = areaGoals.filter((g) => g.completed).length
       return {
         area,
@@ -51,26 +54,36 @@ export default function AreasSection({ areas, goals, tasks, onSelectGoal, onSele
         totalTime,
         completedGoals,
         totalGoals: areaGoals.length,
+        projectCount: area.projectCount ?? areaProjects.length,
+        taskCount: area.taskCount ?? areaTasks.length,
       }
     }).filter((s) => s.area.title.toLowerCase().includes(search.toLowerCase()))
   }, [areas, goals, tasks, search])
 
   const formatTime = (seconds: number) => {
+    if (!seconds) return '۰د'
     const h = Math.floor(seconds / 3600)
     const m = Math.floor((seconds % 3600) / 60)
     return `${h}س ${m}د`
+  }
+
+  const formatMinutes = (mins: number) => {
+    if (!mins) return '۰د'
+    const h = Math.floor(mins / 60)
+    const m = mins % 60
+    return m ? `${h}س ${m}د` : `${h} ساعت`
   }
 
   const handleAddArea = useCallback(async () => {
     if (!newTitle.trim()) return
     setAdding(true)
     try {
-      const result: any = await createDoc('Hambaft Area', {
+      const result: any = await createAreaRecord({
         title: newTitle.trim(),
         description: newDesc.trim(),
         icon: newIcon,
       })
-      const savedId = result?.name || result?.data?.name
+      const savedId = result?.data?.area?.name || result?.name
       if (savedId) {
         const newArea: Area = {
           id: savedId,
@@ -94,7 +107,7 @@ export default function AreasSection({ areas, goals, tasks, onSelectGoal, onSele
   const handleSaveEdit = useCallback(async (areaId: string) => {
     setSavingId(areaId)
     try {
-      await updateDoc('Hambaft Area', areaId, {
+      await updateAreaRecord(areaId, {
         title: editDraft.title,
         description: editDraft.description,
         icon: editDraft.icon,
@@ -112,7 +125,7 @@ export default function AreasSection({ areas, goals, tasks, onSelectGoal, onSele
   const handleDeleteArea = useCallback(async (areaId: string) => {
     if (!confirm('آیا از حذف این حوزه اطمینان دارید؟ اهداف مرتبط حذف نمی‌شوند.')) return
     try {
-      await deleteDoc('Hambaft Area', areaId)
+      await deleteAreaRecord(areaId)
       onUpdateAreas?.(areas.filter(a => a.id !== areaId))
     } catch (e: any) {
       alert('خطا در حذف: ' + (e?.message || 'نامشخص'))
@@ -316,9 +329,20 @@ export default function AreasSection({ areas, goals, tasks, onSelectGoal, onSele
                           <Target className="w-4 h-4 text-[#E26645]" />
                           <span className="text-xs font-bold text-[#2D3025] dark:text-[#E8ECE0] hover:text-[#7C8363] transition-colors">{goal.title}</span>
                         </button>
-                        <span className={`text-[9px] font-bold px-2 py-0.5 rounded ${goal.completed ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
-                          {goal.completed ? 'تکمیل' : 'در حال پیشرفت'}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          {goal.progressPercent != null && (
+                            <span className="text-[9px] font-bold font-mono text-[#7C8363] bg-[#E8ECE0] px-1.5 py-0.5 rounded">{Math.round(goal.progressPercent)}%</span>
+                          )}
+                          {(goal.linkedHabits?.length || 0) > 0 && (
+                            <span className="text-[8px]" title={`${goal.linkedHabits!.length} عادت پیوندی`}>🔥</span>
+                          )}
+                          {(goal.linkedFinanceAccounts?.length || 0) > 0 && (
+                            <span className="text-[8px]" title={`${goal.linkedFinanceAccounts!.length} حساب مالی`}>💳</span>
+                          )}
+                          <span className={`text-[9px] font-bold px-2 py-0.5 rounded ${goal.completed ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+                            {goal.completed ? 'تکمیل' : 'در حال پیشرفت'}
+                          </span>
+                        </div>
                       </div>
                       <div className="pr-6 space-y-1.5">
                         {(goal.projects || []).map((project) => (

@@ -21,6 +21,24 @@ DONE_TASK_STATUSES = {"done", "انجام‌شده"}
 ACTIVE_GOAL_STATUSES = {"active", "فعال"}
 DONE_HABIT_STATUSES = {"done", "انجام‌شده"}
 
+# Priority normalization: English -> Persian for Hambaft Task child table
+_PRIORITY_EN_TO_FA = {
+    "low": "پایین", "medium": "متوسط", "high": "بالا", "urgent": "فوری",
+    "پایین": "پایین", "متوسط": "متوسط", "بالا": "بالا", "فوری": "فوری",
+    "کم": "پایین", "زیاد": "بالا", "حیاتی": "فوری",
+}
+_VALID_TASK_PRIORITIES = {"پایین", "متوسط", "بالا", "فوری"}
+
+
+def _normalize_task_priority(value):
+    """Map any priority value to a valid Hambaft Task Persian enum."""
+    if not value:
+        return "متوسط"
+    mapped = _PRIORITY_EN_TO_FA.get(str(value).strip())
+    if mapped:
+        return mapped
+    return "متوسط"
+
 
 def _unwrap_response(value):
     if isinstance(value, dict) and "data" in value and set(value.keys()) <= {"status", "data", "message"}:
@@ -270,7 +288,7 @@ def _default_settings(user):
         "subcategories_json": None,
         "task_time_json": None,
         "daily_highlights_json": None,
-        "goal_habits_json": None,
+        "goal_habits_json": None,  # DEPRECATED: Use Goal Habit Link child table instead
     }
 
 
@@ -368,6 +386,8 @@ def _project_to_frontend(doc):
         "description": doc.description or "",
         "notes": doc.notes or "",
         "goal": doc.goal,
+        "area": doc.area or None,
+        "parent_project": doc.parent_project or None,
         "status": doc.status,
         "priority": doc.priority,
         "start_date": doc.start_date,
@@ -375,6 +395,10 @@ def _project_to_frontend(doc):
         "progress": doc.progress or 0,
         "color": doc.color,
         "icon": doc.icon,
+        "actual_minutes": doc.actual_minutes or 0,
+        "blocked_by_json": doc.blocked_by_json or None,
+        "effort_type": doc.effort_type or None,
+        "estimated_hours": doc.estimated_hours or None,
         "tasks": task_rows,
         "creation": str(doc.creation) if getattr(doc, "creation", None) else None,
         "noteBlocks": _extract_note_blocks(doc),
@@ -643,14 +667,39 @@ def create_goal(data):
     if isinstance(data, str):
         data = json.loads(data)
     data = _inject_note_blocks(data)
+    # Extract child table data before update
+    habits_data = data.pop("linked_habits", None) or data.pop("linkedHabits", None) or []
+    finance_data = data.pop("linked_finance_accounts", None) or data.pop("linkedFinanceAccounts", None) or []
     doc = frappe.new_doc("Goal")
     doc.update(data)
     doc.user = frappe.session.user
+    # Add linked habits
+    for h in habits_data:
+        if isinstance(h, dict) and h.get("habit"):
+            doc.append("linked_habits", {
+                "habit": h.get("habit"),
+                "contribution_type": h.get("contribution_type") or "تعداد_انجام",
+                "weight": flt(h.get("weight") or 100),
+                "period": h.get("period") or "ماهانه",
+                "target_value": flt(h.get("target_value")) if h.get("target_value") else None,
+                "cap_value": flt(h.get("cap_value")) if h.get("cap_value") else None,
+                "is_negative": cint(h.get("is_negative") or 0),
+                "notes": h.get("notes") or "",
+            })
+    # Add linked finance accounts
+    for f in finance_data:
+        if isinstance(f, dict) and f.get("finance_account"):
+            doc.append("linked_finance_accounts", {
+                "finance_account": f.get("finance_account"),
+                "finance_type": f.get("finance_type") or "موجودی_حساب",
+                "initial_amount": flt(f.get("initial_amount")) if f.get("initial_amount") else None,
+                "target_amount": flt(f.get("target_amount")) if f.get("target_amount") else None,
+                "weight": flt(f.get("weight") or 100),
+                "notes": f.get("notes") or "",
+            })
     doc.insert()
     frappe.db.commit()
-    result = doc.as_dict()
-    result["noteBlocks"] = _extract_note_blocks(doc)
-    return _api_response({"goal": result})
+    return _api_response({"goal": _goal_to_frontend(doc)})
 
 
 @frappe.whitelist()
@@ -660,13 +709,42 @@ def update_goal(name, data):
     if isinstance(data, str):
         data = json.loads(data)
     data = _inject_note_blocks(data)
+    # Extract child table data
+    habits_data = data.pop("linked_habits", None) or data.pop("linkedHabits", None)
+    finance_data = data.pop("linked_finance_accounts", None) or data.pop("linkedFinanceAccounts", None)
     doc = frappe.get_doc("Goal", name)
     doc.update(data)
+    # Replace linked habits if provided
+    if habits_data is not None:
+        doc.set("linked_habits", [])
+        for h in habits_data:
+            if isinstance(h, dict) and h.get("habit"):
+                doc.append("linked_habits", {
+                    "habit": h.get("habit"),
+                    "contribution_type": h.get("contribution_type") or "تعداد_انجام",
+                    "weight": flt(h.get("weight") or 100),
+                    "period": h.get("period") or "ماهانه",
+                    "target_value": flt(h.get("target_value")) if h.get("target_value") else None,
+                    "cap_value": flt(h.get("cap_value")) if h.get("cap_value") else None,
+                    "is_negative": cint(h.get("is_negative") or 0),
+                    "notes": h.get("notes") or "",
+                })
+    # Replace linked finance if provided
+    if finance_data is not None:
+        doc.set("linked_finance_accounts", [])
+        for f in finance_data:
+            if isinstance(f, dict) and f.get("finance_account"):
+                doc.append("linked_finance_accounts", {
+                    "finance_account": f.get("finance_account"),
+                    "finance_type": f.get("finance_type") or "موجودی_حساب",
+                    "initial_amount": flt(f.get("initial_amount")) if f.get("initial_amount") else None,
+                    "target_amount": flt(f.get("target_amount")) if f.get("target_amount") else None,
+                    "weight": flt(f.get("weight") or 100),
+                    "notes": f.get("notes") or "",
+                })
     doc.save()
     frappe.db.commit()
-    result = doc.as_dict()
-    result["noteBlocks"] = _extract_note_blocks(doc)
-    return _api_response({"goal": result})
+    return _api_response({"goal": _goal_to_frontend(doc)})
 
 
 @frappe.whitelist()
@@ -1711,6 +1789,8 @@ def create_project(data):
     doc.description = data.get("description")
     doc.notes = data.get("notes")
     doc.goal = data.get("goal")
+    doc.area = data.get("area")
+    doc.parent_project = data.get("parent_project")
     doc.status = data.get("status") or "برنامه‌ریزی"
     doc.priority = data.get("priority") or "متوسط"
     doc.start_date = data.get("start_date")
@@ -1718,6 +1798,9 @@ def create_project(data):
     doc.progress = flt(data.get("progress") or 0)
     doc.color = data.get("color")
     doc.icon = data.get("icon")
+    doc.effort_type = data.get("effort_type")
+    doc.estimated_hours = flt(data.get("estimated_hours")) if data.get("estimated_hours") else None
+    doc.blocked_by_json = data.get("blocked_by_json")
     if data.get("note_blocks_json"):
         doc.note_blocks_json = data.get("note_blocks_json")
     for task in data.get("tasks") or []:
@@ -1725,7 +1808,7 @@ def create_project(data):
             "title": task.get("title"),
             "description": task.get("description"),
             "status": task.get("status") or ("انجام‌شده" if task.get("completed") else "انجام‌نشده"),
-            "priority": task.get("priority") or "متوسط",
+            "priority": _normalize_task_priority(task.get("priority")),
             "due_date": task.get("dueDate") or task.get("due_date"),
             "user": frappe.session.user,
             "completed": 1 if task.get("completed") else 0,
@@ -1748,6 +1831,8 @@ def update_project(name, data):
     doc.description = data.get("description", doc.description)
     doc.notes = data.get("notes", doc.notes)
     doc.goal = data.get("goal", doc.goal)
+    doc.area = data.get("area", doc.area)
+    doc.parent_project = data.get("parent_project", doc.parent_project)
     doc.status = data.get("status", doc.status)
     doc.priority = data.get("priority", doc.priority)
     doc.start_date = data.get("start_date", doc.start_date)
@@ -1755,6 +1840,9 @@ def update_project(name, data):
     doc.progress = flt(data.get("progress", doc.progress or 0))
     doc.color = data.get("color", doc.color)
     doc.icon = data.get("icon", doc.icon)
+    doc.effort_type = data.get("effort_type", doc.effort_type)
+    doc.estimated_hours = flt(data.get("estimated_hours")) if data.get("estimated_hours") is not None else doc.estimated_hours
+    doc.blocked_by_json = data.get("blocked_by_json", doc.blocked_by_json)
     if data.get("note_blocks_json"):
         doc.note_blocks_json = data.get("note_blocks_json")
     if "tasks" in data:
@@ -1765,7 +1853,7 @@ def update_project(name, data):
                 "title": task.get("title"),
                 "description": task.get("description"),
                 "status": task.get("status") or ("انجام‌شده" if task.get("completed") else "انجام‌نشده"),
-                "priority": task.get("priority") or "متوسط",
+                "priority": _normalize_task_priority(task.get("priority")),
                 "due_date": task.get("dueDate") or task.get("due_date"),
                 "user": frappe.session.user,
                 "completed": 1 if task.get("completed") else 0,
@@ -2909,3 +2997,653 @@ def transition_task_status(task_name, new_status):
     frappe.db.set_value("Task", task_name, updates, update_modified=True)
     frappe.db.commit()
     return _api_response({"task": frappe.get_doc("Task", task_name).as_dict()})
+
+
+# ─── Area CRUD ─────────────────────────────────────────────────
+
+@frappe.whitelist()
+def create_area(data):
+    _check_auth()
+    if isinstance(data, str):
+        data = json.loads(data)
+    data = data or {}
+    doc = frappe.new_doc("Hambaft Area")
+    doc.user = frappe.session.user
+    doc.title = data.get("title")
+    doc.description = data.get("description")
+    doc.color = data.get("color")
+    doc.icon = data.get("icon")
+    doc.status = data.get("status") or "فعال"
+    doc.sort_order = cint(data.get("sort_order") or 0)
+    doc.insert(ignore_permissions=True)
+    frappe.db.commit()
+    return _api_response({"area": doc.as_dict()})
+
+
+@frappe.whitelist()
+def update_area(name, data):
+    _check_auth()
+    _require_owner("Hambaft Area", name)
+    if isinstance(data, str):
+        data = json.loads(data)
+    doc = frappe.get_doc("Hambaft Area", name)
+    for fieldname in ("title", "description", "color", "icon", "status", "sort_order"):
+        if fieldname in data:
+            setattr(doc, fieldname, data.get(fieldname))
+    doc.save(ignore_permissions=True)
+    frappe.db.commit()
+    return _api_response({"area": doc.as_dict()})
+
+
+@frappe.whitelist()
+def delete_area(name):
+    _check_auth()
+    _require_owner("Hambaft Area", name)
+    frappe.delete_doc("Hambaft Area", name, ignore_permissions=True)
+    frappe.db.commit()
+    return _api_response({"ok": True})
+
+
+@frappe.whitelist()
+def get_area_summary(name):
+    """Get area with projects, tasks, tracked time aggregation."""
+    _check_auth()
+    _require_owner("Hambaft Area", name)
+    doc = frappe.get_doc("Hambaft Area", name)
+    return _api_response({"summary": doc.get_summary()})
+
+
+@frappe.whitelist()
+def get_areas_with_summaries(limit=50, offset=0):
+    """Get all areas with summary data (projects, tasks, tracked time)."""
+    _check_auth()
+    areas = frappe.get_all("Hambaft Area", filters=_owner_filter(), fields="*",
+                           limit_page_length=cint(limit), start=cint(offset),
+                           order_by="sort_order asc, title asc")
+    result = []
+    for area_row in areas:
+        doc = frappe.get_doc("Hambaft Area", area_row.name)
+        summary = doc.get_summary()
+        result.append(summary)
+    return _api_response({"areas": result})
+
+
+# ─── Project Dependencies ──────────────────────────────────────
+
+@frappe.whitelist()
+def add_project_dependency(project_name, depends_on_project):
+    _check_auth()
+    _require_owner("Hambaft Project", project_name)
+    doc = frappe.get_doc("Hambaft Project", project_name)
+    blocked = _loads_json(doc.blocked_by_json, [])
+    if depends_on_project not in blocked:
+        blocked.append(depends_on_project)
+        doc.blocked_by_json = json.dumps(blocked, ensure_ascii=False)
+        doc.save(ignore_permissions=True)
+        frappe.db.commit()
+    return _api_response({"blocked_by": blocked})
+
+
+@frappe.whitelist()
+def remove_project_dependency(project_name, depends_on_project):
+    _check_auth()
+    _require_owner("Hambaft Project", project_name)
+    doc = frappe.get_doc("Hambaft Project", project_name)
+    blocked = _loads_json(doc.blocked_by_json, [])
+    if depends_on_project in blocked:
+        blocked.remove(depends_on_project)
+        doc.blocked_by_json = json.dumps(blocked, ensure_ascii=False)
+        doc.save(ignore_permissions=True)
+        frappe.db.commit()
+    return _api_response({"blocked_by": blocked})
+
+
+@frappe.whitelist()
+def is_project_blocked(project_name):
+    _check_auth()
+    doc = frappe.get_doc("Hambaft Project", project_name)
+    blocked, reason = doc.is_blocked()
+    return _api_response({"blocked": blocked, "reason": reason})
+
+
+@frappe.whitelist()
+def get_project_subprojects(project_name):
+    _check_auth()
+    doc = frappe.get_doc("Hambaft Project", project_name)
+    return _api_response({"projects": doc.get_subprojects()})
+
+
+@frappe.whitelist()
+def get_project_tracked_minutes(project_name):
+    """Compute total tracked minutes for a project from its tasks' sessions."""
+    _check_auth()
+    task_names = frappe.get_all("Task", filters={"project": project_name}, fields=["name"])
+    if not task_names:
+        return _api_response({"tracked_minutes": 0})
+    names = [t.name for t in task_names]
+    total = frappe.db.sql(
+        """SELECT COALESCE(SUM(duration_minutes), 0)
+           FROM `tabHambaft Task Session`
+           WHERE task IN (%s) AND status IN ('paused', 'completed')"""
+        % ",".join(["%s"] * len(names)),
+        names,
+    )[0][0] or 0
+    return _api_response({"tracked_minutes": int(total)})
+
+
+# ─── Planner Calendar / Timeline Feeds ─────────────────────────
+
+@frappe.whitelist()
+def get_planner_daily_timeline(date=None):
+    """Get tasks, sessions, time blocks, and events for a single day timeline view."""
+    _check_auth()
+    if not date:
+        date = today()
+    # Tasks scheduled for this date
+    tasks = frappe.get_all(
+        "Task",
+        filters={
+            "user": frappe.session.user,
+            "scheduled_date": date,
+            "status": ["not in", ["done", "dropped"]],
+        },
+        fields="*",
+        order_by="scheduled_time asc",
+    )
+    # Tasks marked as today
+    today_tasks = frappe.get_all(
+        "Task",
+        filters={"user": frappe.session.user, "status": "today"},
+        fields="*",
+        order_by="scheduled_time asc",
+    )
+    # Merge
+    seen = {t.name for t in tasks}
+    for t in today_tasks:
+        if t.name not in seen:
+            tasks.append(t)
+    # Time blocks for this date
+    time_blocks = frappe.get_all(
+        "Hambaft Time Block",
+        filters={"user": frappe.session.user, "block_date": date},
+        fields="*",
+        order_by="start_time asc",
+    )
+    # Active sessions
+    active_session = frappe.get_all(
+        "Hambaft Task Session",
+        filters={"user": frappe.session.user, "status": "active"},
+        fields="*",
+        limit_page_length=1,
+    )
+    # Calendar events for this date
+    events = _fetch_events_for_day(date, limit=50)
+    return _api_response({
+        "date": date,
+        "tasks": tasks,
+        "time_blocks": time_blocks,
+        "active_session": active_session[0] if active_session else None,
+        "events": events,
+    })
+
+
+@frappe.whitelist()
+def get_planner_week(start_date=None):
+    """Get tasks for a full week, grouped by date."""
+    _check_auth()
+    if not start_date:
+        start_date = today()
+    base = getdate(start_date)
+    # Week: 7 days from start_date
+    dates = [(base + timedelta(days=i)).isoformat() for i in range(7)]
+    result = {}
+    for d in dates:
+        day_tasks = frappe.get_all(
+            "Task",
+            filters={
+                "user": frappe.session.user,
+                "scheduled_date": d,
+                "status": ["not in", ["dropped"]],
+            },
+            fields="*",
+            order_by="scheduled_time asc",
+        )
+        today_tasks = frappe.get_all(
+            "Task",
+            filters={"user": frappe.session.user, "status": "today"},
+            fields="*",
+        )
+        seen = {t.name for t in day_tasks}
+        for t in today_tasks:
+            if t.name not in seen:
+                day_tasks.append(t)
+        result[d] = day_tasks
+    return _api_response({"start_date": start_date, "days": result})
+
+
+@frappe.whitelist()
+def get_planner_month(year=None, month=None):
+    """Get tasks for a full month, grouped by date."""
+    _check_auth()
+    if not year or not month:
+        today_str = today()
+        year = int(today_str[:4])
+        month = int(today_str[5:7])
+    year = cint(year)
+    month = cint(month)
+    # Get first and last day of month
+    from_date = date(year, month, 1)
+    if month == 12:
+        to_date = date(year + 1, 1, 1) - timedelta(days=1)
+    else:
+        to_date = date(year, month + 1, 1) - timedelta(days=1)
+    tasks = frappe.get_all(
+        "Task",
+        filters={
+            "user": frappe.session.user,
+            "scheduled_date": ["between", [from_date.isoformat(), to_date.isoformat()]],
+            "status": ["not in", ["dropped"]],
+        },
+        fields="*",
+        order_by="scheduled_date asc, scheduled_time asc",
+    )
+    # Group by date
+    result = {}
+    for t in tasks:
+        d = str(t.scheduled_date) if t.scheduled_date else None
+        if d:
+            result.setdefault(d, []).append(t)
+    return _api_response({
+        "year": year, "month": month,
+        "from_date": from_date.isoformat(),
+        "to_date": to_date.isoformat(),
+        "days": result,
+    })
+
+
+# ─── Project Board (grouped by status) ─────────────────────────
+
+@frappe.whitelist()
+def get_project_board(project_name):
+    """Get tasks for a project, grouped by planner status."""
+    _check_auth()
+    _require_owner("Hambaft Project", project_name)
+    tasks = frappe.get_all(
+        "Task",
+        filters={"project": project_name, "user": frappe.session.user},
+        fields="*",
+        order_by="priority asc, scheduled_date asc",
+    )
+    # Group by status
+    status_groups = {}
+    status_order = ["inbox", "not_started", "next", "today", "in_progress", "on_hold", "someday", "done", "dropped"]
+    for status in status_order:
+        group = [t for t in tasks if t.status == status]
+        if group:
+            status_groups[status] = group
+    # Include tasks without a recognized status
+    for t in tasks:
+        if t.status not in status_order:
+            status_groups.setdefault(t.status or "inbox", []).append(t)
+    project = frappe.get_doc("Hambaft Project", project_name)
+    return _api_response({
+        "project": _project_to_frontend(project),
+        "status_groups": status_groups,
+        "total_tasks": len(tasks),
+        "completed_tasks": sum(1 for t in tasks if t.status == "done"),
+    })
+
+
+# ─── Projects by Area ──────────────────────────────────────────
+
+@frappe.whitelist()
+def get_projects_by_area(area_name):
+    """Get all projects for an area with task/time aggregation."""
+    _check_auth()
+    _require_owner("Hambaft Area", area_name)
+    projects = frappe.get_all(
+        "Hambaft Project",
+        filters={"area": area_name, "user": frappe.session.user},
+        fields="*",
+        order_by="title asc",
+    )
+    result = []
+    for p in projects:
+        task_count = frappe.db.count("Task", {"project": p.name, "user": frappe.session.user})
+        done_count = frappe.db.count("Task", {"project": p.name, "user": frappe.session.user, "status": "done"})
+        tracked = frappe.db.sql(
+            """SELECT COALESCE(SUM(s.duration_minutes), 0)
+               FROM `tabHambaft Task Session` s
+               JOIN `tabTask` t ON t.name = s.task
+               WHERE t.project=%s AND t.user=%s AND s.status IN ('paused', 'completed')""",
+            (p.name, frappe.session.user),
+        )[0][0] or 0
+        p_dict = p if isinstance(p, dict) else p.__dict__
+        p_dict["task_count"] = task_count
+        p_dict["done_task_count"] = done_count
+        p_dict["tracked_minutes"] = int(tracked)
+        result.append(p_dict)
+    return _api_response({"projects": result})
+
+
+# ─── Tracked Time Rollups ──────────────────────────────────────
+
+@frappe.whitelist()
+def get_task_tracked_minutes(task_name):
+    """Get total tracked minutes for a task from sessions."""
+    _check_auth()
+    _require_owner("Task", task_name)
+    total = frappe.db.sql(
+        "SELECT COALESCE(SUM(duration_minutes), 0) FROM `tabHambaft Task Session` WHERE task=%s AND status IN ('paused', 'completed')",
+        task_name,
+    )[0][0] or 0
+    return _api_response({"tracked_minutes": int(total)})
+
+
+@frappe.whitelist()
+def get_area_tracked_minutes(area_name):
+    """Get total tracked minutes for an area (from direct area tasks)."""
+    _check_auth()
+    _require_owner("Hambaft Area", area_name)
+    doc = frappe.get_doc("Hambaft Area", area_name)
+    return _api_response({"tracked_minutes": doc.get_tracked_minutes()})
+
+
+# ─── Planner Board Views ───────────────────────────────────────
+
+@frappe.whitelist()
+def get_tasks_by_project(limit=100):
+    """Get all tasks grouped by project for board view."""
+    _check_auth()
+    tasks = frappe.get_all(
+        "Task",
+        filters={"user": frappe.session.user, "status": ["not in", ["dropped"]]},
+        fields="*",
+        limit_page_length=cint(limit),
+        order_by="project asc, priority asc",
+    )
+    # Group by project
+    by_project = {}
+    for t in tasks:
+        key = t.project or "no_project"
+        by_project.setdefault(key, []).append(t)
+    return _api_response({"by_project": by_project})
+
+
+@frappe.whitelist()
+def get_tasks_grouped_by_status(limit=200):
+    """Get all tasks grouped by status for board view."""
+    _check_auth()
+    tasks = frappe.get_all(
+        "Task",
+        filters={"user": frappe.session.user, "status": ["not in", ["dropped"]]},
+        fields="*",
+        limit_page_length=cint(limit),
+        order_by="status asc, priority asc, scheduled_date asc",
+    )
+    status_groups = {}
+    status_order = ["inbox", "not_started", "next", "today", "in_progress", "on_hold", "someday", "done"]
+    for status in status_order:
+        group = [t for t in tasks if t.status == status]
+        if group:
+            status_groups[status] = group
+    return _api_response({"status_groups": status_groups})
+
+
+# ─── Advanced Goal APIs ──────────────────────────────────────
+
+def _goal_to_frontend(doc):
+    """Convert a Goal document to a frontend-friendly dict."""
+    linked_habits = []
+    for row in doc.get("linked_habits") or []:
+        habit_title = frappe.db.get_value("Habit", row.habit, "title") or row.habit
+        linked_habits.append({
+            "habit": row.habit,
+            "habit_title": habit_title,
+            "contribution_type": row.contribution_type,
+            "weight": row.weight or 100,
+            "period": row.period,
+            "target_value": row.target_value,
+            "cap_value": row.cap_value,
+            "is_negative": row.is_negative,
+            "notes": row.notes or "",
+        })
+
+    linked_finance = []
+    for row in doc.get("linked_finance_accounts") or []:
+        account_name = frappe.db.get_value("Hambaft Finance Account", row.finance_account, "account_name") if row.finance_account else None
+        current_balance = flt(frappe.db.get_value("Hambaft Finance Account", row.finance_account, "current_balance") or 0) if row.finance_account else 0
+        linked_finance.append({
+            "finance_account": row.finance_account or "",
+            "account_name": account_name or "",
+            "current_balance": current_balance,
+            "finance_type": row.finance_type,
+            "initial_amount": row.initial_amount or 0,
+            "target_amount": row.target_amount or 0,
+            "weight": row.weight or 100,
+            "notes": row.notes or "",
+        })
+
+    # Get linked projects
+    projects = frappe.get_all(
+        "Hambaft Project",
+        filters={"goal": doc.name, "user": doc.user},
+        fields=["name", "title", "status", "progress"],
+    )
+
+    return {
+        "name": doc.name,
+        "title": doc.title,
+        "description": doc.description or "",
+        "area": doc.area,
+        "category": doc.category,
+        "goal_type": doc.goal_type,
+        "progress_mode": doc.progress_mode,
+        "status": doc.status,
+        "parent_goal": doc.parent_goal,
+        "goal_level": doc.goal_level,
+        "target_value": doc.target_value or 0,
+        "current_value": doc.current_value or 0,
+        "unit": doc.unit or "",
+        "start_date": doc.start_date,
+        "target_date": doc.target_date,
+        "progress_percent": doc.progress_percent or 0,
+        "derived_progress_detail": doc.derived_progress_detail or "",
+        "priority": doc.priority,
+        "notes": doc.notes or "",
+        "tags": doc.tags or "",
+        "color": doc.color,
+        "icon": doc.icon,
+        "user": doc.user,
+        "linked_habits": linked_habits,
+        "linked_finance_accounts": linked_finance,
+        "linked_projects": projects,
+        "noteBlocks": _extract_note_blocks(doc),
+        "creation": str(doc.creation) if getattr(doc, "creation", None) else None,
+    }
+
+
+@frappe.whitelist()
+def compute_goal_progress(name):
+    """Recompute and save goal progress. Returns the updated progress."""
+    _check_auth()
+    _require_owner("Goal", name)
+    doc = frappe.get_doc("Goal", name)
+    pct, detail = doc.compute_progress()
+    doc.progress_percent = pct
+    doc.derived_progress_detail = json.dumps(detail, ensure_ascii=False)
+    if pct >= 100:
+        doc.status = "تکمیل‌شده"
+    doc.save(ignore_permissions=True)
+    frappe.db.commit()
+    return _api_response({
+        "progress_percent": pct,
+        "detail": detail,
+        "goal": _goal_to_frontend(doc),
+    })
+
+
+@frappe.whitelist()
+def get_goal_detail(name):
+    """Get full goal detail with habit links, finance links, projects."""
+    _check_auth()
+    _require_owner("Goal", name)
+    doc = frappe.get_doc("Goal", name)
+    return _api_response({"goal": _goal_to_frontend(doc)})
+
+
+@frappe.whitelist()
+def link_goal_habit(goal_name, habit, contribution_type="تعداد_انجام", weight=100,
+                    period="ماهانه", target_value=None, cap_value=None, is_negative=0, notes=None):
+    """Add a habit link to a goal."""
+    _check_auth()
+    _require_owner("Goal", goal_name)
+    doc = frappe.get_doc("Goal", goal_name)
+    # Check for duplicate
+    for row in doc.get("linked_habits") or []:
+        if row.habit == habit:
+            return _api_response({"ok": False, "message": "habit_already_linked"})
+    doc.append("linked_habits", {
+        "habit": habit,
+        "contribution_type": contribution_type,
+        "weight": flt(weight or 100),
+        "period": period,
+        "target_value": flt(target_value) if target_value else None,
+        "cap_value": flt(cap_value) if cap_value else None,
+        "is_negative": cint(is_negative),
+        "notes": notes or "",
+    })
+    doc.save(ignore_permissions=True)
+    frappe.db.commit()
+    return _api_response({"goal": _goal_to_frontend(doc)})
+
+
+@frappe.whitelist()
+def unlink_goal_habit(goal_name, habit):
+    """Remove a habit link from a goal."""
+    _check_auth()
+    _require_owner("Goal", goal_name)
+    doc = frappe.get_doc("Goal", goal_name)
+    doc.set("linked_habits", [row for row in doc.get("linked_habits") or [] if row.habit != habit])
+    doc.save(ignore_permissions=True)
+    frappe.db.commit()
+    return _api_response({"goal": _goal_to_frontend(doc)})
+
+
+@frappe.whitelist()
+def link_goal_finance(goal_name, finance_account, finance_type="موجودی_حساب",
+                      initial_amount=None, target_amount=None, weight=100, notes=None):
+    """Add a finance account link to a goal."""
+    _check_auth()
+    _require_owner("Goal", goal_name)
+    doc = frappe.get_doc("Goal", goal_name)
+    # Check for duplicate
+    for row in doc.get("linked_finance_accounts") or []:
+        if row.finance_account == finance_account:
+            return _api_response({"ok": False, "message": "account_already_linked"})
+    doc.append("linked_finance_accounts", {
+        "finance_account": finance_account,
+        "finance_type": finance_type,
+        "initial_amount": flt(initial_amount) if initial_amount else None,
+        "target_amount": flt(target_amount) if target_amount else None,
+        "weight": flt(weight or 100),
+        "notes": notes or "",
+    })
+    doc.save(ignore_permissions=True)
+    frappe.db.commit()
+    return _api_response({"goal": _goal_to_frontend(doc)})
+
+
+@frappe.whitelist()
+def unlink_goal_finance(goal_name, finance_account):
+    """Remove a finance account link from a goal."""
+    _check_auth()
+    _require_owner("Goal", goal_name)
+    doc = frappe.get_doc("Goal", goal_name)
+    doc.set("linked_finance_accounts", [row for row in doc.get("linked_finance_accounts") or [] if row.finance_account != finance_account])
+    doc.save(ignore_permissions=True)
+    frappe.db.commit()
+    return _api_response({"goal": _goal_to_frontend(doc)})
+
+
+@frappe.whitelist()
+def link_goal_project(goal_name, project_name):
+    """Link a project to a goal by setting the project's goal field."""
+    _check_auth()
+    _require_owner("Goal", goal_name)
+    _require_owner("Hambaft Project", project_name)
+    frappe.db.set_value("Hambaft Project", project_name, "goal", goal_name, update_modified=True)
+    frappe.db.commit()
+    return _api_response({"ok": True})
+
+
+@frappe.whitelist()
+def unlink_goal_project(goal_name, project_name):
+    """Unlink a project from a goal."""
+    _check_auth()
+    proj_goal = frappe.db.get_value("Hambaft Project", project_name, "goal")
+    if proj_goal != goal_name:
+        return _api_response({"ok": False, "message": "not_linked"})
+    frappe.db.set_value("Hambaft Project", project_name, "goal", None, update_modified=True)
+    frappe.db.commit()
+    return _api_response({"ok": True})
+
+
+@frappe.whitelist()
+def get_goals_with_details(limit=100, offset=0):
+    """Get all goals for the current user with full detail."""
+    _check_auth()
+    rows = frappe.get_all(
+        "Goal",
+        filters=_owner_filter(),
+        fields=["name"],
+        limit_page_length=cint(limit),
+        start=cint(offset),
+        order_by="target_date asc, creation desc",
+    )
+    goals = [_goal_to_frontend(frappe.get_doc("Goal", row.name)) for row in rows]
+    return _api_response({"goals": goals})
+
+
+@frappe.whitelist()
+def recompute_all_goal_progress():
+    """Recompute progress for all active goals of the current user."""
+    _check_auth()
+    rows = frappe.get_all(
+        "Goal",
+        filters={"user": frappe.session.user, "status": ["in", ["فعال", "active", "پیش‌نویس"]]},
+        fields=["name"],
+    )
+    results = []
+    for row in rows:
+        try:
+            doc = frappe.get_doc("Goal", row.name)
+            pct, detail = doc.compute_progress()
+            doc.progress_percent = pct
+            doc.derived_progress_detail = json.dumps(detail, ensure_ascii=False)
+            if pct >= 100:
+                doc.status = "تکمیل‌شده"
+            doc.save(ignore_permissions=True)
+            results.append({"name": row.name, "progress_percent": pct})
+        except Exception as e:
+            results.append({"name": row.name, "error": str(e)})
+    frappe.db.commit()
+    return _api_response({"recomputed": len(results), "results": results})
+
+
+@frappe.whitelist()
+def get_area_detail(name):
+    """Get area with full detail: goals, projects, tasks, tracked time."""
+    _check_auth()
+    _require_owner("Hambaft Area", name)
+    doc = frappe.get_doc("Hambaft Area", name)
+    summary = doc.get_summary()
+    # Also get goals
+    goals = frappe.get_all(
+        "Goal",
+        filters={"area": name, "user": frappe.session.user},
+        fields=["name", "title", "status", "progress_percent", "goal_type", "target_date", "priority"],
+        order_by="target_date asc",
+    )
+    summary["goals"] = goals
+    return _api_response(summary)

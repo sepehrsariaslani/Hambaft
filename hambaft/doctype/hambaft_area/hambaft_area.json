@@ -3,7 +3,7 @@
  "doctype": "DocType",
  "module": "Hambaft",
  "custom": 0,
- "autoname": "field:title",
+ "autoname": "format:AREA-{#####}",
  "fields": [
   {
    "fieldname": "title",

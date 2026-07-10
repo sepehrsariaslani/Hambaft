@@ -27,6 +27,11 @@ export type WorkspaceTab =
   | 'areas'
   | 'notes'
   | 'planner'
+  | 'planner-timeline'
+  | 'planner-week'
+  | 'planner-month'
+  | 'planner-board'
+  | 'planner-areas'
 
 type WorkspaceRouteConfig = {
   path: string
@@ -60,6 +65,11 @@ export const workspaceRouteConfigs: WorkspaceRouteConfig[] = [
   { path: 'areas', tab: 'areas' },
   { path: 'notes', tab: 'notes' },
   { path: 'planner', tab: 'planner' },
+  { path: 'planner/timeline', tab: 'planner-timeline' },
+  { path: 'planner/week', tab: 'planner-week' },
+  { path: 'planner/month', tab: 'planner-month' },
+  { path: 'planner/board', tab: 'planner-board' },
+  { path: 'planner/areas', tab: 'planner-areas' },
 ]
 
 export function buildWorkspaceRoutes(): RouteObject[] {

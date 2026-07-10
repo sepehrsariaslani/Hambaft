@@ -97,6 +97,18 @@
       "label": "ساعت تخمینی"
     },
     {
+      "fieldname": "actual_minutes",
+      "fieldtype": "Int",
+      "label": "زمان واقعی (دقیقه)",
+      "read_only": 1,
+      "default": 0
+    },
+    {
+      "fieldname": "blocked_by_json",
+      "fieldtype": "Text",
+      "label": "پروژه‌های پیش‌نیاز (JSON)"
+    },
+    {
       "fieldname": "description",
       "fieldtype": "Text Editor",
       "label": "توضیحات"
