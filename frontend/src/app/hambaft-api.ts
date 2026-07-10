@@ -1329,15 +1329,24 @@ export async function quickAddTask(
     area?: string
     goal?: string
     importance?: 'normal' | 'key' | 'milestone'
-    context?: 'planner_today' | 'planner_inbox' | 'planner_next' | 'planner_scheduled' | 'area_board' | 'project_detail'
+    status?: string
+    priority?: string
+    scheduledDate?: string
+    dueDate?: string
+    context?: 'planner_today' | 'planner_inbox' | 'planner_next' | 'planner_scheduled' | 'area_board' | 'project_detail' | 'task_manager'
   }
 ) {
   const importanceMap: Record<string, string> = { normal: 'عادی', key: 'کلیدی', milestone: 'نقطه‌عطف' }
+  const priorityMap: Record<string, string> = { low: 'پایین', medium: 'متوسط', high: 'بالا', urgent: 'فوری' }
   const params: Record<string, string> = { title }
   if (options?.project) params.project = options.project
   if (options?.area) params.area = options.area
   if (options?.goal) params.goal = options.goal
   if (options?.importance) params.importance = importanceMap[options.importance]
+  if (options?.status) params.status = options.status
+  if (options?.priority) params.priority = priorityMap[options.priority] || options.priority
+  if (options?.scheduledDate) params.scheduled_date = options.scheduledDate
+  if (options?.dueDate) params.due_date = options.dueDate
   if (options?.context) params.context = options.context
   return call<{ data?: { task?: any } }>('hambaft.hambaft.api.quick_add_task', params)
 }

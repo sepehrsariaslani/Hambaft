@@ -3,10 +3,13 @@ import type { Task, Goal } from '../types'
 import ViewSwitcher, { type ViewMode } from './ViewSwitcher'
 import { ImportanceBadge, ImportanceSelector, BlockedTaskIndicator, TaskImpactBanner, ImpactScoreBadge, sortTasksByImpact } from './TaskV2Shared'
 import type { ImportanceLevel } from './TaskV2Shared'
-import { updateTaskImportance } from '../../app/hambaft-api'
+import { updateTaskImportance, quickAddTask } from '../../app/hambaft-api'
 import { ColumnConfigurator } from './ColumnConfigurator'
 import { DensityToggle } from './DensityToggle'
 import { type ViewConfig, type DensityMode, type ColumnId, DENSITY_CONFIG, isColumnVisible, getOrInitViewConfig, setViewConfig } from './ViewConfigStore'
+import QuickAddBar from './QuickAddBar'
+import TaskRowV2 from './TaskRowV2'
+import TaskDetailDrawer from './TaskDetailDrawer'
 
 const TaskTableView = lazy(() => import('./TaskTableView'))
 const TaskKanbanView = lazy(() => import('./TaskKanbanView'))
@@ -80,6 +83,10 @@ export default function TaskManagerSection({
   const [kanbanGroup, setKanbanGroup] = useState<KanbanGroup>('status')
   const [newTaskTitle, setNewTaskTitle] = useState('')
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set())
+
+  // Task detail drawer
+  const [drawerTaskId, setDrawerTaskId] = useState<string | null>(null)
+  const drawerTask = drawerTaskId ? allTasks.find(t => t.id === drawerTaskId) || null : null
 
   // Notion-like view config (columns, density, saved views)
   const [viewConfig, setViewConfig] = useState<ViewConfig>(() =>
@@ -171,11 +178,27 @@ export default function TaskManagerSection({
     return groups
   }, [filteredTasks, groupBy, todayDate])
 
-  const handleAdd = useCallback(() => {
-    if (!newTaskTitle.trim()) return
-    onAddTask(newTaskTitle.trim())
-    setNewTaskTitle('')
-  }, [newTaskTitle, onAddTask])
+  const handleAdd = useCallback(async (data: {
+    title: string; status?: string; priority?: string; importance?: ImportanceLevel;
+    projectId?: string; areaId?: string; goalId?: string;
+    scheduledDate?: string; dueDate?: string
+  }) => {
+    try {
+      const importanceMap: Record<string, string> = { normal: 'عادی', key: 'کلیدی', milestone: 'نقطه‌عطف' }
+      await quickAddTask(data.title, {
+        project: data.projectId,
+        area: data.areaId,
+        goal: data.goalId,
+        importance: data.importance,
+        context: 'task_manager',
+      })
+      // Refresh — call onAddTask to trigger parent refresh
+      onAddTask(data.title)
+    } catch (e) {
+      // Fallback to legacy add
+      onAddTask(data.title)
+    }
+  }, [onAddTask])
 
   const toggleSelect = (id: string) => {
     setSelectedTaskIds(prev => {
@@ -185,6 +208,13 @@ export default function TaskManagerSection({
       return next
     })
   }
+
+  // Quick action handler for TaskRowV2
+  const handleQuickAction = useCallback((taskId: string, field: string, value: any) => {
+    const task = allTasks.find(t => t.id === taskId)
+    if (!task) return
+    onUpdateTask({ ...task, [field]: value })
+  }, [allTasks, onUpdateTask])
 
   const stats = useMemo(() => {
     const total = allTasks.length
@@ -210,22 +240,18 @@ export default function TaskManagerSection({
         <StatCard label="مسدود" value={stats.blocked} color="bg-red-600 text-white" />
       </div>
 
-      {/* Add Task + View Controls */}
-      <div className="flex gap-3 items-center">
-        <input
-          type="text"
-          value={newTaskTitle}
-          onChange={(e) => setNewTaskTitle(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
-          placeholder="تسک جدید بنویس و Enter بزن..."
-          className="flex-1 rounded-xl border border-[#E6DFD3] bg-white px-4 py-3 text-sm text-[#2d3025] placeholder:text-[#9D978B] focus:border-[#7C8363] focus:outline-none focus:ring-2 focus:ring-[#7C8363]/20 transition-all"
-        />
-        <button
-          onClick={handleAdd}
-          className="rounded-xl bg-[#2d3025] px-5 py-3 text-sm font-bold text-white hover:bg-[#1a1c15] transition-colors"
-        >
-          + افزودن
-        </button>
+      {/* Quick Add Bar */}
+      <QuickAddBar
+        placeholder="تسک جدید بنویس و Enter بزن..."
+        context="task_manager"
+        projects={goals.flatMap(g => (g.projects || []).map(p => ({ id: p.id, title: p.title })))}
+        areas={[]}
+        goals={goals.map(g => ({ id: g.id, title: g.title }))}
+        onSubmit={handleAdd}
+      />
+
+      {/* View Controls */}
+      <div className="flex gap-2 items-center justify-end">
         <DensityToggle density={density} onChange={(d) => handleViewConfigChange({ ...viewConfig, density: d })} />
         <ColumnConfigurator config={viewConfig} onConfigChange={handleViewConfigChange} />
       </div>
@@ -338,14 +364,16 @@ export default function TaskManagerSection({
               )}
               <div className="space-y-2">
                 {groupTasks.map((task) => (
-                  <TaskRow
+                  <TaskRowV2
                     key={task.id}
                     task={task}
                     selected={selectedTaskIds.has(task.id)}
                     onToggleSelect={() => toggleSelect(task.id)}
                     onToggle={() => onToggleTask(task.id)}
                     onDelete={() => onDeleteTask(task.id)}
-                    onView={() => onViewTaskDetails?.(task.id)}
+                    onView={() => setDrawerTaskId(task.id)}
+                    onQuickAction={handleQuickAction}
+                    onAddSubtask={() => {/* subtask add handled via drawer */}}
                     todayDate={todayDate}
                     viewConfig={viewConfig}
                     dCfg={dCfg}
@@ -401,6 +429,20 @@ export default function TaskManagerSection({
             todayDate={todayDate}
           />
         </Suspense>
+      )}
+
+      {/* Task Detail Drawer */}
+      {drawerTask && (
+        <TaskDetailDrawer
+          task={drawerTask}
+          allTasks={allTasks}
+          goals={goals}
+          projects={goals.flatMap(g => (g.projects || []).map(p => ({ id: p.id, title: p.title })))}
+          areas={[]}
+          onUpdateTask={onUpdateTask}
+          onDeleteTask={(id) => { onDeleteTask(id); setDrawerTaskId(null) }}
+          onClose={() => setDrawerTaskId(null)}
+        />
       )}
     </div>
   )

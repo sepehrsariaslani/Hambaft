@@ -53,6 +53,7 @@ import type { ImportanceLevel } from './TaskV2Shared'
 import { ColumnConfigurator } from './ColumnConfigurator'
 import { DensityToggle } from './DensityToggle'
 import { type ViewConfig, type DensityMode, type ColumnId, DENSITY_CONFIG, isColumnVisible, getOrInitViewConfig, setViewConfig } from './ViewConfigStore'
+import QuickAddBar from './QuickAddBar'
 import type { ImportanceLevel } from './TaskV2Shared'
 
 type PlannerBucket = 'inbox' | 'today' | 'next' | 'scheduled' | 'someday' | 'overdue' | 'key' | 'milestone' | 'blocked' | 'unscheduled' | 'high_impact'
@@ -577,29 +578,35 @@ export default function PlannerSection() {
       </div>
 
       {/* Quick Add Task */}
-      <div className="flex gap-2">
-        <input
-          type="text"
-          value={quickAddText}
-          onChange={(e) => setQuickAddText(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && handleQuickAdd()}
-          placeholder={
-            activeBucket === 'today' ? 'تسک جدید برای امروز + Enter...' :
-            activeBucket === 'inbox' ? 'تسک جدید به صندوق ورودی + Enter...' :
-            activeBucket === 'next' ? 'تسک جدید بخش بعدی + Enter...' :
-            'تسک جدید + Enter...'
+      <QuickAddBar
+        placeholder={
+          activeBucket === 'today' ? 'تسک جدید برای امروز + Enter...' :
+          activeBucket === 'inbox' ? 'تسک جدید به صندوق ورودی + Enter...' :
+          activeBucket === 'next' ? 'تسک جدید بخش بعدی + Enter...' :
+          'تسک جدید + Enter...'
+        }
+        context={
+          activeBucket === 'today' ? 'planner_today' :
+          activeBucket === 'inbox' ? 'planner_inbox' :
+          activeBucket === 'next' ? 'planner_next' :
+          activeBucket === 'scheduled' ? 'planner_scheduled' : 'planner_inbox'
+        }
+        onSubmit={async (data) => {
+          try {
+            await quickAddTask(data.title, {
+              project: data.projectId,
+              area: data.areaId,
+              goal: data.goalId,
+              importance: data.importance,
+              context: data.status === 'today' ? 'planner_today' : data.status === 'next' ? 'planner_next' : 'planner_inbox',
+            })
+            fetchBucket(activeBucket)
+          } catch (e) {
+            console.error('quickAdd error:', e)
           }
-          disabled={quickAdding}
-          className="flex-1 min-w-0 px-3 py-2.5 text-xs bg-white dark:bg-[#1C1D17] border border-[#E6DFD3] dark:border-[#3D4133]/50 rounded-xl focus:outline-none focus:border-[#7C8363] font-semibold text-[#2D3025] dark:text-[#E8ECE0] placeholder:text-[#D6CFC3]"
-        />
-        <button
-          onClick={handleQuickAdd}
-          disabled={!quickAddText.trim() || quickAdding}
-          className="px-3 py-2.5 bg-[#7C8363] hover:bg-[#5A5A40] text-white text-[10px] font-bold rounded-xl disabled:opacity-40 transition-all cursor-pointer active:scale-95 shrink-0"
-        >
-          {quickAdding ? '...' : '+ افزودن'}
-        </button>
-      </div>
+        }}
+        loading={false}
+      />
 
       {/* Task List */}
       {loading ? (

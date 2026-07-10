@@ -4556,7 +4556,7 @@ def get_project_detail_with_tasks(project_name):
 # ─── Quick Add Task with Context-Aware Defaults ──────────────
 
 @frappe.whitelist()
-def quick_add_task(title, project=None, area=None, goal=None, importance=None, context=None):
+def quick_add_task(title, project=None, area=None, goal=None, importance=None, context=None, status=None, priority=None, scheduled_date=None, due_date=None):
     """Create a task quickly with context-aware defaults.
     
     Context logic:
@@ -4564,6 +4564,7 @@ def quick_add_task(title, project=None, area=None, goal=None, importance=None, c
     - If area is given but no project: set default status based on area's active projects
     - If importance is not given: infer from project contribution type (mandatory → key)
     - context: optional string like 'planner_today', 'planner_inbox', 'area_board', 'project_detail'
+    - Explicit status/priority/scheduled_date/due_date override context defaults
     """
     _check_auth()
     user = frappe.session.user
@@ -4609,6 +4610,16 @@ def quick_add_task(title, project=None, area=None, goal=None, importance=None, c
         defaults["goal"] = goal
     if importance:
         defaults["importance"] = importance
+    
+    # Explicit overrides take precedence
+    if status:
+        defaults["status"] = status
+    if priority:
+        defaults["priority"] = priority
+    if scheduled_date:
+        defaults["scheduled_date"] = scheduled_date
+    if due_date:
+        defaults["due_date"] = due_date
     
     # Set scheduled_date for today context
     if context and "today" in context:
