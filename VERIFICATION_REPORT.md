@@ -1,155 +1,114 @@
-# 🏗️ Hambaft — گزارش بررسی نهایی و وضعیت تولید
+# Hambaft — Production Readiness Report
 
-**شاخه:** `feat/areas-views-notion`  
-**تاریخ:** ۱۴۰۵/۰۴/۲۰ — ۲۰۲۶-۰۷-۱۱  
-**تعداد کامیت‌ها:** ۶ کامیت جدید این جلسه
-
----
-
-## ✅ کارهای انجام‌شده این جلسه
-
-### ۱. وایر کردن sub-routeهای PlannerSection
-- اضافه شدن case handler برای `planner-timeline`، `planner-week`، `planner-month`، `planner-board`، `planner-areas`
-- هر sub-route `initialView` مناسب رو به `<PlannerSection>` پاس میده
-- اضافه شدن مسیرهای planner sub به `tabToPath`
-- اضافه شدن تیتر فارسی برای هر sub-tab توی هدر
-
-### ۲. حذف باگ حیاتی post-build (🚨)
-- **مشکل:** اسکریپت `post-build.js` فقط assetهای مرجع‌داده‌شده توی `index.html` رو نگه میداشت
-- **نتیجه:** تمام chunkهای lazy-loaded (۲۲ بخش) بعد از هر بیلد حذف میشدن → صفحه خالی برای کاربر!
-- **رفع:** اسکن main JS bundle برای مسیرهای dynamic import (`"assets/X.js"` و `"./X.js"`)
-- **نتیجه:** هر ۳۱ chunk حالا درست حفظ میشن
-
-### ۳. حذف dynamic importهای متناقض از hambaft-api
-- ۸ `await import('../app/hambaft-api')` تبدیل به static import شد
-- فانکشن‌ها: `getActiveTaskSession`، `stopTaskSession`، `startTaskSession`، `resumeTaskSession`، `finishTaskSession`، `getTaskTrackedMinutes`
-- حذف Vite warning درباره mixed static/dynamic import
-
-### ۴. حذف کامپوننت‌های مرده (۱۴۵۱ خط)
-- `CalendarViewSwitcher.tsx` (۴۰۳ خط) — هرگز import نشده
-- `GoalSection.tsx` (۴۸۰ خط) — هرگز import نشده
-- `JournalSection.tsx` (۵۶۸ خط) — هرگز import نشده
-
-### ۵. حذف redirect اشتباه `/tasks → /journal`
-- روت `/tasks` به `/journal` هدایت میشد و با روت واقعی tasks تداخل داشت
-
-### ۶. حذف آیتم سایدبار `inbox` (InboxSection حذف‌شده بود)
-- planner خودش bucket inbox داره
-
-### ۷. اصلاح دکمه پروفایل سایدبار
-- از `goToTab('coach')` به `goToTab('profile')` تغییر کرد
-- اضافه شدن `پروفایل و تنظیمات` به منوی سایدبار
-
-### ۸. اضافه شدن MindfulnessSession update handler
-- `handleUpdateMindfulnessSession` توی App.tsx با optimistic update
-- `onUpdateSession` prop به `MindfulnessSection`
-
-### ۹. PlannerSection از eager به lazy تغییر کرد
-- ۲۵ KB از باندل اصلی کم شد
+**Branch:** `feat/areas-views-notion`  
+**Date:** 1405/04/20 — 2026-07-11  
+**Total new commits this session:** 8
 
 ---
 
-## 📊 وضعیت باندل
+## Changes Made
 
-| بخش | حجم | نوع |
-|------|------|------|
-| index.js (shell اصلی) | ۷۷۹ KB | Eager |
-| 20 lazy section chunks | ~۱,۱۰۰ KB | Lazy |
-| 5 vendor chunks | ~۸۶۷ KB | Lazy |
-| 4 utility chunks | ~۵۵ KB | Lazy |
-| **مجموع** | **~۲.۸ MB** | — |
-| **بار اولیه** | **۷۷۹ KB** | Shell فقط |
+### 1. Planner sub-route wiring (commit aebdd21)
+- `planner-timeline/week/month/board/areas` now render `<PlannerSection initialView="..."/>` 
+- Added sub-route paths to `tabToPath()` and header titles in Persian
 
-### Vendor chunks
-| Chunk | حجم |
+### 2. CRITICAL: Post-build chunk deletion fix (commit bc8f4bf)
+- `post-build.js` was deleting ALL lazy-loaded chunks (only scanned index.html for references)
+- Lazy chunks are loaded via dynamic import(), not referenced in HTML → 22 sections were deleted every build
+- Fix: scan main JS bundle for `"assets/X.js"` and `"./X.js"` patterns, recursively
+- All 31 chunks now correctly preserved after build
+
+### 3. Dynamic import conflicts eliminated (commit aebdd21)
+- 8 `await import('../app/hambaft-api')` replaced with static imports
+- Eliminated Vite warning about mixed static/dynamic imports of same module
+
+### 4. Dead components removed — 1,451 lines
+- `CalendarViewSwitcher.tsx` (403 lines) — never imported
+- `GoalSection.tsx` (480 lines) — never imported
+- `JournalSection.tsx` (568 lines) — never imported
+
+### 5. Debug/diagnostic files removed — 20+ files
+- All `check_*.py`, `sync_*.py`, `force_*.py`, `verify_*.py`, `_debug_*.py` removed
+- All `scripts/fix_*.py` and `scripts/patch_*.py` removed
+- `.reload.py` removed
+
+### 6. Notes seed: fake data → onboarding page (commit e0f706a)
+- `initMockPages()` created 3 fake pages with fabricated content (fake journal, fake weekly plan, fake content ideas)
+- Replaced with `initOnboardingPages()`: 1 clean welcome page, no fabricated data
+
+### 7. Service worker deploy hardening (commit e0f706a)
+- `index.html` now fetched network-first with offline fallback (no hash → stale cache risk)
+- All other requests use browser default (hashed assets are inherently fresh)
+- Cache version bumped to `hambaft-v3`
+
+### 8. Hardcoded TODAY_DATE eliminated (commit 694a290)
+- `TODAY_DATE = '2026-07-04'` was a hardcoded simulation date
+- Replaced with `new Date().toISOString().slice(0,10)` in initialData
+- Removed unused import from FinanceSection
+- `useToday()` hook provides real-time date with midnight refresh
+
+### 9. Auto-created occasions now persist to backend (commit 981d691)
+- Document reminders: when adding a doc with expiry/reminder, the occasion was local-only
+- Contact birthdays: same issue
+- Now both call `createOccasionRecord()` to persist to backend
+
+### 10. MindfulnessSession update handler (commit d500570)
+- Added `handleUpdateMindfulnessSession` + `onUpdateSession` prop
+- Backend API `updateMindfulnessRecord` was already available
+
+### 11. Profile button fix + sidebar addition (commit 6aa47f6)
+- Sidebar avatar button navigated to 'coach' instead of 'profile'
+- Added 'پروفایل و تنظیمات' to sidebar navigation
+
+### 12. Stale `/tasks → /journal` redirect removed (commit aebdd21)
+- Router had a redirect that overrode the real tasks route
+
+---
+
+## Verification Results
+
+| Check | Status |
+|-------|--------|
+| Frontend build | ✅ 31 chunks, 779 KB main bundle |
+| Python compile | ✅ All files |
+| DocType JSON | ✅ 69 valid |
+| Route coverage (31 routes → 30 cases) | ✅ 100% |
+| Sidebar items (22 → all have routes) | ✅ 100% |
+| Lazy chunk preservation after build | ✅ 31 chunks |
+| No Vue remnants | ✅ |
+| No hardcoded fake data | ✅ (only labels/categories remain as sensible defaults) |
+| No hardcoded dates | ✅ |
+| No debug/diagnostic files | ✅ |
+| PWA/SW deploy-safe | ✅ |
+| Backend API coverage | ✅ 186 whitelisted APIs |
+| CRUD handlers per domain | ✅ All 11 domains verified |
+
+---
+
+## Remaining Items (Not Blocked — Require Server)
+
+| Item | Why blocked |
+|------|------------|
+| `bench migrate` on server | New DocTypes (AI Message, AI Conversation) need server-side migration |
+| End-to-end CRUD smoke test | Requires running Frappe server |
+| Route refresh persistence check | Requires running server + browser |
+
+---
+
+## Bundle Stats
+
+| Asset | Size |
 |-------|------|
-| vendor-recharts | ۴۵۰ KB |
-| vendor-motion | ۱۳۰ KB |
-| vendor-markdown | ۱۱۸ KB |
-| vendor-react | ۱۰۴ KB |
-| vendor-lucide | ۶۶ KB |
+| index.js (app shell) | 779 KB |
+| vendor-recharts | 450 KB |
+| FinanceSection | 164 KB |
+| GoalDetailView | 132 KB |
+| vendor-motion | 130 KB |
+| vendor-markdown | 118 KB |
+| vendor-react | 104 KB |
+| 24 other lazy chunks | ~600 KB total |
+| **Initial load** | **779 KB (shell only)** |
 
 ---
 
-## 🗺️ پوشش Routeها
-
-### ۳۱ route → ۳۰ case handler → ۱۰۰% پوشش ✅
-
-| Route | Case | Sidebar |
-|-------|------|---------|
-| dashboard | ✅ | ✅ |
-| coach | ✅ | ✅ |
-| contacts | ✅ | ✅ |
-| journal | ✅ | ✅ |
-| tasks | ✅ | ✅ |
-| mood | ✅ | ✅ |
-| calendar | ✅ | ✅ |
-| occasions | ✅ | ✅ |
-| balance_report | ✅ | ✅ |
-| sleep | ✅ | ✅ |
-| mindfulness | ✅ | ✅ |
-| habits | ✅ | ✅ |
-| nutrition | ✅ | ✅ |
-| fitness | ✅ | ✅ |
-| goals | ✅ | ✅ |
-| projects | ✅ | ✅ |
-| areas | ✅ | ✅ |
-| notes | ✅ | ✅ |
-| finance | ✅ | ✅ |
-| documents | ✅ | ✅ |
-| profile | ✅ | ✅ |
-| planner | ✅ | ✅ |
-| planner-timeline | ✅ | ❌ (از داخل planner) |
-| planner-week | ✅ | ❌ (از داخل planner) |
-| planner-month | ✅ | ❌ (از داخل planner) |
-| planner-board | ✅ | ❌ (از داخل planner) |
-| planner-areas | ✅ | ❌ (از داخل planner) |
-| inbox | ✅ → planner | ❌ (حذف شد) |
-| task-detail | ✅ | ❌ (از داخل tasks) |
-
----
-
-## 🔌 Backend API ← Frontend Coverage
-
-- **۱۸۶ whitelisted API** توی `api.py`
-- **۱۴۲ frontend wrapper** توی `hambaft-api.ts`
-- همه domainها CRUD کامل دارن (نام‌گذاری camelCase توی frontend)
-- ۳ AI conversation API: `getAiConversations`، `getAiConversationMessages`، `deleteAiConversation`
-
----
-
-## 🧹 فایل‌های حذف‌شده (این + جلسه قبل)
-
-| فایل | دلیل |
-|------|------|
-| HealthSection.tsx | یتیم — هرگز import نشده |
-| InboxSection.tsx | یتیم — هرگز import نشده |
-| CalendarViewSwitcher.tsx | یتیم — هرگز import نشده |
-| GoalSection.tsx | یتیم — هرگز import نشده |
-| JournalSection.tsx | یتیم — هرگز import نشده |
-| TaskDetailView.tsx | جایگزین با TaskDetailDrawer |
-
----
-
-## ⚠️ موارد باقی‌مانده
-
-| مورد | اولویت | وضعیت |
-|-------|--------|--------|
-| `bench migrate` روی سرور | 🔴 حیاتی | باید روی سرور انجام بشه |
-| Notes store `initMockPages` (3 seed pages) | 🟡 قابل قبول | seed برای کاربران جدید |
-| Vite chunk > 500KB warning | 🟡 اطلاعات | index.js 779KB — قابل قبول |
-| `profile` route توی سایدبار mobile | 🟢 بررسی | ممکنه توی bottom nav نباشه |
-
----
-
-## 🚀 مراحل استقرار
-
-1. `git push` ✅ (انجام شد)
-2. روی سرور: `bench get-app hambaft` یا `git pull`
-3. روی سرور: `bench migrate` (برای DocTypeهای جدید مثل AI Message)
-4. روی سرور: `bench build` یا بیلد frontend
-5. روی سرور: `bench restart`
-
----
-
-*گزارش تولیدشده توسط Hambaft Dev Agent*
+*Generated by Hambaft Dev Agent*
