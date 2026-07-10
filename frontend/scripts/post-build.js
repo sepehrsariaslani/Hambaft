@@ -46,6 +46,38 @@ if (existsSync(assetsDir)) {
     referencedAssets.add(match[1])
   }
 
+  // Also scan the main JS bundle for dynamic import references (lazy-loaded chunks)
+  // Vite emits dynamic import paths in two formats:
+  //   "assets/SectionName.HASH.js"  or  "./SectionName.HASH.js"
+  // These are relative to the chunk's location, so Frappe resolves them as
+  // /assets/hambaft/assets/SectionName.HASH.js at runtime.
+  const jsFilesToScan = [...referencedAssets].filter(r => r.endsWith('.js'))
+  let passNewRefs = true
+  while (passNewRefs) {
+    passNewRefs = false
+    for (const ref of [...jsFilesToScan]) {
+      try {
+        const jsPath = resolve(assetsDir, ref)
+        if (!existsSync(jsPath)) continue
+        const jsContent = readFileSync(jsPath, 'utf-8')
+        // Match dynamic import paths: "assets/X.js" or "./X.js" or "/assets/hambaft/assets/X.js"
+        const jsAssetRegex = /["'](?:\.\/|assets\/|\/assets\/hambaft\/assets\/)([^"']+\.(js|css))["']/g
+        let jsMatch
+        while ((jsMatch = jsAssetRegex.exec(jsContent)) !== null) {
+          const assetName = jsMatch[1].replace(/^assets\//, '')
+          if (!referencedAssets.has(assetName)) {
+            referencedAssets.add(assetName)
+            // If this is a JS file we haven't scanned yet, add it for next pass
+            if (assetName.endsWith('.js') && !jsFilesToScan.includes(assetName)) {
+              jsFilesToScan.push(assetName)
+              passNewRefs = true
+            }
+          }
+        }
+      } catch (e) { /* ignore */ }
+    }
+  }
+
   // Also check CSS for url() references
   for (const ref of referencedAssets) {
     if (ref.endsWith('.css')) {
