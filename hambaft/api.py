@@ -3712,7 +3712,7 @@ def get_area_tracked_minutes(area_name):
 
 @frappe.whitelist()
 def get_tasks_by_project(limit=100):
-    """Get all tasks grouped by project for board view."""
+    """Get all tasks grouped by project for board view, enriched with impact data."""
     _check_auth()
     tasks = frappe.get_all(
         "Task",
@@ -3721,17 +3721,19 @@ def get_tasks_by_project(limit=100):
         limit_page_length=cint(limit),
         order_by="project asc, priority asc",
     )
+    # Enrich with impact data
+    enriched = [_enrich_task_with_impact(dict(t)) for t in tasks]
     # Group by project
     by_project = {}
-    for t in tasks:
-        key = t.project or "no_project"
+    for t in enriched:
+        key = t.get("project") or "no_project"
         by_project.setdefault(key, []).append(t)
     return _api_response({"by_project": by_project})
 
 
 @frappe.whitelist()
 def get_tasks_grouped_by_status(limit=200):
-    """Get all tasks grouped by status for board view."""
+    """Get all tasks grouped by status for board view, enriched with impact data."""
     _check_auth()
     tasks = frappe.get_all(
         "Task",
@@ -3740,10 +3742,12 @@ def get_tasks_grouped_by_status(limit=200):
         limit_page_length=cint(limit),
         order_by="status asc, priority asc, scheduled_date asc",
     )
+    # Enrich with impact data
+    enriched = [_enrich_task_with_impact(dict(t)) for t in tasks]
     status_groups = {}
     status_order = ["inbox", "not_started", "next", "today", "in_progress", "on_hold", "someday", "done"]
     for status in status_order:
-        group = [t for t in tasks if t.status == status]
+        group = [t for t in enriched if t.get("status") == status]
         if group:
             status_groups[status] = group
     return _api_response({"status_groups": status_groups})
@@ -4495,3 +4499,77 @@ def get_project_detail_with_tasks(project_name):
             "raw_progress": doc.progress or 0,
         },
     })
+
+
+# ─── Quick Add Task with Context-Aware Defaults ──────────────
+
+@frappe.whitelist()
+def quick_add_task(title, project=None, area=None, goal=None, importance=None, context=None):
+    """Create a task quickly with context-aware defaults.
+    
+    Context logic:
+    - If project is given: auto-set area from project, auto-set goal from project's linked goal
+    - If area is given but no project: set default status based on area's active projects
+    - If importance is not given: infer from project contribution type (mandatory → key)
+    - context: optional string like 'planner_today', 'planner_inbox', 'area_board', 'project_detail'
+    """
+    _check_auth()
+    user = frappe.session.user
+    
+    defaults = {
+        "title": title,
+        "user": user,
+        "status": "inbox",
+        "priority": "متوسط",
+    }
+    
+    # Context-based defaults
+    if context == "planner_today":
+        defaults["status"] = "today"
+        defaults["is_daily_highlight"] = 1
+    elif context == "planner_next":
+        defaults["status"] = "next"
+    elif context == "planner_scheduled":
+        defaults["status"] = "not_started"
+    
+    # Project context: inherit area and goal
+    if project:
+        defaults["project"] = project
+        proj_doc = frappe.get_doc("Hambaft Project", project)
+        if not area and proj_doc.area:
+            defaults["area"] = proj_doc.area
+        if not goal and proj_doc.goal:
+            defaults["goal"] = proj_doc.goal
+        # Infer importance from project's contribution type to its goal
+        if not importance:
+            links = frappe.get_all(
+                "Goal Project Link",
+                filters={"project": project, "parenttype": "Goal"},
+                fields=["contribution_type"],
+                limit=1,
+            )
+            if links and links[0].contribution_type == "اجباری":
+                importance = "کلیدی"
+    
+    if area:
+        defaults["area"] = area
+    if goal:
+        defaults["goal"] = goal
+    if importance:
+        defaults["importance"] = importance
+    
+    # Set scheduled_date for today context
+    if context and "today" in context:
+        defaults["scheduled_date"] = frappe.utils.today()
+    
+    data = _inject_note_blocks(defaults)
+    doc = frappe.new_doc("Task")
+    doc.update(data)
+    doc.user = user
+    doc.insert()
+    frappe.db.commit()
+    
+    result = doc.as_dict()
+    result["noteBlocks"] = _extract_note_blocks(doc)
+    enriched = _enrich_task_with_impact(dict(result))
+    return _api_response({"task": enriched})

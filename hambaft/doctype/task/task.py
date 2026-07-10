@@ -53,6 +53,8 @@ class Task(Document):
         self._sync_blocking_refs()
         # Update parent task status if all children are done
         self._check_parent_completion()
+        # Recompute parent project progress when task status changes
+        self._recompute_parent_project_progress()
         frappe.clear_document_cache(self.doctype, self.name)
 
     def _sync_blocking_refs(self):
@@ -103,6 +105,25 @@ class Task(Document):
         )
         # If no open siblings remain, parent could be auto-completed
         # (We don't auto-complete, but we could trigger a notification)
+
+    def _recompute_parent_project_progress(self):
+        """Recompute progress of the parent project when a task changes.
+        Uses the quality-aware compute_progress method on HambaftProject.
+        """
+        if not self.project:
+            return
+        try:
+            project = frappe.get_doc("Hambaft Project", self.project)
+            new_progress = project.compute_progress()
+            if new_progress != (project.progress or 0):
+                frappe.db.set_value(
+                    "Hambaft Project", self.project,
+                    "progress", new_progress,
+                    update_modified=False,
+                )
+        except Exception:
+            # Non-critical: don't fail the task save if project recomputation fails
+            pass
 
     def get_subtasks(self):
         return frappe.get_all(

@@ -4,6 +4,9 @@ import ViewSwitcher, { type ViewMode } from './ViewSwitcher'
 import { ImportanceBadge, ImportanceSelector, BlockedTaskIndicator, TaskImpactBanner, ImpactScoreBadge, sortTasksByImpact } from './TaskV2Shared'
 import type { ImportanceLevel } from './TaskV2Shared'
 import { updateTaskImportance } from '../../app/hambaft-api'
+import { ColumnConfigurator } from './ColumnConfigurator'
+import { DensityToggle } from './DensityToggle'
+import { type ViewConfig, type DensityMode, type ColumnId, DENSITY_CONFIG, isColumnVisible, getOrInitViewConfig, setViewConfig } from './ViewConfigStore'
 
 const TaskTableView = lazy(() => import('./TaskTableView'))
 const TaskKanbanView = lazy(() => import('./TaskKanbanView'))
@@ -77,6 +80,17 @@ export default function TaskManagerSection({
   const [kanbanGroup, setKanbanGroup] = useState<KanbanGroup>('status')
   const [newTaskTitle, setNewTaskTitle] = useState('')
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set())
+
+  // Notion-like view config (columns, density, saved views)
+  const [viewConfig, setViewConfig] = useState<ViewConfig>(() =>
+    getOrInitViewConfig('task-manager', 'مدیریت تسک')
+  )
+  const density = viewConfig.density
+  const dCfg = DENSITY_CONFIG[density]
+  const handleViewConfigChange = (cfg: ViewConfig) => {
+    setViewConfig(cfg)
+    setViewConfig('task-manager', cfg)
+  }
 
   const allTasks = useMemo(() => collectAllTasks(tasks, goals), [tasks, goals])
 
@@ -196,8 +210,8 @@ export default function TaskManagerSection({
         <StatCard label="مسدود" value={stats.blocked} color="bg-red-600 text-white" />
       </div>
 
-      {/* Add Task */}
-      <div className="flex gap-3">
+      {/* Add Task + View Controls */}
+      <div className="flex gap-3 items-center">
         <input
           type="text"
           value={newTaskTitle}
@@ -212,6 +226,8 @@ export default function TaskManagerSection({
         >
           + افزودن
         </button>
+        <DensityToggle density={density} onChange={(d) => handleViewConfigChange({ ...viewConfig, density: d })} />
+        <ColumnConfigurator config={viewConfig} onConfigChange={handleViewConfigChange} />
       </div>
 
       {/* Filters & Controls */}
@@ -331,6 +347,8 @@ export default function TaskManagerSection({
                     onDelete={() => onDeleteTask(task.id)}
                     onView={() => onViewTaskDetails?.(task.id)}
                     todayDate={todayDate}
+                    viewConfig={viewConfig}
+                    dCfg={dCfg}
                   />
                 ))}
                 {groupTasks.length === 0 && (
@@ -439,6 +457,8 @@ function TaskRow({
   onDelete,
   onView,
   todayDate,
+  viewConfig,
+  dCfg,
 }: {
   task: Task & { sourceGoal?: string; sourceProject?: string }
   selected: boolean
@@ -447,13 +467,15 @@ function TaskRow({
   onDelete: () => void
   onView?: () => void
   todayDate: string
+  viewConfig: ViewConfig
+  dCfg: typeof DENSITY_CONFIG.comfortable
 }) {
   const isOverdue = !task.completed && task.dueDate && task.dueDate < todayDate
   const hasBlockers = (task.blockedBy || []).length > 0
 
   return (
     <div
-      className={`group flex items-start gap-3 rounded-xl border px-4 py-3 transition-all hover:shadow-sm ${
+      className={`group flex items-start ${dCfg.gap} rounded-xl border ${dCfg.rowPadding} transition-all hover:shadow-sm ${
         task.completed
           ? 'border-[#E6DFD3] bg-[#f9f7f2] opacity-60'
           : isOverdue
@@ -463,7 +485,7 @@ function TaskRow({
               : 'border-[#E6DFD3] bg-white hover:border-[#7C8363]/40'
       }`}
     >
-      <div className="flex items-center gap-3 pt-0.5">
+      <div className={`flex items-center ${dCfg.gap} pt-0.5`}>
         <input
           type="checkbox"
           checked={selected}
@@ -485,50 +507,56 @@ function TaskRow({
       </div>
 
       <div className="flex-1 min-w-0 space-y-1.5">
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className={`flex items-center ${dCfg.gap} flex-wrap`}>
           <span
             onClick={onView}
-            className={`text-sm font-bold cursor-pointer ${task.completed ? 'line-through text-[#9D978B]' : 'text-[#2d3025] hover:text-[#7C8363]'}`}
+            className={`${dCfg.textSize} font-bold cursor-pointer ${task.completed ? 'line-through text-[#9D978B]' : 'text-[#2d3025] hover:text-[#7C8363]'}`}
           >
             {task.title}
           </span>
-          {task.importance && task.importance !== 'normal' && (
+          {isColumnVisible(viewConfig, 'importance') && task.importance && task.importance !== 'normal' && (
             <ImportanceBadge importance={task.importance} size="xs" />
           )}
-          {task.impactScore != null && task.impactScore >= 30 && !task.completed && (
+          {isColumnVisible(viewConfig, 'impactScore') && task.impactScore != null && task.impactScore >= 30 && !task.completed && (
             <ImpactScoreBadge score={task.impactScore} />
           )}
-          {task.isDailyHighlight && (
-            <span className="text-[10px] font-bold bg-[#d4a017]/15 text-[#b8860b] px-1.5 py-0.5 rounded">⭐ برجسته</span>
+          {isColumnVisible(viewConfig, 'isDailyHighlight') && task.isDailyHighlight && (
+            <span className={`${dCfg.badgeSize} font-bold bg-[#d4a017]/15 text-[#b8860b] rounded`}>⭐ برجسته</span>
           )}
-          {isOverdue && (
-            <span className="text-[10px] font-bold bg-[#c44a3d]/15 text-[#c44a3d] px-1.5 py-0.5 rounded">تاریخ گذشته</span>
+          {isColumnVisible(viewConfig, 'dueDate') && isOverdue && (
+            <span className={`${dCfg.badgeSize} font-bold bg-[#c44a3d]/15 text-[#c44a3d] rounded`}>تاریخ گذشته</span>
           )}
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          {task.status && (
-            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#f3ebdf] text-[#8D7F72]`}>
+        <div className={`flex items-center ${dCfg.gap} flex-wrap`}>
+          {isColumnVisible(viewConfig, 'status') && task.status && (
+            <span className={`${dCfg.badgeSize} font-bold rounded bg-[#f3ebdf] text-[#8D7F72]`}>
               {statusLabelsMap[task.status] || task.status}
             </span>
           )}
-          {task.priority && (
-            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${priorityColors[task.priority] || priorityColors.low}`}>
+          {isColumnVisible(viewConfig, 'priority') && task.priority && (
+            <span className={`${dCfg.badgeSize} font-bold rounded border ${priorityColors[task.priority] || priorityColors.low}`}>
               {priorityLabels[task.priority] || 'متوسط'}
             </span>
           )}
-          {task.category && (
-            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${categoryColors[task.category] || categoryColors.other}`}>
+          {isColumnVisible(viewConfig, 'category') && task.category && (
+            <span className={`${dCfg.badgeSize} font-bold rounded border ${categoryColors[task.category] || categoryColors.other}`}>
               {categoryLabels[task.category] || 'سایر'}
             </span>
           )}
-          {task.dueDate && (
-            <span className="text-[10px] font-bold text-[#8D7F72]">📅 {task.dueDate}</span>
+          {isColumnVisible(viewConfig, 'dueDate') && task.dueDate && (
+            <span className={`${dCfg.badgeSize} font-bold text-[#8D7F72]`}>📅 {task.dueDate}</span>
           )}
-          {task.sourceProject && (
-            <span className="text-[10px] font-bold text-[#5a6b8a]">📁 {task.sourceProject}</span>
+          {isColumnVisible(viewConfig, 'project') && task.sourceProject && (
+            <span className={`${dCfg.badgeSize} font-bold text-[#5a6b8a]`}>📁 {task.sourceProject}</span>
           )}
-          {task.sourceGoal && !task.sourceProject && (
-            <span className="text-[10px] font-bold text-[#6b5a8a]">🎯 {task.sourceGoal}</span>
+          {isColumnVisible(viewConfig, 'goal') && task.sourceGoal && !task.sourceProject && (
+            <span className={`${dCfg.badgeSize} font-bold text-[#6b5a8a]`}>🎯 {task.sourceGoal}</span>
+          )}
+          {isColumnVisible(viewConfig, 'estimatedMinutes') && task.estimatedMinutes && (
+            <span className={`${dCfg.badgeSize} font-bold text-indigo-600`}>⏱ {task.estimatedMinutes} دقیقه</span>
+          )}
+          {isColumnVisible(viewConfig, 'effortType') && task.effortType && (
+            <span className={`${dCfg.badgeSize} font-bold text-[#8D7F72]`}>{task.effortType === 'fixed' ? 'ثابت' : 'متغیر'}</span>
           )}
         </div>
         {/* Blocked indicator */}

@@ -2,17 +2,17 @@ import React, { useState } from 'react';
 import { Task, SubTask } from '../types';
 import PersianDatePicker from './PersianDatePicker';
 import EntityNoteEditor from '../../notes/components/EntityNoteEditor';
-import { 
-  ArrowRight, 
-  CheckCircle, 
-  Trash2, 
-  Plus, 
-  Calendar, 
-  Clock, 
-  AlertTriangle, 
-  Tag, 
-  CheckSquare, 
-  Circle, 
+import {
+  ArrowRight,
+  CheckCircle,
+  Trash2,
+  Plus,
+  Calendar,
+  Clock,
+  AlertTriangle,
+  Tag,
+  CheckSquare,
+  Circle,
   Sparkles,
   Pin,
   Layers,
@@ -21,10 +21,15 @@ import {
   Pause,
   Square,
   RotateCcw,
-  FolderKanban
+  FolderKanban,
+  Target,
+  Zap,
+  ArrowUpRight,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { toPersianDigits, formatTimeDigital, formatTimeHuman } from '../App';
+import { ImportanceBadge, ImportanceSelector, ImpactScoreBadge, TaskImpactBanner, TaskImpactExplanation, BlockedTaskIndicator } from './TaskV2Shared';
+import type { ImportanceLevel } from './TaskV2Shared';
 
 interface TaskDetailViewProps {
   task: Task;
@@ -501,6 +506,99 @@ export default function TaskDetailView({
             </button>
           </div>
         </div>
+
+        {/* ── IMPACT & CONTEXT PANEL (Notion-like property section) ── */}
+        {(task.impactScore != null || task.impactGoalTitle || task.impactProjectTitle || task.importance) && (
+          <div className="bg-[#FDFBF7] p-4 rounded-3xl border border-[#E6DFD3] space-y-3 shadow-xs">
+            <div className="flex items-center gap-2">
+              <Zap className="w-4 h-4 text-amber-600" />
+              <h4 className="text-xs font-black text-[#2D3025]">تأثیر و زمینه</h4>
+            </div>
+
+            {/* Impact Score */}
+            {task.impactScore != null && (
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-[#8D7F72]">امتیاز تأثیر</span>
+                <ImpactScoreBadge score={task.impactScore} />
+              </div>
+            )}
+
+            {/* Importance inline edit */}
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold text-[#8D7F72]">اهمیت</span>
+              <ImportanceSelector
+                value={task.importance || 'normal'}
+                onChange={(imp) => onUpdateTask({ ...task, importance: imp })}
+                compact
+              />
+            </div>
+
+            {/* Goal Relation Chip */}
+            {task.impactGoalTitle && (
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-[#8D7F72]">هدف مرتبط</span>
+                <div className="flex items-center gap-1.5 bg-purple-50 border border-purple-200 rounded-lg px-2.5 py-1">
+                  <Target className="w-3 h-3 text-purple-600" />
+                  <span className="text-[10px] font-bold text-purple-700">{task.impactGoalTitle}</span>
+                  {task.impactGoalProgress != null && (
+                    <span className="text-[9px] text-purple-500">({Math.round(task.impactGoalProgress)}%)</span>
+                  )}
+                  {task.impactGoalHealth && (
+                    <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-full ${
+                      task.impactGoalHealth === 'off_track' || task.impactGoalHealth === 'خارج_از_مسیر' ? 'bg-red-100 text-red-700' :
+                      task.impactGoalHealth === 'at_risk' || task.impactGoalHealth === 'در_خطر' ? 'bg-amber-100 text-amber-700' :
+                      'bg-emerald-100 text-emerald-700'
+                    }`}>
+                      {task.impactGoalHealth === 'off_track' || task.impactGoalHealth === 'خارج_از_مسیر' ? 'خارج از مسیر' :
+                       task.impactGoalHealth === 'at_risk' || task.impactGoalHealth === 'در_خطر' ? 'در خطر' :
+                       task.impactGoalHealth === 'needs_review' || task.impactGoalHealth === 'نیاز_به_بررسی' ? 'نیاز به بررسی' :
+                       'در مسیر'}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Project Relation Chip */}
+            {task.impactProjectTitle && (
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-[#8D7F72]">پروژه مرتبط</span>
+                <div className="flex items-center gap-1.5 bg-blue-50 border border-blue-200 rounded-lg px-2.5 py-1">
+                  <FolderKanban className="w-3 h-3 text-blue-600" />
+                  <span className="text-[10px] font-bold text-blue-700">{task.impactProjectTitle}</span>
+                  {task.impactProjectProgress != null && (
+                    <span className="text-[9px] text-blue-500">({Math.round(task.impactProjectProgress)}%)</span>
+                  )}
+                  {task.impactProjectContributionType && (
+                    <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-full ${
+                      task.impactProjectContributionType === 'اجباری' || task.impactProjectContributionType === 'mandatory' ? 'bg-red-100 text-red-700' :
+                      task.impactProjectContributionType === 'پیشنهادی' || task.impactProjectContributionType === 'recommended' ? 'bg-blue-100 text-blue-700' :
+                      'bg-gray-100 text-gray-600'
+                    }`}>
+                      {task.impactProjectContributionType === 'mandatory' ? 'اجباری' :
+                       task.impactProjectContributionType === 'recommended' ? 'پیشنهادی' :
+                       task.impactProjectContributionType === 'supporting' ? 'پشتیبان' :
+                       task.impactProjectContributionType}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Impact explanation */}
+            <TaskImpactExplanation task={task} />
+
+            {/* Blocked indicator */}
+            {(task.blockedBy || []).length > 0 && !task.completed && (
+              <BlockedTaskIndicator task={task} />
+            )}
+
+            {/* Impact banner full context */}
+            {(task.impactGoalTitle || task.impactProjectTitle) && !task.completed && (
+              <TaskImpactBanner task={task} />
+            )}
+          </div>
+        )}
 
         {/* TASK DEPENDENCIES (وابستگی کارها) */}
         <div className="bg-[#FDFBF7] p-4 rounded-3xl border border-[#E6DFD3] space-y-3 shadow-xs">

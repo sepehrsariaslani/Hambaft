@@ -49,6 +49,10 @@ import {
 } from '../../app/hambaft-api'
 import { ImportanceBadge, ImportanceSelector, BlockedTaskIndicator, TaskImpactBanner, ImpactScoreBadge, TaskImpactExplanation } from './TaskV2Shared'
 import type { ImportanceLevel } from './TaskV2Shared'
+import { ColumnConfigurator } from './ColumnConfigurator'
+import { DensityToggle } from './DensityToggle'
+import { type ViewConfig, type DensityMode, type ColumnId, DENSITY_CONFIG, isColumnVisible, getOrInitViewConfig, setViewConfig } from './ViewConfigStore'
+import type { ImportanceLevel } from './TaskV2Shared'
 
 type PlannerBucket = 'inbox' | 'today' | 'next' | 'scheduled' | 'someday' | 'overdue' | 'key' | 'milestone' | 'blocked' | 'unscheduled' | 'high_impact'
 type PlannerView = 'buckets' | 'timeline' | 'week' | 'month' | 'board' | 'areas'
@@ -123,6 +127,17 @@ export default function PlannerSection() {
   const [activeSession, setActiveSession] = useState<TaskSession | null>(null)
   const [sessionTaskTitle, setSessionTaskTitle] = useState('')
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null)
+
+  // Notion-like view config (columns, density, saved views)
+  const [viewConfig, setViewConfig] = useState<ViewConfig>(() =>
+    getOrInitViewConfig('planner-buckets', 'برنامه‌ریز')
+  )
+  const density = viewConfig.density
+  const dCfg = DENSITY_CONFIG[density]
+  const handleViewConfigChange = (cfg: ViewConfig) => {
+    setViewConfig(cfg)
+    setViewConfig('planner-buckets', cfg)
+  }
 
   // Timeline view state
   const [timelineDate, setTimelineDate] = useState(() => new Date().toISOString().slice(0, 10))
@@ -359,7 +374,7 @@ export default function PlannerSection() {
       exit={{ opacity: 0, x: 30 }}
       className="bg-white dark:bg-[#1C1D17] rounded-2xl border border-[#E6DFD3] dark:border-[#3D4133]/50 overflow-hidden"
     >
-      <div className={`p-3 flex items-center gap-3 ${compact ? 'py-2 px-3' : ''}`}>
+      <div className={`${dCfg.rowPadding} flex items-center ${dCfg.gap} ${compact ? 'py-2 px-3' : ''}`}>
         <button
           onClick={() => handleMove(task.id, task.status === 'done' ? 'inbox' : 'done')}
           className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
@@ -372,42 +387,50 @@ export default function PlannerSection() {
         </button>
 
         <div className="flex-1 min-w-0" onClick={() => toggleExpand(task.id)}>
-          <div className={`text-xs font-bold truncate flex items-center gap-1.5 ${task.status === 'done' ? 'line-through text-gray-400' : 'text-[#2D3025] dark:text-[#E8ECE0]'}`}>
+          <div className={`${dCfg.textSize} font-bold truncate flex items-center ${dCfg.gap} ${task.status === 'done' ? 'line-through text-gray-400' : 'text-[#2D3025] dark:text-[#E8ECE0]'}`}>
             <span>{task.title}</span>
-            {task.importance && task.importance !== 'normal' && (
+            {isColumnVisible(viewConfig, 'importance') && task.importance && task.importance !== 'normal' && (
               <ImportanceBadge importance={task.importance} size="xs" />
             )}
-            {task.impactScore != null && task.impactScore >= 30 && task.status !== 'done' && (
+            {isColumnVisible(viewConfig, 'impactScore') && task.impactScore != null && task.impactScore >= 30 && task.status !== 'done' && (
               <ImpactScoreBadge score={task.impactScore} />
             )}
           </div>
           {!compact && (
-            <div className="flex items-center gap-2 mt-1 flex-wrap">
-              <span className={`text-[8px] px-1.5 py-0.5 rounded-md border font-bold ${STATUS_COLORS[task.status || 'inbox']}`}>
-                {STATUS_LABELS[task.status || 'inbox']}
-              </span>
-              {task.priority && (
-                <span className={`text-[8px] px-1.5 py-0.5 rounded ${PRIORITY_COLORS[task.priority] || PRIORITY_COLORS.medium}`}>
+            <div className={`flex items-center ${dCfg.gap} mt-1 flex-wrap`}>
+              {isColumnVisible(viewConfig, 'status') && (
+                <span className={`${dCfg.badgeSize} rounded-md border font-bold ${STATUS_COLORS[task.status || 'inbox']}`}>
+                  {STATUS_LABELS[task.status || 'inbox']}
+                </span>
+              )}
+              {isColumnVisible(viewConfig, 'priority') && task.priority && (
+                <span className={`${dCfg.badgeSize} rounded ${PRIORITY_COLORS[task.priority] || PRIORITY_COLORS.medium}`}>
                   {PRIORITY_LABELS[task.priority] || task.priority}
                 </span>
               )}
-              {task.scheduledDate && (
-                <span className="text-[8px] text-[#8D7F72] flex items-center gap-0.5">
+              {isColumnVisible(viewConfig, 'scheduledDate') && task.scheduledDate && (
+                <span className={`${dCfg.badgeSize} text-[#8D7F72] flex items-center gap-0.5`}>
                   <CalendarDays className="w-2.5 h-2.5" />
                   {task.scheduledDate}
                 </span>
               )}
-              {task.actualMinutes ? (
-                <span className="text-[8px] text-indigo-600 flex items-center gap-0.5">
+              {isColumnVisible(viewConfig, 'actualMinutes') && task.actualMinutes ? (
+                <span className={`${dCfg.badgeSize} text-indigo-600 flex items-center gap-0.5`}>
                   <Clock className="w-2.5 h-2.5" />
                   {formatMinutes(task.actualMinutes)}
                 </span>
               ) : null}
-              {task.blockedBy && task.blockedBy.length > 0 && (
-                <span className="text-[8px] text-amber-600 flex items-center gap-0.5">
+              {isColumnVisible(viewConfig, 'blockedBy') && task.blockedBy && task.blockedBy.length > 0 && (
+                <span className={`${dCfg.badgeSize} text-amber-600 flex items-center gap-0.5`}>
                   <AlertCircle className="w-2.5 h-2.5" />
                   {task.blockedBy.length} پیش‌نیاز
                 </span>
+              )}
+              {isColumnVisible(viewConfig, 'project') && task.projectId && (
+                <span className={`${dCfg.badgeSize} text-[#5a6b8a]`}>📁</span>
+              )}
+              {isColumnVisible(viewConfig, 'isDailyHighlight') && task.isDailyHighlight && (
+                <span className={`${dCfg.badgeSize} bg-[#d4a017]/15 text-[#b8860b]`}>⭐ برجسته</span>
               )}
             </div>
           )}
@@ -822,15 +845,25 @@ export default function PlannerSection() {
           <div className="flex gap-3 overflow-x-auto pb-2">
             {statusOrder.map(status => {
               const group = (boardData[status] || []).map(mapBackendTask)
+              const milestoneCount = group.filter(t => t.importance === 'milestone').length
+              const keyCount = group.filter(t => t.importance === 'key').length
               return (
                 <div
                   key={status}
                   className="min-w-[220px] max-w-[280px] flex-1 bg-[#F9F6EE] dark:bg-[#1B1D16] rounded-2xl p-3 space-y-2 border border-[#E6DFD3]/50 dark:border-[#3D4133]/30"
                 >
                   <div className="flex items-center justify-between mb-2">
-                    <span className={`text-[10px] font-black px-2 py-1 rounded-lg border ${STATUS_COLORS[status]}`}>
-                      {STATUS_LABELS[status]}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className={`text-[10px] font-black px-2 py-1 rounded-lg border ${STATUS_COLORS[status]}`}>
+                        {STATUS_LABELS[status]}
+                      </span>
+                      {milestoneCount > 0 && (
+                        <span className="text-[9px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">◆ {milestoneCount}</span>
+                      )}
+                      {keyCount > 0 && (
+                        <span className="text-[9px] font-bold bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full">★ {keyCount}</span>
+                      )}
+                    </div>
                     <span className="text-[9px] font-bold text-[#8D7F72]">{group.length}</span>
                   </div>
                   <div className="space-y-2">
@@ -904,15 +937,19 @@ export default function PlannerSection() {
           <Layers className="w-4 h-4 text-[#7C8363]" />
           <span>برنامه‌ریز شخصی</span>
         </h2>
-        {activeSession && (
-          <div className="flex items-center gap-2 bg-indigo-50 dark:bg-indigo-950/20 border border-indigo-200 dark:border-indigo-800 px-3 py-1.5 rounded-xl">
-            <Timer className="w-3.5 h-3.5 text-indigo-600 animate-pulse" />
-            <span className="text-[10px] font-bold text-indigo-700">{sessionTaskTitle || 'جلسه فعال'}</span>
-            <button onClick={handleStopSession} className="p-1 bg-indigo-600 text-white rounded">
-              <Pause className="w-3 h-3" />
-            </button>
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          <DensityToggle density={density} onChange={(d) => handleViewConfigChange({ ...viewConfig, density: d })} />
+          <ColumnConfigurator config={viewConfig} onConfigChange={handleViewConfigChange} />
+          {activeSession && (
+            <div className="flex items-center gap-2 bg-indigo-50 dark:bg-indigo-950/20 border border-indigo-200 dark:border-indigo-800 px-3 py-1.5 rounded-xl">
+              <Timer className="w-3.5 h-3.5 text-indigo-600 animate-pulse" />
+              <span className="text-[10px] font-bold text-indigo-700">{sessionTaskTitle || 'جلسه فعال'}</span>
+              <button onClick={handleStopSession} className="p-1 bg-indigo-600 text-white rounded">
+                <Pause className="w-3 h-3" />
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* View Tabs */}

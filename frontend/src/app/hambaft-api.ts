@@ -1319,3 +1319,25 @@ export async function getAreaBoard(areaName: string) {
 export async function getProjectDetailWithTasks(projectName: string) {
   return callGet<{ data?: any }>(`hambaft.hambaft.api.get_project_detail_with_tasks?project_name=${encodeURIComponent(projectName)}`)
 }
+
+// ─── Quick Add Task with Context-Aware Defaults ──────────────
+
+export async function quickAddTask(
+  title: string,
+  options?: {
+    project?: string
+    area?: string
+    goal?: string
+    importance?: 'normal' | 'key' | 'milestone'
+    context?: 'planner_today' | 'planner_inbox' | 'planner_next' | 'planner_scheduled' | 'area_board' | 'project_detail'
+  }
+) {
+  const importanceMap: Record<string, string> = { normal: 'عادی', key: 'کلیدی', milestone: 'نقطه‌عطف' }
+  const params: Record<string, string> = { title }
+  if (options?.project) params.project = options.project
+  if (options?.area) params.area = options.area
+  if (options?.goal) params.goal = options.goal
+  if (options?.importance) params.importance = importanceMap[options.importance]
+  if (options?.context) params.context = options.context
+  return call<{ data?: { task?: any } }>('hambaft.hambaft.api.quick_add_task', params)
+}
