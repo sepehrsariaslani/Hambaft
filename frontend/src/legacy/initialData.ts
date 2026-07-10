@@ -14,9 +14,10 @@ export const DEFAULT_CATEGORIES: CategoryDef[] = [
   { id: 'other', name: 'سایر موارد', type: 'expense', subcategories: ['بانک و کارمزد', 'خیریه', 'سایر موارد'], color: '#DDE2D5', icon: '✨' }
 ];
 
-// The current date in our simulation is 2026-07-04. Kept as an anchor for
-// UI copy that references "today" while backend seeds real timestamps.
-export const TODAY_DATE = '2026-07-04';
+// NOTE: TODAY_DATE was previously a hardcoded simulation date.
+// It has been replaced by useToday() hook which provides the real current date.
+// Kept here only for test compatibility; do NOT use in production components.
+export const TODAY_DATE = new Date().toISOString().slice(0, 10);
 
 export const CATEGORY_LABELS: Record<string, string> = {
   salary: 'حقوق و دستمزد',

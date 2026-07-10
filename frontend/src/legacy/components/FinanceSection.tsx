@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Transaction, Subscription, CategoryDef, BudgetSettings, BankAccount, RecurringTransaction, Debt, AssetInvestment, Document, Installment } from '../types';
-import { CATEGORY_LABELS, TODAY_DATE } from '../initialData';
+import { CATEGORY_LABELS } from '../initialData';
 import PersianDatePicker from './PersianDatePicker';
 import FinanceCategoryDashboard from './FinanceCategoryDashboard';
 import {
