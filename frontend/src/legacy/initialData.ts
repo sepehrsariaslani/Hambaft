@@ -34,7 +34,7 @@ export const CATEGORY_LABELS: Record<string, string> = {
 };
 
 export const MOOD_LABELS: Record<string, { label: string, icon: string, color: string }> = {
-  excited: { label: 'پرانرژی و عالی', icon: 'Sparkles', color: 'text-amber-600 bg-amber-50 border-amber-200' },
+  excited: { label: 'پرانرژی و عالی', icon: 'Sparkles', color: 'text-[#9B6B61] bg-[#F9F1D8] border-[#EBE3C8]' },
   happy: { label: 'خوشحال و آرام', icon: 'Smile', color: 'text-emerald-600 bg-emerald-50 border-emerald-200' },
   neutral: { label: 'معمولی', icon: 'Meh', color: 'text-slate-600 bg-slate-50 border-slate-200' },
   tired: { label: 'خسته', icon: 'Moon', color: 'text-sky-600 bg-sky-50 border-sky-200' },
@@ -46,7 +46,7 @@ export const GOAL_CATEGORY_LABELS: Record<string, { label: string, color: string
   financial: { label: 'مالی', color: 'text-emerald-600 bg-emerald-50 border-emerald-200' },
   health: { label: 'سلامت و ورزش', color: 'text-rose-600 bg-rose-50 border-rose-200' },
   career: { label: 'شغل و حرفه', color: 'text-blue-600 bg-blue-50 border-blue-200' },
-  learning: { label: 'یادگیری و مهارت', color: 'text-amber-600 bg-amber-50 border-amber-200' },
+  learning: { label: 'یادگیری و مهارت', color: 'text-[#9B6B61] bg-[#F9F1D8] border-[#EBE3C8]' },
   personal: { label: 'توسعه فردی', color: 'text-purple-600 bg-purple-50 border-purple-200' },
   other: { label: 'سایر اهداف', color: 'text-slate-600 bg-slate-50 border-slate-200' }
 };

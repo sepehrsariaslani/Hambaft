@@ -4036,7 +4036,7 @@ export default function App({
                     className="flex items-center justify-between bg-[#FDFBF7] hover:bg-white p-3 rounded-2xl cursor-pointer transition-all shadow-xs text-right"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-amber-500 text-white flex items-center justify-center shadow-xs">
+                      <div className="w-8 h-8 rounded-full bg-[#9B6B61] text-white flex items-center justify-center shadow-xs">
                         <Wallet className="w-4 h-4" />
                       </div>
                       <span className="text-[11px] font-black text-[#2D3025]">ثبت هزینه یا درآمد جدید</span>
@@ -4626,7 +4626,7 @@ export default function App({
                   {isTimerRunning ? (
                     <button
                       onClick={handlePauseTimer}
-                      className="p-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 rounded-xl transition-all cursor-pointer active:scale-90"
+                      className="p-2 bg-[#9B6B61]/20 hover:bg-[#9B6B61]/30 text-[#C59B93] rounded-xl transition-all cursor-pointer active:scale-90"
                       title="توقف موقت"
                     >
                       <Pause className="w-3.5 h-3.5 fill-current" />
@@ -4692,7 +4692,7 @@ export default function App({
             >
               <div className="flex justify-between items-center border-b border-[#E6DFD3]/50 pb-3">
                 <div className="flex items-center gap-2">
-                  <span className="p-2 bg-amber-50 rounded-xl text-amber-600">
+                  <span className="p-2 bg-[#F9F1D8] rounded-xl text-[#9B6B61]">
                     💰
                   </span>
                   <div>
