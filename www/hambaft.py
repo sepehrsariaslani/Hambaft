@@ -13,7 +13,7 @@ def _get_asset_paths():
     """
     # www/hambaft.py is at the repo root www/hambaft.py
     # public is at hambaft/public/
-    public_dir = os.path.join(os.path.dirname(__file__), 'hambaft', 'public')
+    public_dir = os.path.join(os.path.dirname(__file__), '..', 'hambaft', 'public')
     assets_dir = os.path.join(public_dir, 'assets')
     js_path = None
     css_path = None
