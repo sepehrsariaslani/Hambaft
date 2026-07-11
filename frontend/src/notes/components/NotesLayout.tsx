@@ -58,7 +58,7 @@ function PageTreeItem({
         )}
         <span className="text-xs shrink-0">{page.icon || '📄'}</span>
         <span className="text-[11px] font-bold truncate flex-1 text-right">{page.title}</span>
-        {page.isFavorite && <Star className="w-3 h-3 text-amber-500 fill-amber-500 shrink-0" />}
+        {page.isFavorite && <Star className="w-3 h-3 text-[#9B6B61] fill-[#9B6B61] shrink-0" />}
         <button
           onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu) }}
           className="opacity-0 group-hover:opacity-100 p-1 text-[#8D7F72] hover:text-[#2D3025] shrink-0"
@@ -191,7 +191,7 @@ export default function NotesLayout({
                   {favorites.length > 0 && (
                     <div className="space-y-1">
                       <span className="text-[9px] font-black text-[#8D7F72] px-1 flex items-center gap-1">
-                        <Star className="w-3 h-3 text-amber-500" /> علاقه‌مندی‌ها
+                        <Star className="w-3 h-3 text-[#9B6B61]" /> علاقه‌مندی‌ها
                       </span>
                       {favorites.map((p) => (
                         <button
@@ -252,7 +252,7 @@ export default function NotesLayout({
           </div>
           <div className="flex items-center gap-2">
             <span className={`text-[9px] font-bold px-2 py-0.5 rounded-md ${
-              savingState === 'saving' ? 'bg-amber-50 text-amber-700' :
+              savingState === 'saving' ? 'bg-[#F9F1D8] text-[#5A5A40]' :
               savingState === 'saved' ? 'bg-emerald-50 text-emerald-700' :
               'bg-[#F9F6EE] text-[#8D7F72]'
             }`}>
