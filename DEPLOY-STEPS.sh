@@ -1,27 +1,44 @@
 #!/bin/bash
-# === مراحل دیپلوی سرور ===
-# بعد از git pull روی سرور، این مراحل رو به ترتیب اجرا کن
+# === مراحل دیپلوی سرور Hambaft ===
+# این مراحل رو دقیقاً به همین ترتیب اجرا کن
 #
-# مرحله ۱: پاکسازی و بیلد فرانت‌اند
-#   bash deploy-fix.sh
+# ─── مرحله ۱: گرفتن آخرین تغییرات ───
+cd ~/frappe-bench/apps/hambaft
+git pull
 #
-# مرحله ۲: مایگریت دیتابیس
-#   bench --site hambaft.ir migrate
+# ─── مرحله ۲: پاکسازی و بیلد (deploy-fix.sh) ───
+# این اسکریپت:
+#   - دایرکتوری‌های قدیمی /frontend/ رو حذف میکنه
+#   - index.html رو از git بازنشانی میکنه
+#   - npm install + npm run build اجرا میکنه
+#   - sw.js رو force-copy میکنه (حل مشکل EPERM)
+#   - stale hashed assets رو پاک میکنه
+bash deploy-fix.sh
 #
-# مرحله ۳: مایگریت وضعیت تسک‌ها (فارسی → انگلیسی)
-#   bench --site hambaft.ir execute hambaft.hambaft.api.run_task_status_migration
+# ─── مرحله ۳: مایگریت دیتابیس ───
+bench --site hambaft.ir migrate
 #
-# مرحله ۴: مایگریت تسک‌های پروژه (child table → Task اصلی)
-#   bench --site hambaft.ir execute hambaft.hambaft.api.run_project_tasks_migration
+# ─── مرحله ۴: مایگریت وضعیت تسک‌ها ───
+bench --site hambaft.ir execute hambaft.hambaft.api.run_task_status_migration
 #
-# مرحله ۵: بیلد و ریستارت
-#   bench build && bench clear-cache && bench clear-website-cache && bench restart
+# ─── مرحله ۵: مایگریت تسک‌های پروژه ───
+bench --site hambaft.ir execute hambaft.hambaft.api.run_project_tasks_migration
 #
-# مرحله ۶: بیلد فرانت‌اند دوباره (bench build ممکنه index.html رو تغییر بده)
-#   cd frontend && npm run build && cd ..
+# ─── مرحله ۶: bench build ───
+bench build
 #
-# مرحله ۷: هارد رفرش مرورگر (Ctrl+Shift+R)
+# ─── مرحله ۷: بیلد مجدد فرانت‌اند بعد از bench build ───
+# bench build ممکنه فایل‌های فرانت‌اند رو overwrite کنه
+# این مرحله تضمین میکنه که آخرین بیلد فعال باشه
+cd ~/frappe-bench/apps/hambaft
+bash deploy-fix.sh
 #
-# ⚠️ نکته مهم: اگر بعد از همه مراحل بالا اپ هنوز لود نمیشه:
-#   1. برو به DevTools > Application > Storage > Clear site data
-#   2. یا در آدرس بار بزن: chrome://serviceworker-internals/ و unregister کن
+# ─── مرحله ۸: پاکسازی کش و ریستارت ───
+bench clear-cache
+bench clear-website-cache
+bench restart
+#
+# ─── مرحله ۹: تست در مرورگر ───
+# 1. Ctrl+Shift+R (hard refresh)
+# 2. اگه هنوز مشکل داشتید: DevTools > Application > Storage > Clear site data
+# 3. یا: chrome://serviceworker-internals/ → unregister SW
