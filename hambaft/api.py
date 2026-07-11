@@ -3080,6 +3080,10 @@ def get_note_pages(limit=100, offset=0):
         )
     except frappe.DoesNotExistError:
         return _api_response({"pages": []})
+    except Exception as e:
+        # Table may not exist yet (migrate not run) — return empty gracefully
+        frappe.logger().warning(f"get_note_pages failed: {e}")
+        return _api_response({"pages": []})
     for row in rows:
         row["blocks"] = _loads_json(row.get("blocks_json"), [])
     return _api_response({"pages": rows})

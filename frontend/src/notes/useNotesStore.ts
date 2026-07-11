@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import type { Block, BlockType, NotePage } from './types'
-import { callGet } from '../app/frappe'
+import { call, callGet } from '../app/frappe'
 
 let GLOBAL_PAGES: NotePage[] = []
 let LISTENERS: (() => void)[] = []
