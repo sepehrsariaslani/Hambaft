@@ -314,7 +314,7 @@ export default function FitnessSection({
             </div>
             <div className="flex-1 min-w-[100px] p-3 bg-white/10 dark:bg-black/20 rounded-2xl border border-white/10 backdrop-blur-sm text-center">
               <span className="text-[10px] text-white/60 font-bold block mb-1">وزن فعلی کنونی</span>
-              <span className="text-xl font-mono font-black text-amber-200">{toPersianDigits(currentWeight)} <span className="text-[10px] font-normal text-white">kg</span></span>
+              <span className="text-xl font-mono font-black text-[#C59B93]">{toPersianDigits(currentWeight)} <span className="text-[10px] font-normal text-white">kg</span></span>
             </div>
           </div>
         </div>
@@ -498,7 +498,7 @@ export default function FitnessSection({
               <div className="space-y-3">
                 <div className="border-b border-[#E6DFD3]/40 pb-3">
                   <h3 className="text-xs font-black text-[#2D3025] dark:text-[#E8ECE0] flex items-center gap-1.5">
-                    <Clock className="w-4 h-4 text-amber-500" />
+                    <Clock className="w-4 h-4 text-[#9B6B61]" />
                     تاریخچه تمرینات و هوازی‌های ثبت‌شده
                   </h3>
                 </div>
@@ -685,7 +685,7 @@ export default function FitnessSection({
                       {isDropdownOpen && (
                         <div className="absolute right-0 left-0 mt-1 bg-white dark:bg-[#1E211B] border border-[#D6CFC3] dark:border-[#3D4133] rounded-xl shadow-lg z-30 max-h-56 overflow-y-auto p-2 space-y-1.5">
                           <div className="flex items-center gap-1 bg-[#FDFBF7] dark:bg-[#242721] px-2 py-1 rounded-lg border border-[#D6CFC3]/60 dark:border-[#3D4133]/60">
-                            <Search className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                            <Search className="w-3.5 h-3.5 text-[#8D7F72] shrink-0" />
                             <input 
                               type="text"
                               value={exSearchQuery}
@@ -708,14 +708,14 @@ export default function FitnessSection({
                                   className={`p-2 text-xs rounded-lg cursor-pointer text-right transition-colors font-semibold ${
                                     exName === p 
                                       ? 'bg-[#7C8363] text-white' 
-                                      : 'hover:bg-[#F9F6EE] dark:hover:bg-[#2A2E25] text-gray-700 dark:text-gray-300'
+                                      : 'hover:bg-[#F9F6EE] dark:hover:bg-[#2A2E25] text-[#2D3025] dark:text-[#E8ECE0]'
                                   }`}
                                 >
                                   {p}
                                 </div>
                               ))
                             ) : (
-                              <div className="text-center py-2 text-[10px] text-gray-400 space-y-2">
+                              <div className="text-center py-2 text-[10px] text-[#8D7F72] space-y-2">
                                 <span>حرکتی یافت نشد.</span>
                                 <button
                                   type="button"
@@ -901,7 +901,7 @@ export default function FitnessSection({
                   <div className="md:col-span-5 space-y-1">
                     <label className="text-[10px] font-bold text-[#8D7F72] dark:text-[#9D978B]">جستجوی حرکت ورزشی در جدول</label>
                     <div className="flex items-center gap-1.5 bg-white dark:bg-[#242721] px-3 py-2.5 rounded-xl border border-[#D6CFC3] dark:border-[#3D4133]/60">
-                      <Search className="w-4 h-4 text-gray-400 shrink-0" />
+                      <Search className="w-4 h-4 text-[#8D7F72] shrink-0" />
                       <input 
                         type="text"
                         value={movementSearchQuery}
@@ -992,31 +992,31 @@ export default function FitnessSection({
                                       {toPersianDigits(toJalali(lastPerformed.date))}
                                     </span>
                                   ) : (
-                                    <span className="text-gray-400 text-[10px] font-bold">هنوز ثبت نشده</span>
+                                    <span className="text-[#8D7F72] text-[10px] font-bold">هنوز ثبت نشده</span>
                                   )}
                                 </td>
                                 <td>
                                   {lastPerformed ? (
-                                    <div className="space-x-2 space-x-reverse font-mono text-[11px] text-gray-600 dark:text-gray-400 font-bold">
+                                    <div className="space-x-2 space-x-reverse font-mono text-[11px] text-[#8D7F72] dark:text-[#8D7F72] font-bold">
                                       <span>وزن: {toPersianDigits(lastPerformed.weight)}kg</span>
-                                      <span className="text-gray-300 dark:text-gray-700">|</span>
+                                      <span className="text-[#D6CFC3] dark:text-[#3D4133]">|</span>
                                       <span>تکرار: {toPersianDigits(lastPerformed.reps)}</span>
-                                      <span className="text-gray-300 dark:text-gray-700">|</span>
+                                      <span className="text-[#D6CFC3] dark:text-[#3D4133]">|</span>
                                       <span>ست: {toPersianDigits(lastPerformed.sets)}</span>
                                     </div>
                                   ) : (
-                                    <span className="text-gray-400">—</span>
+                                    <span className="text-[#8D7F72]">—</span>
                                   )}
                                 </td>
                                 <td className="text-center">
                                   {pr ? (
-                                    <div className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-50 dark:bg-amber-950/20 border border-amber-200/50 rounded-xl text-amber-700 dark:text-amber-400 font-black font-mono">
-                                      <Award className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
+                                    <div className="inline-flex items-center gap-1 px-2.5 py-1 bg-[#F9F1D8] dark:bg-[#201D13] border border-[#EBE3C8]/50 rounded-xl text-[#5A5A40] dark:text-[#C59B93] font-black font-mono">
+                                      <Award className="w-3.5 h-3.5 text-[#9B6B61] animate-pulse" />
                                       <span>{toPersianDigits(pr.maxWeight)} kg</span>
                                       <span className="text-[10px] font-normal">({toPersianDigits(pr.reps)}R)</span>
                                     </div>
                                   ) : (
-                                    <span className="text-gray-400">—</span>
+                                    <span className="text-[#8D7F72]">—</span>
                                   )}
                                 </td>
                                 <td className="text-left py-3.5">
@@ -1082,9 +1082,9 @@ export default function FitnessSection({
                   {toPersianDigits(Math.round(totalCaloriesWeek / 7))} <span className="text-xs font-normal">kcal</span>
                 </span>
               </div>
-              <div className="p-4 bg-amber-50 dark:bg-amber-950/20 rounded-2xl border border-amber-100 dark:border-amber-900/30 text-center space-y-1">
+              <div className="p-4 bg-[#F9F1D8] dark:bg-[#201D13] rounded-2xl border border-[#EBE3C8] dark:border-[#3D3929] text-center space-y-1">
                 <span className="text-[10px] text-[#8D7F72] dark:text-[#9D978B] font-bold block">جلسات عضلانی بدنسازی</span>
-                <span className="text-lg font-black font-mono text-amber-700 dark:text-amber-400">
+                <span className="text-lg font-black font-mono text-[#5A5A40] dark:text-[#C59B93]">
                   {toPersianDigits(workoutLogs.filter(l => l.type === 'strength').length)} <span className="text-xs font-normal">جلسه</span>
                 </span>
               </div>
@@ -1201,7 +1201,7 @@ export default function FitnessSection({
                     <div className="grid grid-cols-3 gap-2">
                       <div className="space-y-1">
                         <label className="text-[10px] font-bold text-[#8D7F72] dark:text-[#9D978B] flex items-center gap-0.5 justify-center">
-                          دور کمر <span className="text-[9px] font-normal text-gray-400">(cm)</span>
+                          دور کمر <span className="text-[9px] font-normal text-[#8D7F72]">(cm)</span>
                         </label>
                         <input
                           type="number"
@@ -1215,7 +1215,7 @@ export default function FitnessSection({
                       </div>
                       <div className="space-y-1">
                         <label className="text-[10px] font-bold text-[#8D7F72] dark:text-[#9D978B] flex items-center gap-0.5 justify-center">
-                          دور بازو <span className="text-[9px] font-normal text-gray-400">(cm)</span>
+                          دور بازو <span className="text-[9px] font-normal text-[#8D7F72]">(cm)</span>
                         </label>
                         <input
                           type="number"
@@ -1229,7 +1229,7 @@ export default function FitnessSection({
                       </div>
                       <div className="space-y-1">
                         <label className="text-[10px] font-bold text-[#8D7F72] dark:text-[#9D978B] flex items-center gap-0.5 justify-center">
-                          دور سینه <span className="text-[9px] font-normal text-gray-400">(cm)</span>
+                          دور سینه <span className="text-[9px] font-normal text-[#8D7F72]">(cm)</span>
                         </label>
                         <input
                           type="number"
@@ -1285,7 +1285,7 @@ export default function FitnessSection({
 
                   {bodyMeasurementLogs.length === 0 ? (
                     <div className="h-64 flex flex-col items-center justify-center text-center space-y-2 text-[#8D7F72] dark:text-[#9D978B]">
-                      <Ruler className="w-10 h-10 text-gray-300 dark:text-gray-700 animate-bounce" />
+                      <Ruler className="w-10 h-10 text-[#D6CFC3] dark:text-[#3D4133] animate-bounce" />
                       <p className="text-xs font-bold">هنوز هیچ اندازه‌گیری بدنی ثبت نشده است</p>
                       <p className="text-[10px]">برای مشاهده نمودار پیشرفت سایز کمر، بازو و سینه، اولین سایزگیری خود را ثبت کنید.</p>
                     </div>
@@ -1381,13 +1381,13 @@ export default function FitnessSection({
                                 {toPersianDigits(toJalali(log.date))}
                               </td>
                               <td className="text-center py-2.5 font-mono font-black text-[#2D3025] dark:text-[#E8ECE0]">
-                                {toPersianDigits(log.waist)} <span className="text-[10px] font-normal text-gray-400">cm</span>
+                                {toPersianDigits(log.waist)} <span className="text-[10px] font-normal text-[#8D7F72]">cm</span>
                               </td>
                               <td className="text-center py-2.5 font-mono font-black text-[#2D3025] dark:text-[#E8ECE0]">
-                                {toPersianDigits(log.arm)} <span className="text-[10px] font-normal text-gray-400">cm</span>
+                                {toPersianDigits(log.arm)} <span className="text-[10px] font-normal text-[#8D7F72]">cm</span>
                               </td>
                               <td className="text-center py-2.5 font-mono font-black text-[#2D3025] dark:text-[#E8ECE0]">
-                                {toPersianDigits(log.chest)} <span className="text-[10px] font-normal text-gray-400">cm</span>
+                                {toPersianDigits(log.chest)} <span className="text-[10px] font-normal text-[#8D7F72]">cm</span>
                               </td>
                               <td className="py-2.5 text-[#8D7F72] dark:text-[#9D978B] text-[11px] max-w-xs truncate" title={log.note}>
                                 {log.note || '—'}

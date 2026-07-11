@@ -50,11 +50,11 @@ const CATEGORY_LABELS: Record<GoalCategory, string> = {
 };
 
 const CATEGORY_COLORS: Record<GoalCategory, string> = {
-  financial: 'bg-amber-100 text-amber-800 border-amber-200',
+  financial: 'bg-[#F9F1D8] text-[#5A5A40] border-[#EBE3C8]',
   health: 'bg-emerald-100 text-emerald-800 border-emerald-200',
   career: 'bg-rose-100 text-rose-800 border-rose-200',
   learning: 'bg-stone-100 text-stone-800 border-stone-200',
-  personal: 'bg-amber-100 text-amber-800 border-amber-200',
+  personal: 'bg-[#F9F1D8] text-[#5A5A40] border-[#EBE3C8]',
   other: 'bg-slate-100 text-slate-800 border-slate-200'
 };
 
@@ -200,7 +200,7 @@ export default function ProjectDashboard({
           <span className="text-[9px] font-bold text-[#8D7F72] block">نرخ تکمیل تسک‌های پروژه</span>
           <div className="flex items-center gap-2">
             <span className="text-lg font-black text-[#E26645] font-mono">{taskProgressPct}%</span>
-            <div className="flex-1 bg-gray-100 h-2 rounded-full overflow-hidden">
+            <div className="flex-1 bg-[#E6DFD3]/40 h-2 rounded-full overflow-hidden">
               <div className="bg-[#E26645] h-full" style={{ width: `${taskProgressPct}%` }} />
             </div>
           </div>
@@ -459,7 +459,7 @@ export default function ProjectDashboard({
                               <span>تکمیل‌شده</span>
                             </span>
                           ) : (
-                            <span className="px-3 py-1 rounded-xl bg-amber-50 border border-amber-200 text-[10px] font-black text-[#9B6B61] flex items-center gap-1">
+                            <span className="px-3 py-1 rounded-xl bg-[#F9F1D8] border border-[#EBE3C8] text-[10px] font-black text-[#9B6B61] flex items-center gap-1">
                               <Clock className="w-3.5 h-3.5 text-[#9B6B61]" />
                               <span>در حال اجرا</span>
                             </span>

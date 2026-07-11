@@ -38,18 +38,18 @@ const TABS: { id: DetailTab; label: string; icon: React.ReactNode }[] = [
 ]
 
 const STATUS_OPTIONS = [
-  { id: 'inbox', label: 'ورودی', color: 'bg-amber-50 text-amber-700 border-amber-200' },
+  { id: 'inbox', label: 'ورودی', color: 'bg-[#F9F1D8] text-[#5A5A40] border-[#EBE3C8]' },
   { id: 'today', label: 'امروز', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
   { id: 'next', label: 'بعدی', color: 'bg-blue-50 text-blue-700 border-blue-200' },
   { id: 'in_progress', label: 'درحال انجام', color: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
   { id: 'on_hold', label: 'متوقف', color: 'bg-orange-50 text-orange-700 border-orange-200' },
-  { id: 'someday', label: 'شاید', color: 'bg-gray-50 text-gray-500 border-gray-200' },
+  { id: 'someday', label: 'شاید', color: 'bg-[#F9F6EE] text-[#8D7F72] border-[#D6CFC3]' },
   { id: 'done', label: 'انجام‌شده', color: 'bg-green-50 text-green-700 border-green-200' },
 ] as const
 
 const PRIORITY_MAP: Record<string, { label: string; color: string; icon: string }> = {
   low: { label: 'پایین', color: 'bg-emerald-100 text-emerald-700', icon: '🟢' },
-  medium: { label: 'متوسط', color: 'bg-amber-100 text-amber-700', icon: '🟡' },
+  medium: { label: 'متوسط', color: 'bg-[#F9F1D8] text-[#5A5A40]', icon: '🟡' },
   high: { label: 'فوری', color: 'bg-red-100 text-red-700', icon: '🔴' },
   urgent: { label: 'بحرانی', color: 'bg-red-200 text-red-800', icon: '🚨' },
 }
@@ -624,7 +624,7 @@ function RelationsTab({ task, linkedGoal, linkedProject, onNavigate }: {
   }
   const healthColors: Record<string, string> = {
     'خارج از مسیر': 'bg-red-100 text-red-700',
-    'در خطر': 'bg-amber-100 text-amber-700',
+    'در خطر': 'bg-[#F9F1D8] text-[#5A5A40]',
     'نیاز به بررسی': 'bg-yellow-100 text-yellow-700',
     'در مسیر': 'bg-emerald-100 text-emerald-700',
   }
@@ -633,8 +633,8 @@ function RelationsTab({ task, linkedGoal, linkedProject, onNavigate }: {
     اجباری: { label: 'اجباری', color: 'bg-red-100 text-red-700' },
     recommended: { label: 'پیشنهادی', color: 'bg-blue-100 text-blue-700' },
     پیشنهادی: { label: 'پیشنهادی', color: 'bg-blue-100 text-blue-700' },
-    supporting: { label: 'پشتیبان', color: 'bg-gray-100 text-gray-600' },
-    پشتیبان: { label: 'پشتیبان', color: 'bg-gray-100 text-gray-600' },
+    supporting: { label: 'پشتیبان', color: 'bg-[#E6DFD3]/40 text-[#8D7F72]' },
+    پشتیبان: { label: 'پشتیبان', color: 'bg-[#E6DFD3]/40 text-[#8D7F72]' },
   }
 
   const goalHealth = task.impactGoalHealth ? (healthLabels[task.impactGoalHealth] || task.impactGoalHealth) : null
@@ -655,7 +655,7 @@ function RelationsTab({ task, linkedGoal, linkedProject, onNavigate }: {
         <div className="p-2.5 bg-purple-50/50 rounded-xl border border-purple-200/60 space-y-1.5">
           <div className="flex items-center justify-between">
             <span className="text-[9px] font-black text-purple-600">هدف</span>
-            {goalHealth && <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-full ${healthColors[goalHealth] || 'bg-gray-100 text-gray-600'}`}>{goalHealth}</span>}
+            {goalHealth && <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-full ${healthColors[goalHealth] || 'bg-[#E6DFD3]/40 text-[#8D7F72]'}`}>{goalHealth}</span>}
           </div>
           <div className="flex items-center gap-2">
             <Target className="w-4 h-4 text-purple-600 shrink-0" />
@@ -769,7 +769,7 @@ function TimeTab({ task, isActiveSession, activeTimerSeconds, isTimerRunning, on
           {isActiveSession ? (
             <>
               <button onClick={isTimerRunning ? onPauseTimer : () => onStartTimer?.(task.id)}
-                className={`px-3.5 py-2 text-xs font-bold rounded-xl flex items-center gap-1.5 cursor-pointer transition-all ${isTimerRunning ? 'bg-amber-500 text-white hover:bg-amber-600' : 'bg-[#7C8363] text-white hover:bg-[#5A5A40]'}`}>
+                className={`px-3.5 py-2 text-xs font-bold rounded-xl flex items-center gap-1.5 cursor-pointer transition-all ${isTimerRunning ? 'bg-[#F9F1D8]0 text-white hover:bg-[#9B6B61]' : 'bg-[#7C8363] text-white hover:bg-[#5A5A40]'}`}>
                 {isTimerRunning ? <><Pause className="w-3.5 h-3.5" /> توقف</> : <><Play className="w-3.5 h-3.5" /> ادامه</>}
               </button>
               <button onClick={onStopTimer}
@@ -795,7 +795,7 @@ function TimeTab({ task, isActiveSession, activeTimerSeconds, isTimerRunning, on
         {estimated > 0 ? (
           <div className="w-full h-3 bg-[#E6DFD3] rounded-full overflow-hidden relative">
             <div
-              className={`h-full rounded-full transition-all ${isOverBudget ? 'bg-red-500' : timePct >= 80 ? 'bg-amber-500' : 'bg-[#7C8363]'}`}
+              className={`h-full rounded-full transition-all ${isOverBudget ? 'bg-red-500' : timePct >= 80 ? 'bg-[#F9F1D8]0' : 'bg-[#7C8363]'}`}
               style={{ width: `${Math.min(timePct, 100)}%` }}
             />
             {isOverBudget && (
@@ -829,7 +829,7 @@ function TimeTab({ task, isActiveSession, activeTimerSeconds, isTimerRunning, on
             {sessions.map((s, idx) => (
               <div key={s.name || idx} className="flex items-center justify-between bg-[#F9F6EE] px-2.5 py-1.5 rounded-lg">
                 <div className="flex items-center gap-2">
-                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${s.status === 'completed' ? 'bg-emerald-500' : s.status === 'active' ? 'bg-blue-500 animate-pulse' : 'bg-amber-500'}`} />
+                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${s.status === 'completed' ? 'bg-emerald-500' : s.status === 'active' ? 'bg-blue-500 animate-pulse' : 'bg-[#F9F1D8]0'}`} />
                   <span className="text-[10px] font-bold text-[#2D3025]">{formatDuration(s.duration_minutes)}</span>
                 </div>
                 <span className="text-[8px] text-[#8D7F72]">{formatTime(s.started_at)}</span>

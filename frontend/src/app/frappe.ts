@@ -2,6 +2,8 @@ type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE'
 
 type CallOptions = {
   httpMethod?: HttpMethod
+  /** Force JSON body instead of form-encoding (for specific cases) */
+  jsonBody?: boolean
 }
 
 function getCsrfToken() {
@@ -41,6 +43,28 @@ async function parsePayload(response: Response) {
   return text ? { message: text } : {}
 }
 
+/**
+ * Build a FormData or URLSearchParams from a flat args object.
+ * Complex objects (dicts/lists) are JSON-stringified so Frappe
+ * receives them as strings and can json.loads() on the backend.
+ */
+function serializeArgs(args: Record<string, unknown>): FormData {
+  const fd = new FormData()
+  const csrfToken = getCsrfToken()
+  if (csrfToken) {
+    fd.append('csrf_token', csrfToken)
+  }
+  Object.entries(args).forEach(([key, value]) => {
+    if (value === undefined || value === null) return
+    if (typeof value === 'object') {
+      fd.append(key, JSON.stringify(value))
+    } else {
+      fd.append(key, String(value))
+    }
+  })
+  return fd
+}
+
 function toQueryString(args: Record<string, unknown>) {
   const params = new URLSearchParams()
 
@@ -61,6 +85,16 @@ function toQueryString(args: Record<string, unknown>) {
   return query ? `?${query}` : ''
 }
 
+/**
+ * Call a Frappe whitelisted method.
+ *
+ * For POST requests we use FormData (form-encoding) by default,
+ * which is the standard Frappe convention. This avoids the issue
+ * where Frappe serialises nested JSON objects to strings when
+ * receiving `Content-Type: application/json`.
+ *
+ * Set `jsonBody: true` in options to force JSON body.
+ */
 export async function call<T = any>(
   method: string,
   args: Record<string, unknown> = {},
@@ -72,19 +106,58 @@ export async function call<T = any>(
     Accept: 'application/json',
   }
 
-  if (httpMethod !== 'GET' && httpMethod !== 'DELETE') {
-    headers['Content-Type'] = 'application/json'
+  // GET / DELETE → query string
+  if (httpMethod === 'GET' || httpMethod === 'DELETE') {
+    const response = await fetch(`/api/method/${method}${toQueryString(args)}`, {
+      method: httpMethod,
+      headers,
+      credentials: 'same-origin',
+    })
+    const payload = await parsePayload(response)
+    if (!response.ok) {
+      throw new Error(
+        payload?._error_message ||
+          payload?._server_messages ||
+          payload?.message ||
+          `Request failed: ${response.status}`,
+      )
+    }
+    return payload.message ?? payload
   }
 
-  if (csrfToken && httpMethod !== 'GET') {
+  // POST / PUT → form-encoding (standard Frappe)
+  if (options.jsonBody) {
+    // Legacy JSON body path — kept for rare edge-cases
+    headers['Content-Type'] = 'application/json'
+    if (csrfToken) headers['X-Frappe-CSRF-Token'] = csrfToken
+    const response = await fetch(`/api/method/${method}`, {
+      method: httpMethod,
+      headers,
+      credentials: 'same-origin',
+      body: JSON.stringify(args),
+    })
+    const payload = await parsePayload(response)
+    if (!response.ok) {
+      throw new Error(
+        payload?._error_message ||
+          payload?._server_messages ||
+          payload?.message ||
+          `Request failed: ${response.status}`,
+      )
+    }
+    return payload.message ?? payload
+  }
+
+  // Form-encoded — Frappe's native format
+  if (csrfToken) {
     headers['X-Frappe-CSRF-Token'] = csrfToken
   }
-
-  const response = await fetch(`/api/method/${method}${httpMethod === 'GET' ? toQueryString(args) : ''}`, {
+  const body = serializeArgs(args)
+  const response = await fetch(`/api/method/${method}`, {
     method: httpMethod,
     headers,
     credentials: 'same-origin',
-    body: httpMethod === 'GET' || httpMethod === 'DELETE' ? undefined : JSON.stringify(args),
+    body,
   })
 
   const payload = await parsePayload(response)

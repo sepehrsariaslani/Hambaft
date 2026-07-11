@@ -1185,21 +1185,21 @@ def bulk_update_tasks(names, updates):
         names: JSON string of task name list, e.g. '["TASK-001","TASK-002"]'
         updates: JSON string of field updates, e.g. '{"status":"done","priority":"high"}'
     """
-    if frappe.session_user == "Guest":
+    if frappe.session.user == "Guest":
         frappe.throw("Authentication required", frappe.AuthenticationError)
     if isinstance(names, str):
-        names = json.loads(names)
+        try:
+            names = json.loads(names)
+        except (json.JSONDecodeError, ValueError):
+            names = []
     if isinstance(updates, str):
-        updates = json.loads(updates)
+        try:
+            updates = json.loads(updates)
+        except (json.JSONDecodeError, ValueError):
+            updates = {}
     if not names or not updates:
         frappe.throw("names and updates are required")
 
-    _STATUS_MAP = {
-        "inbox": "صندوق ورودی", "today": "امروز", "next": "بعدی",
-        "scheduled": "زمان‌بندی‌شده", "someday": "شاید", "in_progress": "در حال انجام",
-        "on_hold": "متوقف", "done": "انجام‌شده", "completed": "انجام‌شده",
-    }
-    _PRIORITY_MAP = {"low": "پایین", "medium": "متوسط", "high": "بالا", "urgent": "فوری"}
     _IMPORTANCE_MAP = {"normal": "عادی", "key": "کلیدی", "milestone": "نقطه‌عطف"}
 
     allowed_fields = {"status", "priority", "importance"}
@@ -1207,10 +1207,9 @@ def bulk_update_tasks(names, updates):
     if not filtered_updates:
         frappe.throw("No valid fields to update")
 
-    if "status" in filtered_updates and filtered_updates["status"] in _STATUS_MAP:
-        filtered_updates["status"] = _STATUS_MAP[filtered_updates["status"]]
-    if "priority" in filtered_updates and filtered_updates["priority"] in _PRIORITY_MAP:
-        filtered_updates["priority"] = _PRIORITY_MAP[filtered_updates["priority"]]
+    # Normalize status: Persian → English if needed
+    if "status" in filtered_updates:
+        filtered_updates["status"] = _normalize_task_status(filtered_updates["status"])
     if "importance" in filtered_updates and filtered_updates["importance"] in _IMPORTANCE_MAP:
         filtered_updates["importance"] = _IMPORTANCE_MAP[filtered_updates["importance"]]
 
@@ -1937,6 +1936,12 @@ def update_settings(data=None):
         frappe.throw("Authentication required", frappe.AuthenticationError)
     if data is None:
         data = {}
+    if isinstance(data, str):
+        try:
+            data = json.loads(data)
+        except (json.JSONDecodeError, ValueError):
+            data = {}
+    data = data or {}
     data = _normalize_settings_update(data)
     if not data:
         return _api_response({"settings": _get_settings_payload()})
@@ -1986,7 +1991,12 @@ def get_onboarding_status():
 def submit_onboarding_step(step, data=None):
     if frappe.session.user == "Guest":
         frappe.throw("Authentication required", frappe.AuthenticationError)
-    data = _normalize_settings_update(data)
+    if isinstance(data, str):
+        try:
+            data = json.loads(data)
+        except (json.JSONDecodeError, ValueError):
+            data = {}
+    data = _normalize_settings_update(data or {})
     step = cint(step)
     doc = _get_or_create_settings_doc()
     payload = dict(data or {})

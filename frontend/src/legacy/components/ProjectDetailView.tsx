@@ -49,27 +49,27 @@ const TX_CATEGORIES: Record<string, { label: string; color: string }> = {
   gift: { label: 'هدیه', color: 'text-pink-600 bg-pink-50' },
   subsidy: { label: 'یارانه/حمایتی', color: 'text-teal-600 bg-teal-50' },
   investment: { label: 'سود سرمایه‌گذاری', color: 'text-cyan-600 bg-cyan-50' },
-  food: { label: 'خوراک و رستوران', color: 'text-amber-600 bg-amber-50' },
+  food: { label: 'خوراک و رستوران', color: 'text-[#9B6B61] bg-[#F9F1D8]' },
   rent: { label: 'مسکن و اجاره', color: 'text-indigo-600 bg-indigo-50' },
   transport: { label: 'حمل و نقل', color: 'text-blue-600 bg-blue-50' },
   health: { label: 'پزشکی و سلامت', color: 'text-red-600 bg-red-50' },
   shopping: { label: 'خرید کالا/خدمات', color: 'text-purple-600 bg-purple-50' },
   education: { label: 'آموزش و تحصیل', color: 'text-orange-600 bg-orange-50' },
-  other: { label: 'سایر موارد', color: 'text-gray-600 bg-gray-50' }
+  other: { label: 'سایر موارد', color: 'text-[#8D7F72] bg-[#F9F6EE]' }
 };
 
 const TASK_CATEGORIES = [
   { id: 'work', label: 'کاری', color: 'text-blue-600 bg-blue-50' },
   { id: 'personal', label: 'شخصی', color: 'text-emerald-600 bg-emerald-50' },
   { id: 'health', label: 'سلامت', color: 'text-rose-600 bg-rose-50' },
-  { id: 'finance', label: 'مالی', color: 'text-amber-600 bg-amber-50' },
+  { id: 'finance', label: 'مالی', color: 'text-[#9B6B61] bg-[#F9F1D8]' },
   { id: 'learning', label: 'یادگیری', color: 'text-indigo-600 bg-indigo-50' },
-  { id: 'other', label: 'سایر', color: 'text-gray-600 bg-gray-50' }
+  { id: 'other', label: 'سایر', color: 'text-[#8D7F72] bg-[#F9F6EE]' }
 ];
 
 const PRIORITIES = [
   { id: 'low', label: 'پایین', color: 'bg-emerald-50 text-emerald-700' },
-  { id: 'medium', label: 'متوسط', color: 'bg-amber-50 text-amber-700' },
+  { id: 'medium', label: 'متوسط', color: 'bg-[#F9F1D8] text-[#5A5A40]' },
   { id: 'high', label: 'فوری', color: 'bg-red-50 text-red-700 font-bold' }
 ];
 
@@ -482,7 +482,7 @@ export default function ProjectDetailView({
                   <span>{qualityProgress}%</span>
                 </div>
                 <div className="w-full bg-[#E6DFD3]/40 h-2 rounded-full overflow-hidden">
-                  <div className="bg-amber-600 h-full transition-all duration-300" style={{ width: `${qualityProgress}%` }} />
+                  <div className="bg-[#9B6B61] h-full transition-all duration-300" style={{ width: `${qualityProgress}%` }} />
                 </div>
               </>
             )}
@@ -490,7 +490,7 @@ export default function ProjectDetailView({
             {(milestoneTasks.length > 0 || keyTasks.length > 0) && (
               <div className="flex gap-3 text-[9px] font-bold pt-1">
                 {milestoneTasks.length > 0 && (
-                  <span className="bg-amber-50 text-amber-700 px-2 py-0.5 rounded-lg">◆ نقطه‌عطف: {milestoneDone}/{milestoneTasks.length}</span>
+                  <span className="bg-[#F9F1D8] text-[#5A5A40] px-2 py-0.5 rounded-lg">◆ نقطه‌عطف: {milestoneDone}/{milestoneTasks.length}</span>
                 )}
                 {keyTasks.length > 0 && (
                   <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded-lg">★ کلیدی: {keyDone}/{keyTasks.length}</span>
@@ -510,7 +510,7 @@ export default function ProjectDetailView({
                              contribType === 'supporting' || contribType === 'پشتیبان' ? 'پشتیبان' : contribType
         const contribColor = contribLabel === 'اجباری' ? 'bg-red-100 text-red-700 border-red-200' :
                              contribLabel === 'پیشنهادی' ? 'bg-blue-100 text-blue-700 border-blue-200' :
-                             'bg-gray-100 text-gray-600 border-gray-200'
+                             'bg-[#E6DFD3]/40 text-[#8D7F72] border-[#D6CFC3]'
         // Health state from project
         const healthState = (project as any).goalHealthState || ''
         const healthLabel = healthState === 'در_مسیر' || healthState === 'on_track' ? 'در مسیر' :
@@ -518,7 +518,7 @@ export default function ProjectDetailView({
                             healthState === 'خارج_از_مسیر' || healthState === 'off_track' ? 'خارج از مسیر' :
                             healthState === 'نیاز_به_بررسی' || healthState === 'needs_review' ? 'نیاز به بررسی' : ''
         const healthColor = healthLabel === 'در مسیر' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' :
-                            healthLabel === 'در خطر' ? 'bg-amber-100 text-amber-700 border-amber-200' :
+                            healthLabel === 'در خطر' ? 'bg-[#F9F1D8] text-[#5A5A40] border-[#EBE3C8]' :
                             healthLabel === 'خارج از مسیر' ? 'bg-red-100 text-red-700 border-red-200' :
                             healthLabel === 'نیاز به بررسی' ? 'bg-yellow-100 text-yellow-700 border-yellow-200' : ''
         return (
@@ -731,7 +731,7 @@ export default function ProjectDetailView({
                                 {t.dueDate && <span className="text-[8px] text-[#9B6B61]">مهلت: {t.dueDate}</span>}
                                 {t.priority && (
                                   <span className={`text-[8px] px-1.5 rounded ${
-                                    t.priority === 'high' ? 'bg-red-50 text-red-600' : t.priority === 'medium' ? 'bg-amber-50 text-amber-600' : 'bg-gray-50 text-gray-600'
+                                    t.priority === 'high' ? 'bg-red-50 text-red-600' : t.priority === 'medium' ? 'bg-[#F9F1D8] text-[#9B6B61]' : 'bg-[#F9F6EE] text-[#8D7F72]'
                                   }`}>
                                     {t.priority === 'high' ? 'فوری' : t.priority === 'medium' ? 'متوسط' : 'پایین'}
                                   </span>
@@ -888,7 +888,7 @@ export default function ProjectDetailView({
                 <div className="flex items-center gap-3">
                   <button
                     onClick={() => setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() - 1, 1))}
-                    className="p-1 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-lg"
+                    className="p-1 hover:bg-[#E6DFD3]/40 dark:hover:bg-[#2D3025] rounded-lg"
                   >
                     <ChevronLeft className="w-4 h-4 rotate-180" />
                   </button>
@@ -897,7 +897,7 @@ export default function ProjectDetailView({
                   </span>
                   <button
                     onClick={() => setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() + 1, 1))}
-                    className="p-1 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-lg"
+                    className="p-1 hover:bg-[#E6DFD3]/40 dark:hover:bg-[#2D3025] rounded-lg"
                   >
                     <ChevronLeft className="w-4 h-4" />
                   </button>
@@ -905,9 +905,9 @@ export default function ProjectDetailView({
               </div>
 
               {schedulingTaskId && (
-                <div className="bg-amber-50 border border-amber-200 text-amber-800 text-[10px] p-2.5 rounded-xl flex items-center justify-between">
+                <div className="bg-[#F9F1D8] border border-[#EBE3C8] text-[#5A5A40] text-[10px] p-2.5 rounded-xl flex items-center justify-between">
                   <span>حالت برنامه‌ریزی فعال است. برای ثبت تاریخ انجام، روی یکی از روزهای تقویم زیر کلیک کنید.</span>
-                  <button onClick={() => setSchedulingTaskId(null)} className="text-amber-900 font-bold bg-white px-2 py-0.5 rounded border">انصراف</button>
+                  <button onClick={() => setSchedulingTaskId(null)} className="text-[#5A5A40] font-bold bg-white px-2 py-0.5 rounded border">انصراف</button>
                 </div>
               )}
 
@@ -936,13 +936,13 @@ export default function ProjectDetailView({
                       className={`min-h-[70px] border rounded-xl p-1 text-right flex flex-col justify-between transition-all ${
                         cell.active 
                           ? 'bg-[#FDFBF7] dark:bg-[#121411] border-[#E6DFD3] hover:border-[#7C8363] cursor-pointer' 
-                          : 'bg-gray-50/40 dark:bg-zinc-900/10 border-transparent opacity-30 select-none'
+                          : 'bg-[#F9F6EE]/40 dark:bg-[#1B1D16]/10 border-transparent opacity-30 select-none'
                       }`}
                     >
                       {cell.active && (
                         <div className="flex justify-between items-center text-[9px] font-black text-[#8D7F72]">
                           <span>{cell.day}</span>
-                          <span className="text-[8px] text-gray-400 font-mono">{jalaliDay}</span>
+                          <span className="text-[8px] text-[#8D7F72] font-mono">{jalaliDay}</span>
                         </div>
                       )}
 
@@ -957,7 +957,7 @@ export default function ProjectDetailView({
                             }}
                             className={`text-[8px] p-1 rounded truncate leading-none font-bold select-none cursor-pointer ${
                               t.completed 
-                                ? 'bg-gray-200/60 text-gray-500 line-through' 
+                                ? 'bg-[#D6CFC3]/60 text-[#8D7F72] line-through' 
                                 : 'bg-[#E8ECE0] text-[#5A5A40] dark:bg-[#1F241A] dark:text-[#9ECE9A]'
                             }`}
                             title={t.title}
@@ -999,7 +999,7 @@ export default function ProjectDetailView({
                         onClick={() => setSchedulingTaskId(t.id)}
                         className={`px-2 py-1 text-[9px] font-black rounded-lg border transition-colors cursor-pointer shrink-0 ${
                           schedulingTaskId === t.id 
-                            ? 'bg-amber-500 text-white border-amber-600' 
+                            ? 'bg-[#9B6B61] text-white border-[#9B6B61]' 
                             : 'bg-[#7C8363] text-white hover:bg-[#5A5A40]'
                         }`}
                       >
@@ -1008,7 +1008,7 @@ export default function ProjectDetailView({
                     </div>
                   ))
                 ) : (
-                  <div className="text-center py-8 border border-dashed border-gray-200 rounded-xl text-[9px] text-gray-400">
+                  <div className="text-center py-8 border border-dashed border-[#D6CFC3] rounded-xl text-[9px] text-[#8D7F72]">
                     🎉 تمام کارهای پروژه زمان‌بندی شده‌اند!
                   </div>
                 )}
@@ -1032,7 +1032,7 @@ export default function ProjectDetailView({
               </div>
 
               {/* Milestones timeline list */}
-              <div className="space-y-6 relative border-r-2 border-gray-200 dark:border-zinc-800 pr-5 mr-3 pt-3">
+              <div className="space-y-6 relative border-r-2 border-[#D6CFC3] dark:border-[#3D4133] pr-5 mr-3 pt-3">
                 {(project.milestones || []).length > 0 ? (
                   (project.milestones || []).map((m) => {
                     const associated = tasksList.filter(t => t.milestoneId === m.id);
@@ -1052,7 +1052,7 @@ export default function ProjectDetailView({
                         <div className="flex justify-between items-start">
                           <div>
                             <div className="flex items-center gap-2">
-                              <span className={`text-xs font-black ${m.completed ? 'text-gray-400 line-through' : 'text-[#3D3D3D] dark:text-[#E8ECE0]'}`}>
+                              <span className={`text-xs font-black ${m.completed ? 'text-[#8D7F72] line-through' : 'text-[#3D3D3D] dark:text-[#E8ECE0]'}`}>
                                 {m.title}
                               </span>
                               {m.dueDate && <span className="text-[8px] bg-red-50 text-red-600 px-1.5 py-0.5 rounded">تا {m.dueDate}</span>}
@@ -1076,12 +1076,12 @@ export default function ProjectDetailView({
                         </div>
 
                         {/* Progress Bar of Milestone */}
-                        <div className="bg-[#FDFBF7] dark:bg-[#121411] p-2 rounded-xl border border-gray-100 dark:border-zinc-800 space-y-1">
-                          <div className="flex justify-between text-[8px] font-bold text-gray-500">
+                        <div className="bg-[#FDFBF7] dark:bg-[#121411] p-2 rounded-xl border border-[#E6DFD3] dark:border-[#3D4133] space-y-1">
+                          <div className="flex justify-between text-[8px] font-bold text-[#8D7F72]">
                             <span>کارهای متصل: {doneCount} از {totalCount} کار</span>
                             <span>{pct}% درصد پیشرفت</span>
                           </div>
-                          <div className="w-full bg-gray-200/50 dark:bg-zinc-800 h-1.5 rounded-full overflow-hidden">
+                          <div className="w-full bg-[#D6CFC3]/50 dark:bg-[#3D4133] h-1.5 rounded-full overflow-hidden">
                             <div className="bg-emerald-500 h-full transition-all duration-300" style={{ width: `${pct}%` }} />
                           </div>
 
@@ -1094,14 +1094,14 @@ export default function ProjectDetailView({
                                   onClick={() => setSelectedTaskForDetails(t)}
                                   className="flex items-center justify-between text-[9px] bg-white dark:bg-[#1C1D17] border p-1 rounded-lg cursor-pointer hover:border-[#7C8363]"
                                 >
-                                  <span className={`truncate ${t.completed ? 'line-through text-gray-400' : 'text-[#3D3D3D] dark:text-[#E8ECE0]'}`}>{t.title}</span>
+                                  <span className={`truncate ${t.completed ? 'line-through text-[#8D7F72]' : 'text-[#3D3D3D] dark:text-[#E8ECE0]'}`}>{t.title}</span>
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       const updated = tasksList.map(item => item.id === t.id ? { ...item, milestoneId: undefined } : item);
                                       saveTasksList(updated);
                                     }}
-                                    className="text-gray-400 hover:text-red-500 p-0.5"
+                                    className="text-[#8D7F72] hover:text-red-500 p-0.5"
                                     title="قطع ارتباط از مایلستون"
                                   >
                                     <X className="w-2.5 h-2.5" />
@@ -1110,7 +1110,7 @@ export default function ProjectDetailView({
                               ))}
                             </div>
                           ) : (
-                            <p className="text-[8px] text-gray-400 italic mt-1">هیچ کاری هنوز به این مایلستون متصل نشده است.</p>
+                            <p className="text-[8px] text-[#8D7F72] italic mt-1">هیچ کاری هنوز به این مایلستون متصل نشده است.</p>
                           )}
                         </div>
                       </div>
@@ -1180,7 +1180,7 @@ export default function ProjectDetailView({
                         </div>
                       ))
                     ) : (
-                      <p className="text-[8px] text-gray-400 italic text-center py-2">هیچ کارِ بدون مایلستونی وجود ندارد.</p>
+                      <p className="text-[8px] text-[#8D7F72] italic text-center py-2">هیچ کارِ بدون مایلستونی وجود ندارد.</p>
                     )}
                   </div>
                 </div>
@@ -1285,7 +1285,7 @@ export default function ProjectDetailView({
             >
               <div className="space-y-5">
                 {/* Close & Completed */}
-                <div className="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-zinc-800">
+                <div className="flex items-center justify-between pb-3 border-b border-[#E6DFD3] dark:border-[#3D4133]">
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => handleUpdateSingleTask({ ...selectedTaskForDetails, completed: !selectedTaskForDetails.completed })}
@@ -1293,14 +1293,14 @@ export default function ProjectDetailView({
                     >
                       {selectedTaskForDetails.completed ? <CheckSquare className="w-5 h-5 text-[#7C8363]" /> : <Square className="w-5 h-5" />}
                     </button>
-                    <span className="text-[10px] font-black text-gray-400">شناسه کار: {selectedTaskForDetails.id.split('-')[1] || 'جدید'}</span>
+                    <span className="text-[10px] font-black text-[#8D7F72]">شناسه کار: {selectedTaskForDetails.id.split('-')[1] || 'جدید'}</span>
                   </div>
 
                   <button
                     onClick={() => setSelectedTaskForDetails(null)}
-                    className="p-1 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-lg cursor-pointer"
+                    className="p-1 hover:bg-[#E6DFD3]/40 dark:hover:bg-[#2D3025] rounded-lg cursor-pointer"
                   >
-                    <X className="w-4 h-4 text-gray-400" />
+                    <X className="w-4 h-4 text-[#8D7F72]" />
                   </button>
                 </div>
 
@@ -1377,10 +1377,10 @@ export default function ProjectDetailView({
                 </div>
 
                 {/* Subtasks Section */}
-                <div className="pt-4 border-t border-gray-100 dark:border-zinc-800 space-y-3">
+                <div className="pt-4 border-t border-[#E6DFD3] dark:border-[#3D4133] space-y-3">
                   <div className="flex justify-between items-center">
                     <h4 className="text-[11px] font-black text-[#2D3025] dark:text-[#E8ECE0]">زیرلیست کارها و چک‌لیست جزئی</h4>
-                    <span className="text-[8px] text-gray-500 bg-gray-100 dark:bg-zinc-800 px-2 py-0.5 rounded-full">
+                    <span className="text-[8px] text-[#8D7F72] bg-[#E6DFD3]/40 dark:bg-[#3D4133] px-2 py-0.5 rounded-full">
                       {(selectedTaskForDetails.subTasks || []).filter(st => st.completed).length} از {(selectedTaskForDetails.subTasks || []).length} مورد
                     </span>
                   </div>
@@ -1408,7 +1408,7 @@ export default function ProjectDetailView({
                   <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
                     {(selectedTaskForDetails.subTasks || []).length > 0 ? (
                       (selectedTaskForDetails.subTasks || []).map((sub) => (
-                        <div key={sub.id} className="flex items-center justify-between p-1.5 bg-[#FDFBF7]/60 dark:bg-[#121411]/50 border border-gray-100 dark:border-zinc-800 rounded-lg">
+                        <div key={sub.id} className="flex items-center justify-between p-1.5 bg-[#FDFBF7]/60 dark:bg-[#121411]/50 border border-[#E6DFD3] dark:border-[#3D4133] rounded-lg">
                           <button
                             onClick={() => {
                               const updated = (selectedTaskForDetails.subTasks || []).map(st => st.id === sub.id ? { ...st, completed: !st.completed } : st);
@@ -1416,8 +1416,8 @@ export default function ProjectDetailView({
                             }}
                             className="flex items-center gap-2 text-right text-xs"
                           >
-                            {sub.completed ? <CheckCircle className="w-3.5 h-3.5 text-[#7C8363]" /> : <Square className="w-3.5 h-3.5 text-gray-400" />}
-                            <span className={sub.completed ? 'line-through text-gray-400' : 'text-[#3D3D3D] dark:text-[#E8ECE0]'}>{sub.title}</span>
+                            {sub.completed ? <CheckCircle className="w-3.5 h-3.5 text-[#7C8363]" /> : <Square className="w-3.5 h-3.5 text-[#8D7F72]" />}
+                            <span className={sub.completed ? 'line-through text-[#8D7F72]' : 'text-[#3D3D3D] dark:text-[#E8ECE0]'}>{sub.title}</span>
                           </button>
                           <button
                             onClick={() => {
@@ -1431,7 +1431,7 @@ export default function ProjectDetailView({
                         </div>
                       ))
                     ) : (
-                      <p className="text-[9px] text-gray-400 italic text-center py-2">هیچ موردی در چک‌لیست این کار ثبت نشده است.</p>
+                      <p className="text-[9px] text-[#8D7F72] italic text-center py-2">هیچ موردی در چک‌لیست این کار ثبت نشده است.</p>
                     )}
                   </div>
                 </div>
@@ -1460,7 +1460,7 @@ export default function ProjectDetailView({
                         const updated = { ...selectedTaskForDetails, totalTimeSpent: 0, isTracking: false, trackingStartTime: undefined };
                         handleUpdateSingleTask(updated);
                       }}
-                      className="px-3 py-1.5 border border-[#D6CFC3] text-xs font-bold rounded-xl text-gray-600 dark:text-gray-400"
+                      className="px-3 py-1.5 border border-[#D6CFC3] text-xs font-bold rounded-xl text-[#8D7F72] dark:text-[#8D7F72]"
                     >
                       بازنشانی زمان
                     </button>
@@ -1469,7 +1469,7 @@ export default function ProjectDetailView({
               </div>
 
               {/* Bottom Actions */}
-              <div className="pt-4 border-t border-gray-100 dark:border-zinc-800 flex justify-between gap-3">
+              <div className="pt-4 border-t border-[#E6DFD3] dark:border-[#3D4133] flex justify-between gap-3">
                 <button
                   onClick={() => {
                     if (confirm('آیا از حذف این کار اطمینان دارید؟')) {

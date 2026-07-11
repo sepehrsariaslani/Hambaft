@@ -25,10 +25,10 @@ const STATUS_LABELS: Record<string, string> = {
 }
 
 const STATUS_DOT: Record<string, string> = {
-  inbox: 'bg-gray-400',
+  inbox: 'bg-[#8D7F72]',
   not_started: 'bg-slate-400',
   next: 'bg-blue-400',
-  today: 'bg-amber-400',
+  today: 'bg-[#9B6B61]',
   in_progress: 'bg-orange-400',
   done: 'bg-emerald-400',
   on_hold: 'bg-purple-400',
@@ -229,7 +229,7 @@ export default function ProjectTaskTreeView({ tasks, onToggleTask, onDeleteTask,
                   {task.completed && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
                 </button>
 
-                <span className={`w-2 h-2 rounded-full shrink-0 ${STATUS_DOT[task.status || 'inbox'] || 'bg-gray-400'}`} />
+                <span className={`w-2 h-2 rounded-full shrink-0 ${STATUS_DOT[task.status || 'inbox'] || 'bg-[#8D7F72]'}`} />
 
                 {isEditing ? (
                   <div className="flex items-center gap-1 flex-1">

@@ -12,10 +12,10 @@ interface TaskTableViewProps {
 }
 
 const STATUS_OPTIONS: { value: Task['status']; label: string; color: string }[] = [
-  { value: 'inbox', label: 'صندوق ورودی', color: 'bg-gray-100 text-gray-700' },
+  { value: 'inbox', label: 'صندوق ورودی', color: 'bg-[#E6DFD3]/40 text-[#2D3025]' },
   { value: 'not_started', label: 'شروع نشده', color: 'bg-slate-100 text-slate-700' },
   { value: 'next', label: 'بعدی', color: 'bg-blue-50 text-blue-700' },
-  { value: 'today', label: 'امروز', color: 'bg-amber-50 text-amber-700' },
+  { value: 'today', label: 'امروز', color: 'bg-[#F9F1D8] text-[#5A5A40]' },
   { value: 'in_progress', label: 'در حال انجام', color: 'bg-orange-50 text-orange-700' },
   { value: 'done', label: 'انجام شده', color: 'bg-emerald-50 text-emerald-700' },
   { value: 'on_hold', label: 'متوقف', color: 'bg-purple-50 text-purple-700' },
@@ -25,7 +25,7 @@ const STATUS_OPTIONS: { value: Task['status']; label: string; color: string }[] 
 
 const PRIORITY_OPTIONS = [
   { value: 'high', label: 'بالا', color: 'bg-red-50 text-red-700' },
-  { value: 'medium', label: 'متوسط', color: 'bg-amber-50 text-amber-700' },
+  { value: 'medium', label: 'متوسط', color: 'bg-[#F9F1D8] text-[#5A5A40]' },
   { value: 'low', label: 'پایین', color: 'bg-emerald-50 text-emerald-700' },
 ]
 
@@ -117,11 +117,11 @@ export default function TaskTableView({
           case 'title': return task.title
           case 'status': {
             const opt = STATUS_OPTIONS.find(s => s.value === task.status)
-            return opt ? { label: opt.label, color: opt.color } : { label: task.status || 'صندوق ورودی', color: 'bg-gray-100 text-gray-700' }
+            return opt ? { label: opt.label, color: opt.color } : { label: task.status || 'صندوق ورودی', color: 'bg-[#E6DFD3]/40 text-[#2D3025]' }
           }
           case 'priority': {
             const opt = PRIORITY_OPTIONS.find(p => p.value === task.priority)
-            return opt ? { label: opt.label, color: opt.color } : { label: 'متوسط', color: 'bg-amber-50 text-amber-700' }
+            return opt ? { label: opt.label, color: opt.color } : { label: 'متوسط', color: 'bg-[#F9F1D8] text-[#5A5A40]' }
           }
           case 'category': {
             const opt = CATEGORY_OPTIONS.find(c => c.value === task.category)

@@ -12,9 +12,9 @@ export const IMPORTANCE_CONFIG: Record<ImportanceLevel, { label: string; shortLa
   milestone: {
     label: 'نقطه‌عطف',
     shortLabel: 'نقطه‌عطف',
-    color: 'text-amber-900',
-    bgColor: 'bg-amber-100',
-    borderColor: 'border-amber-300',
+    color: 'text-[#5A5A40]',
+    bgColor: 'bg-[#F9F1D8]',
+    borderColor: 'border-[#EBE3C8]',
     icon: '◆',
   },
   key: {
@@ -28,9 +28,9 @@ export const IMPORTANCE_CONFIG: Record<ImportanceLevel, { label: string; shortLa
   normal: {
     label: 'عادی',
     shortLabel: 'عادی',
-    color: 'text-gray-600',
-    bgColor: 'bg-gray-100',
-    borderColor: 'border-gray-300',
+    color: 'text-[#8D7F72]',
+    bgColor: 'bg-[#E6DFD3]/40',
+    borderColor: 'border-[#D6CFC3]',
     icon: '○',
   },
 }
@@ -96,7 +96,7 @@ const healthStateLabels: Record<string, string> = {
 
 const healthStateColors: Record<string, { bg: string; text: string; border: string }> = {
   در_مسیر: { bg: 'bg-emerald-50', text: 'text-emerald-800', border: 'border-emerald-200' },
-  در_خطر: { bg: 'bg-amber-50', text: 'text-amber-800', border: 'border-amber-200' },
+  در_خطر: { bg: 'bg-[#F9F1D8]', text: 'text-[#5A5A40]', border: 'border-[#EBE3C8]' },
   خارج_از_مسیر: { bg: 'bg-red-50', text: 'text-red-800', border: 'border-red-200' },
   نیاز_به_بررسی: { bg: 'bg-yellow-50', text: 'text-yellow-800', border: 'border-yellow-200' },
 }
@@ -110,7 +110,7 @@ const contributionTypeLabels: Record<string, string> = {
 const contributionTypeColors: Record<string, string> = {
   اجباری: 'bg-red-100 text-red-800 border-red-200',
   پیشنهادی: 'bg-blue-100 text-blue-800 border-blue-200',
-  پشتیبان: 'bg-gray-100 text-gray-600 border-gray-200',
+  پشتیبان: 'bg-[#E6DFD3]/40 text-[#8D7F72] border-[#D6CFC3]',
 }
 
 export function TaskImpactBanner({ task }: { task: Task }) {
@@ -160,7 +160,7 @@ export function TaskImpactBanner({ task }: { task: Task }) {
           <span className="text-[#9D978B]">نقش در هدف:</span>
           <ImportanceBadge importance={task.importance} size="xs" />
           {task.importance === 'milestone' && (
-            <span className="text-amber-700">— تکمیل این نقطه‌عطف تأثیر مستقیم روی پیشرفت هدف دارد</span>
+            <span className="text-[#5A5A40]">— تکمیل این نقطه‌عطف تأثیر مستقیم روی پیشرفت هدف دارد</span>
           )}
           {task.importance === 'key' && (
             <span className="text-blue-700">— این تسک کلیدی است و در سیگنال کلیدی هدف حساب می‌شود</span>
@@ -236,13 +236,13 @@ export function ImpactScoreBadge({ score }: { score?: number }) {
   let color: string
   let label: string
   if (score >= 60) {
-    color = 'bg-amber-100 text-amber-800 border-amber-300'
+    color = 'bg-[#F9F1D8] text-[#5A5A40] border-[#EBE3C8]'
     label = 'تأثیر بالا'
   } else if (score >= 30) {
     color = 'bg-blue-100 text-blue-800 border-blue-300'
     label = 'تأثیر متوسط'
   } else {
-    color = 'bg-gray-100 text-gray-600 border-gray-300'
+    color = 'bg-[#E6DFD3]/40 text-[#8D7F72] border-[#D6CFC3]'
     label = ''
   }
   return (

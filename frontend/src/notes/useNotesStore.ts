@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import type { Block, BlockType, NotePage } from './types'
-import { call } from '../app/frappe'
+import { callGet } from '../app/frappe'
 
 let GLOBAL_PAGES: NotePage[] = []
 let LISTENERS: (() => void)[] = []
@@ -32,7 +32,7 @@ export function createDefaultPage(title = 'بدون عنوان'): NotePage {
 
 async function apiGetPages(): Promise<NotePage[]> {
   try {
-    const res = await call<{ data?: { pages?: any[] } }>('hambaft.hambaft.api.get_note_pages', { limit: 200 })
+    const res = await callGet<{ data?: { pages?: any[] } }>('hambaft.hambaft.api.get_note_pages', { limit: 200 })
     const rows = res?.data?.pages || []
     return rows.map((row: any) => ({
       id: row.name,

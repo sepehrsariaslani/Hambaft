@@ -4,6 +4,7 @@ import { GOAL_CATEGORY_LABELS } from '../initialData';
 import PersianDatePicker from './PersianDatePicker';
 import ViewSwitcher, { type ViewMode } from './ViewSwitcher';
 import GoalKanbanView from './GoalKanbanView';
+import SectionHeader from './SectionHeader';
 import { 
   Target, 
   Calendar, 
@@ -283,30 +284,35 @@ export default function GoalDashboard({
   const totalCompletionRatio = totalMilestones > 0 ? Math.round((completedMilestones / totalMilestones) * 100) : 0;
 
   return (
-    <div className="space-y-5 text-right pb-10" dir="rtl" id="goal-dashboard-container">
+    <div className="space-y-5 text-right pb-8" dir="rtl" id="goal-dashboard-container">
       
       {/* 1. Header with Back Button */}
-      <div className="flex justify-between items-center bg-[#FDFBF7] py-2 border-b border-[#E6DFD3]/40" id="goal-header">
-        <div className="flex items-center gap-1.5">
-          <button 
-            id="back-to-home-btn"
-            onClick={() => setActiveTab('dashboard')}
-            className="p-1.5 bg-[#F9F6EE] hover:bg-[#E6DFD3]/60 border border-[#E6DFD3] rounded-xl text-[#8D7F72] transition-all cursor-pointer"
-          >
-            <ArrowRight className="w-4 h-4" />
-          </button>
-          <h2 className="text-sm font-extrabold text-[#2D3025] font-serif-elegant">داشبورد اهداف</h2>
-        </div>
-
-        <button 
-          id="toggle-inline-goal-form-btn"
-          onClick={() => setShowAddInline(!showAddInline)}
-          className="bg-[#7C8363] hover:bg-[#5A5A40] text-white text-[10px] font-bold px-3 py-1.5 rounded-xl transition-all shadow-xs flex items-center gap-1 cursor-pointer"
-        >
-          <PlusCircle className="w-3.5 h-3.5" />
-          <span>هدف جدید</span>
-        </button>
-      </div>
+      <SectionHeader
+        icon={Target}
+        title="داشبورد اهداف"
+        subtitle={`${activeGoalsCount} هدف فعال · ${totalCompletionRatio}% پیشرفت`}
+        badge={activeGoalsCount}
+        badgeVariant="default"
+        actions={
+          <>
+            <button 
+              id="back-to-home-btn"
+              onClick={() => setActiveTab('dashboard')}
+              className="p-1.5 bg-[#F9F6EE] dark:bg-[#151713] hover:bg-[#E6DFD3]/60 dark:hover:bg-[#2D3025]/60 border border-[#E6DFD3] dark:border-[#3D4133] rounded-xl text-[#8D7F72] dark:text-[#9D978B] transition-all cursor-pointer"
+            >
+              <ArrowRight className="w-4 h-4" />
+            </button>
+            <button 
+              id="toggle-inline-goal-form-btn"
+              onClick={() => setShowAddInline(!showAddInline)}
+              className="bg-[#7C8363] hover:bg-[#5A5A40] text-white text-[10px] font-bold px-3 py-1.5 rounded-xl transition-all shadow-xs flex items-center gap-1 cursor-pointer"
+            >
+              <PlusCircle className="w-3.5 h-3.5" />
+              <span>هدف جدید</span>
+            </button>
+          </>
+        }
+      />
 
       {/* Inline Goal Form */}
       <AnimatePresence>
@@ -490,7 +496,7 @@ export default function GoalDashboard({
             const getHealthBadge = (state?: string) => {
               switch (state) {
                 case 'on_track': return { label: 'در مسیر', color: 'bg-emerald-50 border-emerald-200 text-emerald-700' };
-                case 'at_risk': return { label: 'در خطر', color: 'bg-amber-50 border-amber-200 text-amber-700' };
+                case 'at_risk': return { label: 'در خطر', color: 'bg-[#F9F1D8] border-[#EBE3C8] text-[#5A5A40]' };
                 case 'off_track': return { label: 'خارج از مسیر', color: 'bg-red-50 border-red-200 text-red-700' };
                 case 'needs_review': return { label: 'نیاز به بررسی', color: 'bg-slate-50 border-slate-200 text-slate-600' };
                 default: return null;
@@ -953,7 +959,7 @@ export default function GoalDashboard({
                                             {habit.name}
                                           </h5>
                                           <span className="bg-[#FDFBF7] border border-[#E6DFD3] text-[#8D7F72] text-[8px] px-1.5 py-0.5 rounded-full font-bold flex items-center gap-0.5 shrink-0 font-mono">
-                                            <Flame className="w-2.5 h-2.5 text-amber-500 fill-amber-100" />
+                                            <Flame className="w-2.5 h-2.5 text-[#9B6B61] fill-[#F4E9E4]" />
                                             <span>{habit.streak} روز</span>
                                           </span>
                                         </div>
@@ -1253,7 +1259,7 @@ export default function GoalDashboard({
                             className={`text-[9px] font-bold px-2 py-0.5 rounded-lg border cursor-pointer ${
                               goal.completed
                                 ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
-                                : 'bg-amber-50 border-amber-200 text-amber-700'
+                                : 'bg-[#F9F1D8] border-[#EBE3C8] text-[#5A5A40]'
                             }`}
                           >
                             {goal.completed ? 'تکمیل' : 'جاری'}

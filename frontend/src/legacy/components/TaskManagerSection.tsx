@@ -50,9 +50,9 @@ const categoryColors: Record<string, string> = {
   work: 'bg-blue-50 text-blue-700 border-blue-200',
   personal: 'bg-purple-50 text-purple-700 border-purple-200',
   health: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  finance: 'bg-amber-50 text-amber-700 border-amber-200',
+  finance: 'bg-[#F9F1D8] text-[#5A5A40] border-[#EBE3C8]',
   learning: 'bg-indigo-50 text-indigo-700 border-indigo-200',
-  other: 'bg-gray-50 text-gray-600 border-gray-200',
+  other: 'bg-[#F9F6EE] text-[#8D7F72] border-[#D6CFC3]',
 }
 
 function collectAllTasks(tasks: Task[], goals: Goal[]): Array<Task & { sourceGoal?: string; sourceProject?: string }> {
@@ -262,7 +262,7 @@ export default function TaskManagerSection({
         <StatCard label="انجام‌شده" value={stats.completed} color="bg-[#7C8363] text-white" />
         <StatCard label="تاریخ گذشته" value={stats.overdue} color="bg-[#c44a3d] text-white" />
         <StatCard label="اولویت بالا" value={stats.highPriority} color="bg-[#d4a017] text-white" />
-        <StatCard label="نقطه‌عطف" value={stats.milestones} color="bg-amber-700 text-white" />
+        <StatCard label="نقطه‌عطف" value={stats.milestones} color="bg-[#9B6B61] text-white" />
         <StatCard label="کلیدی" value={stats.keyTasks} color="bg-blue-700 text-white" />
         <StatCard label="مسدود" value={stats.blocked} color="bg-red-600 text-white" />
       </div>

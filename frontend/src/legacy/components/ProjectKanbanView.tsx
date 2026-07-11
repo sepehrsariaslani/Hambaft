@@ -11,7 +11,7 @@ interface ProjectKanbanViewProps {
 const columns: Record<string, { label: string; color: string; border: string }> = {
   waiting: { label: '⏳ در انتظار شروع', color: 'bg-slate-50/50', border: 'border-slate-200' },
   in_progress: { label: '🚀 در حال اقدام', color: 'bg-blue-50/50', border: 'border-blue-200' },
-  paused: { label: '⏸️ متوقف شده', color: 'bg-amber-50/50', border: 'border-amber-200' },
+  paused: { label: '⏸️ متوقف شده', color: 'bg-[#F9F1D8]/50', border: 'border-[#EBE3C8]' },
   completed: { label: '✅ تکمیل شده', color: 'bg-emerald-50/50', border: 'border-emerald-200' },
 }
 

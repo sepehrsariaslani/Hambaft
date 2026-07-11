@@ -63,18 +63,18 @@ type PlannerBucket = 'inbox' | 'today' | 'next' | 'scheduled' | 'someday' | 'ove
 type PlannerView = 'buckets' | 'timeline' | 'week' | 'month' | 'board' | 'areas'
 
 const BUCKETS: { id: PlannerBucket; label: string; icon: React.ReactNode; color: string }[] = [
-  { id: 'inbox', label: 'صندوق ورودی', icon: <Inbox className="w-4 h-4" />, color: 'text-amber-600' },
+  { id: 'inbox', label: 'صندوق ورودی', icon: <Inbox className="w-4 h-4" />, color: 'text-[#9B6B61]' },
   { id: 'today', label: 'امروز', icon: <Sunrise className="w-4 h-4" />, color: 'text-emerald-600' },
   { id: 'next', label: 'بعدی', icon: <ArrowRight className="w-4 h-4" />, color: 'text-blue-600' },
   { id: 'scheduled', label: 'زمان‌بندی‌شده', icon: <CalendarDays className="w-4 h-4" />, color: 'text-purple-600' },
-  { id: 'someday', label: 'شاید', icon: <Archive className="w-4 h-4" />, color: 'text-gray-500' },
+  { id: 'someday', label: 'شاید', icon: <Archive className="w-4 h-4" />, color: 'text-[#8D7F72]' },
   // Saved filter views
   { id: 'overdue', label: 'تاریخ‌گذشته', icon: <AlertCircle className="w-4 h-4" />, color: 'text-red-600' },
-  { id: 'high_impact', label: 'تأثیر بالا', icon: <BarChart3 className="w-4 h-4" />, color: 'text-amber-700' },
-  { id: 'milestone', label: 'نقاط عطف', icon: <CheckCircle2 className="w-4 h-4" />, color: 'text-amber-600' },
+  { id: 'high_impact', label: 'تأثیر بالا', icon: <BarChart3 className="w-4 h-4" />, color: 'text-[#5A5A40]' },
+  { id: 'milestone', label: 'نقاط عطف', icon: <CheckCircle2 className="w-4 h-4" />, color: 'text-[#9B6B61]' },
   { id: 'key', label: 'کلیدی', icon: <SkipForward className="w-4 h-4" />, color: 'text-blue-700' },
   { id: 'blocked', label: 'مسدود', icon: <AlertCircle className="w-4 h-4" />, color: 'text-orange-600' },
-  { id: 'unscheduled', label: 'بدون برنامه', icon: <Layers className="w-4 h-4" />, color: 'text-gray-400' },
+  { id: 'unscheduled', label: 'بدون برنامه', icon: <Layers className="w-4 h-4" />, color: 'text-[#8D7F72]' },
 ]
 
 const VIEW_TABS: { id: PlannerView; label: string; icon: React.ReactNode }[] = [
@@ -99,14 +99,14 @@ const STATUS_LABELS: Record<string, string> = {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  inbox: 'bg-amber-50 text-amber-700 border-amber-200',
-  not_started: 'bg-gray-50 text-gray-600 border-gray-200',
+  inbox: 'bg-[#F9F1D8] text-[#5A5A40] border-[#EBE3C8]',
+  not_started: 'bg-[#F9F6EE] text-[#8D7F72] border-[#D6CFC3]',
   next: 'bg-blue-50 text-blue-700 border-blue-200',
   today: 'bg-emerald-50 text-emerald-700 border-emerald-200',
   in_progress: 'bg-indigo-50 text-indigo-700 border-indigo-200',
   done: 'bg-green-50 text-green-700 border-green-200 line-through',
   on_hold: 'bg-orange-50 text-orange-700 border-orange-200',
-  someday: 'bg-gray-50 text-gray-500 border-gray-200',
+  someday: 'bg-[#F9F6EE] text-[#8D7F72] border-[#D6CFC3]',
   dropped: 'bg-red-50 text-red-700 border-red-200 line-through',
 }
 
@@ -118,8 +118,8 @@ const PRIORITY_LABELS: Record<string, string> = {
 }
 
 const PRIORITY_COLORS: Record<string, string> = {
-  low: 'bg-gray-50 text-gray-500',
-  medium: 'bg-amber-50 text-amber-600',
+  low: 'bg-[#F9F6EE] text-[#8D7F72]',
+  medium: 'bg-[#F9F1D8] text-[#9B6B61]',
   high: 'bg-red-50 text-red-600',
   urgent: 'bg-red-100 text-red-700 font-black',
 }
@@ -726,7 +726,7 @@ export default function PlannerSection({ initialView, onNavigate }: PlannerSecti
                             t.status === 'done' ? 'bg-emerald-400' :
                             t.status === 'today' ? 'bg-[#7C8363]' :
                             t.status === 'in_progress' ? 'bg-indigo-400' :
-                            'bg-amber-400'
+                            'bg-[#9B6B61]'
                           }`}
                         />
                       ))}
@@ -772,7 +772,7 @@ export default function PlannerSection({ initialView, onNavigate }: PlannerSecti
                         {STATUS_LABELS[status]}
                       </span>
                       {milestoneCount > 0 && (
-                        <span className="text-[9px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">◆ {milestoneCount}</span>
+                        <span className="text-[9px] font-bold bg-[#F9F1D8] text-[#5A5A40] px-1.5 py-0.5 rounded-full">◆ {milestoneCount}</span>
                       )}
                       {keyCount > 0 && (
                         <span className="text-[9px] font-bold bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full">★ {keyCount}</span>
@@ -872,7 +872,7 @@ export default function PlannerSection({ initialView, onNavigate }: PlannerSecti
                         <span className="text-[8px] font-bold text-emerald-600">✓{area.goal_health_counts.on_track}</span>
                       ) : null}
                       {area.goal_health_counts.at_risk ? (
-                        <span className="text-[8px] font-bold text-amber-600">⚠{area.goal_health_counts.at_risk}</span>
+                        <span className="text-[8px] font-bold text-[#9B6B61]">⚠{area.goal_health_counts.at_risk}</span>
                       ) : null}
                       {area.goal_health_counts.off_track ? (
                         <span className="text-[8px] font-bold text-red-600">⊘{area.goal_health_counts.off_track}</span>
@@ -889,7 +889,7 @@ export default function PlannerSection({ initialView, onNavigate }: PlannerSecti
                   <div className="bg-[#F9F6EE] dark:bg-[#121411] rounded-xl p-2 text-center col-span-2">
                     <div className="flex justify-center gap-3">
                       {area.milestone_total > 0 && (
-                        <span className="text-[10px] font-bold text-amber-700">◆ {area.milestone_done ?? 0}/{area.milestone_total}</span>
+                        <span className="text-[10px] font-bold text-[#5A5A40]">◆ {area.milestone_done ?? 0}/{area.milestone_total}</span>
                       )}
                       {area.key_total > 0 && (
                         <span className="text-[10px] font-bold text-blue-700">★ {area.key_done ?? 0}/{area.key_total}</span>

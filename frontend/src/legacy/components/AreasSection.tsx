@@ -304,7 +304,7 @@ export default function AreasSection({ areas, goals, tasks, onSelectGoal, onSele
                           <span className="text-[10px] font-bold bg-blue-50 text-blue-700 px-2 py-1 rounded-lg">{s.activeProjectCount ?? s.projectCount} پروژه</span>
                         )}
                         {(s.milestoneTotal ?? 0) > 0 && (
-                          <span className="text-[10px] font-bold bg-amber-50 text-amber-700 px-2 py-1 rounded-lg">◆ {s.milestoneDone ?? 0}/{s.milestoneTotal}</span>
+                          <span className="text-[10px] font-bold bg-[#F9F1D8] text-[#5A5A40] px-2 py-1 rounded-lg">◆ {s.milestoneDone ?? 0}/{s.milestoneTotal}</span>
                         )}
                         {(s.keyTotal ?? 0) > 0 && (
                           <span className="text-[10px] font-bold bg-blue-50 text-blue-700 px-2 py-1 rounded-lg">★ {s.keyDone ?? 0}/{s.keyTotal}</span>
@@ -356,7 +356,7 @@ export default function AreasSection({ areas, goals, tasks, onSelectGoal, onSele
                           {(goal.linkedFinanceAccounts?.length || 0) > 0 && (
                             <span className="text-[8px]" title={`${goal.linkedFinanceAccounts!.length} حساب مالی`}>💳</span>
                           )}
-                          <span className={`text-[9px] font-bold px-2 py-0.5 rounded ${goal.completed ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+                          <span className={`text-[9px] font-bold px-2 py-0.5 rounded ${goal.completed ? 'bg-emerald-50 text-emerald-700' : 'bg-[#F9F1D8] text-[#5A5A40]'}`}>
                             {goal.completed ? 'تکمیل' : 'در حال پیشرفت'}
                           </span>
                         </div>
@@ -444,7 +444,7 @@ export default function AreasSection({ areas, goals, tasks, onSelectGoal, onSele
                       <td className="px-4 py-3 font-mono text-[#9B6B61]">{ap.length}</td>
                       <td className="px-4 py-3 font-mono text-[#5A5A40]">{at.length}</td>
                       <td className="px-4 py-3">
-                        <span className="text-[10px] font-bold bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded">
+                        <span className="text-[10px] font-bold bg-[#F9F1D8] text-[#5A5A40] px-1.5 py-0.5 rounded">
                           {(milestoneDone ?? 0)}/{milestoneTotal ?? 0} ◆
                         </span>
                       </td>
@@ -513,7 +513,7 @@ export default function AreasSection({ areas, goals, tasks, onSelectGoal, onSele
                     <span className="text-[11px] font-bold text-[#2D3025] dark:text-[#E8ECE0] block">{goal.title}</span>
                     <div className="flex items-center gap-2">
                       <span className="text-[9px] text-[#8D7F72]">{(goal.projects || []).length} پروژه</span>
-                      <span className={`text-[9px] px-1.5 py-0.5 rounded ${goal.completed ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+                      <span className={`text-[9px] px-1.5 py-0.5 rounded ${goal.completed ? 'bg-emerald-50 text-emerald-700' : 'bg-[#F9F1D8] text-[#5A5A40]'}`}>
                         {goal.completed ? 'تکمیل' : 'فعال'}
                       </span>
                     </div>

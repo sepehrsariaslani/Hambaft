@@ -1656,7 +1656,7 @@ export default function CalendarSection({
                         details: tk,
                         styleClass: (isSelected 
                           ? 'bg-white/20 border-white/30 text-white hover:bg-white/30 font-bold' 
-                          : 'bg-amber-50 border-amber-100 text-amber-800 hover:border-amber-400') + (tk.completed ? ' line-through opacity-60' : '')
+                          : 'bg-[#F9F1D8] border-[#EBE3C8] text-[#5A5A40] hover:border-[#9B6B61]') + (tk.completed ? ' line-through opacity-60' : '')
                       });
                     });
                   }
@@ -1854,7 +1854,7 @@ export default function CalendarSection({
                       onClick={() => setTimelineFullDay(prev => !prev)}
                       className={`px-3 py-1.5 rounded-xl text-[10px] font-black border transition-all flex items-center gap-1.5 cursor-pointer ${
                         timelineFullDay
-                          ? 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 border-amber-300/30'
+                          ? 'bg-[#9B6B61]/10 hover:bg-[#9B6B61]/20 text-[#9B6B61] border-[#9B6B61]/30'
                           : 'bg-white dark:bg-[#1B1D16] border-[#E6DFD3] dark:border-[#3D4133]/50 text-[#8D7F72] hover:border-[#7C8363]'
                       }`}
                     >
@@ -2167,8 +2167,8 @@ export default function CalendarSection({
                                     }}
                                     className={`absolute rounded-xl border shadow-2xs flex flex-col justify-between overflow-hidden cursor-move select-none group transition-all hover:shadow-sm hover:z-20 ${
                                       tk.completed
-                                        ? 'bg-gray-100 dark:bg-[#2D2F2A] border-gray-300 dark:border-gray-700 text-gray-400 dark:text-gray-500 line-through opacity-70'
-                                        : 'bg-amber-50 dark:bg-[#322A1E] border-amber-200 dark:border-amber-900 text-amber-800 dark:text-amber-200'
+                                        ? 'bg-[#E6DFD3]/40 dark:bg-[#2D3025] border-[#D6CFC3] dark:border-[#3D4133] text-[#8D7F72] dark:text-[#9D978B] line-through opacity-70'
+                                        : 'bg-[#F9F1D8] dark:bg-[#201D13] border-[#EBE3C8] dark:border-[#3D3929] text-[#5A5A40] dark:text-[#C59B93]'
                                     } ${
                                       heightPx < 32 ? 'py-0.5 px-1.5' : heightPx < 50 ? 'p-1' : 'p-2'
                                     }`}
@@ -2181,13 +2181,13 @@ export default function CalendarSection({
                                   >
                                     <div 
                                       onMouseDown={(e) => startResize(e, tk, 'task', 'top')} 
-                                      className="absolute top-0 inset-x-0 h-1 cursor-ns-resize bg-amber-500/20 opacity-0 group-hover:opacity-100 transition-opacity z-10" 
+                                      className="absolute top-0 inset-x-0 h-1 cursor-ns-resize bg-[#9B6B61]/20 opacity-0 group-hover:opacity-100 transition-opacity z-10" 
                                     />
 
                                     {heightPx < 32 ? (
                                       <div className="flex items-center justify-between text-[8px] font-black w-full truncate leading-none">
                                         <span className="truncate flex items-center gap-1">
-                                          <span className={`w-1 h-1 rounded-full ${tk.completed ? 'bg-gray-400' : 'bg-amber-500 animate-pulse'}`} />
+                                          <span className={`w-1 h-1 rounded-full ${tk.completed ? 'bg-[#8D7F72]' : 'bg-[#9B6B61] animate-pulse'}`} />
                                           {tk.title}
                                         </span>
                                         <span className="font-mono shrink-0 font-bold opacity-80">{toPersianDigits(activeTime)}</span>
@@ -2200,7 +2200,7 @@ export default function CalendarSection({
                                             <span>({toPersianDigits(activeDuration)}ساعت)</span>
                                           </div>
                                           <h4 className="text-[9px] font-black truncate leading-tight flex items-center gap-1">
-                                            <span className={`w-1.5 h-1.5 rounded-full ${tk.completed ? 'bg-gray-400' : 'bg-amber-500 animate-pulse'}`} />
+                                            <span className={`w-1.5 h-1.5 rounded-full ${tk.completed ? 'bg-[#8D7F72]' : 'bg-[#9B6B61] animate-pulse'}`} />
                                             {tk.title}
                                           </h4>
                                         </div>
@@ -2209,14 +2209,14 @@ export default function CalendarSection({
 
                                     {heightPx >= 45 && (
                                       <div className="flex justify-between items-center mt-1">
-                                        <span className="text-[7px] font-black bg-amber-150 dark:bg-amber-900/50 px-1 py-0.5 rounded text-amber-700 dark:text-amber-300 shrink-0">تسک</span>
+                                        <span className="text-[7px] font-black bg-[#F9F1D8] dark:bg-[#201D13] px-1 py-0.5 rounded text-[#5A5A40] dark:text-[#C59B93] shrink-0">تسک</span>
                                         <Move className="w-2 h-2 opacity-30 group-hover:opacity-100 transition-opacity" />
                                       </div>
                                     )}
 
                                     <div 
                                       onMouseDown={(e) => startResize(e, tk, 'task', 'bottom')} 
-                                      className="absolute bottom-0 inset-x-0 h-1 cursor-ns-resize bg-amber-500/20 opacity-0 group-hover:opacity-100 transition-opacity z-10" 
+                                      className="absolute bottom-0 inset-x-0 h-1 cursor-ns-resize bg-[#9B6B61]/20 opacity-0 group-hover:opacity-100 transition-opacity z-10" 
                                     />
                                   </div>
                                 );
@@ -2453,12 +2453,12 @@ export default function CalendarSection({
                     {selectedDayEvents.map(ev => (
                       <div key={ev.id} className="p-3 bg-white border border-[#E6DFD3] rounded-xl flex justify-between items-center text-xs">
                         <span className="font-bold text-teal-800">📅 {ev.title}</span>
-                        <span className="font-mono text-[10px] text-gray-500 bg-[#F9F6EE] px-2 py-0.5 rounded-lg">{toPersianDigits(ev.time)}</span>
+                        <span className="font-mono text-[10px] text-[#8D7F72] bg-[#F9F6EE] px-2 py-0.5 rounded-lg">{toPersianDigits(ev.time)}</span>
                       </div>
                     ))}
                     {selectedDayTasks.map(tk => (
                       <div key={tk.id} className="p-3 bg-white border border-[#E6DFD3] rounded-xl flex justify-between items-center text-xs">
-                        <span className="font-bold text-amber-800">📋 {tk.title}</span>
+                        <span className="font-bold text-[#5A5A40]">📋 {tk.title}</span>
                         <span className="text-[10px] text-[#8D7F72] font-bold">مهلت کار</span>
                       </div>
                     ))}
@@ -2870,7 +2870,7 @@ export default function CalendarSection({
                         type="button"
                         onClick={() => setFinanceType('expense')}
                         className={`py-1 text-[9px] font-bold rounded-lg cursor-pointer transition-all ${
-                          financeType === 'expense' ? 'bg-[#9B6B61] text-white' : 'text-gray-600'
+                          financeType === 'expense' ? 'bg-[#9B6B61] text-white' : 'text-[#8D7F72]'
                         }`}
                       >
                         هزینه / خرج
@@ -2879,7 +2879,7 @@ export default function CalendarSection({
                         type="button"
                         onClick={() => setFinanceType('income')}
                         className={`py-1 text-[9px] font-bold rounded-lg cursor-pointer transition-all ${
-                          financeType === 'income' ? 'bg-emerald-600 text-white' : 'text-gray-600'
+                          financeType === 'income' ? 'bg-emerald-600 text-white' : 'text-[#8D7F72]'
                         }`}
                       >
                         درآمد
@@ -2969,7 +2969,7 @@ export default function CalendarSection({
                       draggable
                       onDragStart={(e) => handleDragStart(e, ev.id, 'event')}
                       className={`p-2.5 rounded-xl border text-xs flex justify-between items-center transition-all ${
-                        ev.completed ? 'opacity-40 bg-gray-100' : CATEGORY_STYLES[ev.category] || CATEGORY_STYLES.purple
+                        ev.completed ? 'opacity-40 bg-[#E6DFD3]/40' : CATEGORY_STYLES[ev.category] || CATEGORY_STYLES.purple
                       }`}
                     >
                       <div className="flex items-center gap-1.5 min-w-0">
@@ -2977,14 +2977,14 @@ export default function CalendarSection({
                         <button
                           onClick={() => onToggleScheduleItem(ev.id)}
                           className={`w-4 h-4 rounded-full border flex items-center justify-center bg-white shrink-0 ${
-                            ev.completed ? 'bg-teal-700 border-teal-700 text-white' : 'border-gray-300'
+                            ev.completed ? 'bg-teal-700 border-teal-700 text-white' : 'border-[#D6CFC3]'
                           }`}
                         >
                           {ev.completed && <Check className="w-2.5 h-2.5" />}
                         </button>
                         <div className="truncate">
-                          <span className={`font-extrabold truncate block ${ev.completed ? 'line-through text-gray-400' : ''}`}>{ev.title}</span>
-                          {hasEnd && <span className="text-[7px] text-gray-500 font-bold">مدت: چند روزه</span>}
+                          <span className={`font-extrabold truncate block ${ev.completed ? 'line-through text-[#8D7F72]' : ''}`}>{ev.title}</span>
+                          {hasEnd && <span className="text-[7px] text-[#8D7F72] font-bold">مدت: چند روزه</span>}
                         </div>
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0">
@@ -3034,7 +3034,7 @@ export default function CalendarSection({
 
           {/* C. Tasks */}
           <div className="space-y-2">
-            <span className="text-[10px] text-amber-700 font-black block border-b border-[#E6DFD3]/40 pb-1">📋 مهلت کارهای روز منتخب:</span>
+            <span className="text-[10px] text-[#5A5A40] font-black block border-b border-[#E6DFD3]/40 pb-1">📋 مهلت کارهای روز منتخب:</span>
             {selectedDayTasks.length === 0 ? (
               <span className="text-[10px] text-[#8D7F72] block">کاری برای امروز تعریف نشده است.</span>
             ) : (
@@ -3051,12 +3051,12 @@ export default function CalendarSection({
                       <button
                         onClick={() => handleToggleTaskWrap(tk.id)}
                         className={`w-4 h-4 rounded border-2 shrink-0 ${
-                          tk.completed ? 'bg-[#7C8363] border-[#7C8363]' : 'border-amber-500'
+                          tk.completed ? 'bg-[#7C8363] border-[#7C8363]' : 'border-[#9B6B61]'
                         }`}
                       >
                         {tk.completed && <Check className="w-2.5 h-2.5 text-white" />}
                       </button>
-                      <span className={`font-extrabold truncate ${tk.completed ? 'line-through text-gray-400' : 'text-[#2D3025]'}`}>{tk.title}</span>
+                      <span className={`font-extrabold truncate ${tk.completed ? 'line-through text-[#8D7F72]' : 'text-[#2D3025]'}`}>{tk.title}</span>
                     </div>
                     {onDeleteTask && (
                       <button onClick={() => handleDeleteTaskWrap(tk.id)} className="text-red-700 opacity-60 hover:opacity-100 p-1">
@@ -3104,7 +3104,7 @@ export default function CalendarSection({
                 <div className="flex items-center gap-3 border-b border-[#E6DFD3]/40 pb-3">
                   <div className={`p-2.5 rounded-2xl shrink-0 ${
                     type === 'event' ? 'bg-[#E8ECE0] text-[#7C8363]' :
-                    type === 'task' ? 'bg-amber-50 text-amber-600' :
+                    type === 'task' ? 'bg-[#F9F1D8] text-[#9B6B61]' :
                     type === 'finance' ? 'bg-rose-50 text-[#9B6B61]' :
                     type === 'habit' ? 'bg-emerald-50 text-emerald-600' :
                     type === 'meal' ? 'bg-emerald-50 text-emerald-600' :
@@ -3138,28 +3138,28 @@ export default function CalendarSection({
                     <>
                       {liveItem.isOccasion ? (
                         <>
-                          <div className="p-3 bg-[#FDFBF7] rounded-xl text-gray-700 space-y-1 border border-[#E6DFD3]">
+                          <div className="p-3 bg-[#FDFBF7] rounded-xl text-[#2D3025] space-y-1 border border-[#E6DFD3]">
                             <div className="font-bold text-[#2D3025] flex items-center gap-1">
                               <span>🎈</span>
                               <span>مناسبت خاص</span>
                             </div>
-                            <p className="text-xs text-gray-600">نوع مناسبت: {
+                            <p className="text-xs text-[#8D7F72]">نوع مناسبت: {
                               liveItem.originalOccasion?.type === 'birthday' ? 'تولد 🎂' :
                               liveItem.originalOccasion?.type === 'anniversary' ? 'سالگرد 💖' :
                               liveItem.originalOccasion?.type === 'deadline' ? 'ضرب‌الاجل ⏰' :
                               liveItem.originalOccasion?.type === 'reminder' ? 'یادآوری 🔔' : 'بیمه / رویداد خاص 🛡️'
                             }</p>
-                            {liveItem.originalOccasion?.person && <p className="text-xs text-gray-600">شخص مرتبط: {liveItem.originalOccasion.person}</p>}
-                            <p className="text-xs text-gray-600">تکرار: {
+                            {liveItem.originalOccasion?.person && <p className="text-xs text-[#8D7F72]">شخص مرتبط: {liveItem.originalOccasion.person}</p>}
+                            <p className="text-xs text-[#8D7F72]">تکرار: {
                               liveItem.originalOccasion?.recurrenceType === 'yearly' ? 'سالانه (هر سال)' :
                               liveItem.originalOccasion?.recurrenceType === 'monthly' ? 'ماهانه' : 'یک‌باره'
                             }</p>
                           </div>
-                          {liveItem.desc && <div className="p-3 bg-[#F9F6EE] rounded-xl text-gray-700">{liveItem.desc}</div>}
+                          {liveItem.desc && <div className="p-3 bg-[#F9F6EE] rounded-xl text-[#2D3025]">{liveItem.desc}</div>}
                         </>
                       ) : (
                         <>
-                          {liveItem.desc && <div className="p-3 bg-[#F9F6EE] rounded-xl text-gray-700">{liveItem.desc}</div>}
+                          {liveItem.desc && <div className="p-3 bg-[#F9F6EE] rounded-xl text-[#2D3025]">{liveItem.desc}</div>}
                           <div className="flex justify-between text-[#8D7F72]">
                             <span>ساعت شروع:</span>
                             <span className="font-mono font-bold text-[#2D3025]">{toPersianDigits(liveItem.time)}</span>
@@ -3167,7 +3167,7 @@ export default function CalendarSection({
                           {liveItem.reminderType && liveItem.reminderType !== 'none' && (
                             <div className="flex justify-between text-[#8D7F72]">
                               <span>یادآور فعال:</span>
-                              <span className="font-bold text-amber-600">
+                              <span className="font-bold text-[#9B6B61]">
                                 {liveItem.reminderType === '1day' ? '۱ روز قبل' :
                                  liveItem.reminderType === '2day' ? '۲ روز قبل' :
                                  liveItem.reminderType === '3day' ? '۳ روز قبل' : 'یادآور مستمر سفارشی'}
@@ -3191,10 +3191,10 @@ export default function CalendarSection({
 
                   {type === 'task' && (
                     <>
-                      {liveItem.description && <div className="p-3 bg-[#F9F6EE] rounded-xl text-gray-700">{liveItem.description}</div>}
+                      {liveItem.description && <div className="p-3 bg-[#F9F6EE] rounded-xl text-[#2D3025]">{liveItem.description}</div>}
                       <div className="flex justify-between text-[#8D7F72]">
                         <span>وضعیت:</span>
-                        <span className={`font-bold ${liveItem.completed ? 'text-emerald-700' : 'text-amber-700'}`}>
+                        <span className={`font-bold ${liveItem.completed ? 'text-emerald-700' : 'text-[#5A5A40]'}`}>
                           {liveItem.completed ? 'کامل شده' : 'در انتظار انجام'}
                         </span>
                       </div>
@@ -3232,7 +3232,7 @@ export default function CalendarSection({
 
                   {type === 'habit' && (
                     <>
-                      <div className="p-3 bg-[#F9F6EE] rounded-xl text-gray-700">{liveItem.habit.description}</div>
+                      <div className="p-3 bg-[#F9F6EE] rounded-xl text-[#2D3025]">{liveItem.habit.description}</div>
                       <div className="flex justify-between text-[#8D7F72]">
                         <span>روز پیگیری:</span>
                         <span className="font-mono font-bold text-[#2D3025]">{toPersianDigits(liveItem.date)}</span>
@@ -3246,7 +3246,7 @@ export default function CalendarSection({
 
                   {type === 'meal' && (
                     <>
-                      <div className="p-3 bg-[#F9F6EE] rounded-xl text-gray-700 font-bold">🍽️ {liveItem.foods}</div>
+                      <div className="p-3 bg-[#F9F6EE] rounded-xl text-[#2D3025] font-bold">🍽️ {liveItem.foods}</div>
                       <div className="flex justify-between text-[#8D7F72]">
                         <span>وعده غذایی:</span>
                         <span className="font-bold text-[#2D3025]">
@@ -3286,7 +3286,7 @@ export default function CalendarSection({
 
                   {type === 'workout' && (
                     <>
-                      <div className="p-3 bg-[#F9F6EE] rounded-xl text-gray-700 space-y-2">
+                      <div className="p-3 bg-[#F9F6EE] rounded-xl text-[#2D3025] space-y-2">
                         {liveItem.type === 'cardio' ? (
                           <div>
                             <div className="font-bold text-[#2D3025] mb-1">🏃 تمرین هوازی: {liveItem.cardioType === 'running' ? 'دویدن' : liveItem.cardioType === 'cycling' ? 'دوچرخه‌سواری' : liveItem.cardioType === 'swimming' ? 'شنا' : 'پیاده‌روی'}</div>
@@ -3298,8 +3298,8 @@ export default function CalendarSection({
                             <div className="space-y-1">
                               {liveItem.gymSets?.map((set: any, idx: number) => (
                                 <div key={idx} className="text-[10px] flex justify-between items-center bg-white p-1 rounded-lg border border-[#E6DFD3]">
-                                  <span className="font-bold text-gray-800">{set.exerciseName}</span>
-                                  <span className="font-mono text-gray-600">
+                                  <span className="font-bold text-[#2D3025]">{set.exerciseName}</span>
+                                  <span className="font-mono text-[#8D7F72]">
                                     {toPersianDigits(set.weight)}kg × {toPersianDigits(set.reps)} ({toPersianDigits(set.sets)} ست)
                                   </span>
                                 </div>
@@ -3307,7 +3307,7 @@ export default function CalendarSection({
                             </div>
                           </div>
                         )}
-                        {liveItem.notes && <p className="text-[10px] text-gray-500 italic pt-1 border-t border-gray-200 mt-1">یادداشت: {liveItem.notes}</p>}
+                        {liveItem.notes && <p className="text-[10px] text-[#8D7F72] italic pt-1 border-t border-[#D6CFC3] mt-1">یادداشت: {liveItem.notes}</p>}
                       </div>
                       <div className="flex justify-between text-[#8D7F72]">
                         <span>مدت زمان تمرین:</span>
@@ -3328,9 +3328,9 @@ export default function CalendarSection({
 
                   {type === 'sleep' && (
                     <>
-                      <div className="p-3 bg-[#F9F6EE] rounded-xl text-gray-700">
+                      <div className="p-3 bg-[#F9F6EE] rounded-xl text-[#2D3025]">
                         <div className="font-bold text-[#2D3025] mb-1">💤 خواب ثبت‌شده روزانه</div>
-                        {liveItem.notes && <p className="text-[10px] text-gray-500 italic">یادداشت: {liveItem.notes}</p>}
+                        {liveItem.notes && <p className="text-[10px] text-[#8D7F72] italic">یادداشت: {liveItem.notes}</p>}
                       </div>
                       <div className="flex justify-between text-[#8D7F72]">
                         <span>مدت زمان کل خواب:</span>
@@ -3463,7 +3463,7 @@ export default function CalendarSection({
                 <button
                   type="button"
                   onClick={() => setShowAddCalendarModal(false)}
-                  className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-[#8D7F72] text-xs font-bold rounded-xl transition-all cursor-pointer"
+                  className="px-4 py-2.5 bg-[#E6DFD3]/40 hover:bg-[#E6DFD3]/60 text-[#8D7F72] text-xs font-bold rounded-xl transition-all cursor-pointer"
                 >
                   انصراف
                 </button>
@@ -3523,7 +3523,7 @@ export default function CalendarSection({
                     <button
                       type="button"
                       onClick={handleGoogleSignIn}
-                      className="w-full py-2.5 bg-white hover:bg-gray-50 border border-gray-300 rounded-xl text-xs font-bold text-gray-700 flex items-center justify-center gap-2 transition-all cursor-pointer shadow-3xs"
+                      className="w-full py-2.5 bg-white hover:bg-[#F9F6EE] border border-[#D6CFC3] rounded-xl text-xs font-bold text-[#2D3025] flex items-center justify-center gap-2 transition-all cursor-pointer shadow-3xs"
                     >
                       <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
                         <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v3.92h6.58c-.28 1.48-1.11 2.74-2.36 3.59v2.98h3.8c2.22-2.05 3.5-5.07 3.5-8.62z"/>
@@ -3576,7 +3576,7 @@ export default function CalendarSection({
                   <span>یادآورهای دسکتاپ و صوتی</span>
                 </h4>
                 <div className="flex justify-between items-center text-xs">
-                  <span className="text-gray-600 font-semibold">نوتیفیکیشن‌های سیستم جهت یادآوری رویدادهای امروز:</span>
+                  <span className="text-[#8D7F72] font-semibold">نوتیفیکیشن‌های سیستم جهت یادآوری رویدادهای امروز:</span>
                   <button
                     type="button"
                     onClick={requestNotificationPermission}
@@ -3623,7 +3623,7 @@ export default function CalendarSection({
                             prev.map(c => c.id === cal.id ? { ...c, active: !c.active } : c)
                           );
                         }}
-                        className="w-4 h-4 rounded-sm border-gray-300 accent-[#7C8363]"
+                        className="w-4 h-4 rounded-sm border-[#D6CFC3] accent-[#7C8363]"
                       />
                       <div className="flex items-center gap-1.5">
                         <span className={`w-2.5 h-2.5 rounded-full ${
@@ -3688,7 +3688,7 @@ export default function CalendarSection({
                 </button>
 
                 <div className="flex items-center gap-3 border-b border-[#E6DFD3]/40 pb-3">
-                  <div className="p-2.5 bg-amber-50 text-amber-600 rounded-2xl">
+                  <div className="p-2.5 bg-[#F9F1D8] text-[#9B6B61] rounded-2xl">
                     <PlusCircle className="w-6 h-6 text-[#7C8363]" />
                   </div>
                   <div>
@@ -3770,26 +3770,26 @@ export default function CalendarSection({
                   </div>
                 ) : quickAddType === 'task' ? (
                   <div className="space-y-4 text-right">
-                    <span className="text-[10px] font-black text-amber-700 block">ثبت کار جدید (Task) برای تاریخ {toPersianDigits(dateStr)}</span>
+                    <span className="text-[10px] font-black text-[#5A5A40] block">ثبت کار جدید (Task) برای تاریخ {toPersianDigits(dateStr)}</span>
                     <div className="space-y-3">
                       <div>
-                        <label className="text-[10px] font-bold text-gray-600 block mb-1">عنوان کار</label>
+                        <label className="text-[10px] font-bold text-[#8D7F72] block mb-1">عنوان کار</label>
                         <input
                           type="text"
                           placeholder="مثلا: ارسال گزارش ماهانه یا خرید دارو..."
                           value={quickTaskTitle}
                           onChange={(e) => setQuickTaskTitle(e.target.value)}
-                          className="w-full p-2.5 text-xs bg-white border border-[#E6DFD3] rounded-xl text-right font-semibold focus:ring-1 focus:ring-amber-500"
+                          className="w-full p-2.5 text-xs bg-white border border-[#E6DFD3] rounded-xl text-right font-semibold focus:ring-1 focus:ring-[#9B6B61]"
                           autoFocus
                         />
                       </div>
                       <div>
-                        <label className="text-[10px] font-bold text-gray-600 block mb-1">توضیحات (اختیاری)</label>
+                        <label className="text-[10px] font-bold text-[#8D7F72] block mb-1">توضیحات (اختیاری)</label>
                         <textarea
                           placeholder="یادداشت کوتاهی درباره این کار..."
                           value={quickTaskDesc}
                           onChange={(e) => setQuickTaskDesc(e.target.value)}
-                          className="w-full p-2.5 text-xs bg-white border border-[#E6DFD3] rounded-xl text-right h-20 resize-none focus:ring-1 focus:ring-amber-500"
+                          className="w-full p-2.5 text-xs bg-white border border-[#E6DFD3] rounded-xl text-right h-20 resize-none focus:ring-1 focus:ring-[#9B6B61]"
                         />
                       </div>
                     </div>
@@ -3815,7 +3815,7 @@ export default function CalendarSection({
                           setQuickAddType(null);
                         }}
                         disabled={!quickTaskTitle.trim()}
-                        className="flex-1 py-2.5 bg-[#7C8363] hover:bg-[#5A5A40] disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-xl text-xs font-black transition-all cursor-pointer"
+                        className="flex-1 py-2.5 bg-[#7C8363] hover:bg-[#5A5A40] disabled:bg-[#D6CFC3] disabled:cursor-not-allowed text-white rounded-xl text-xs font-black transition-all cursor-pointer"
                       >
                         ایجاد و ثبت کار
                       </button>
@@ -3825,7 +3825,7 @@ export default function CalendarSection({
                           setQuickTaskTitle('');
                           setQuickTaskDesc('');
                         }}
-                        className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-black transition-all cursor-pointer"
+                        className="px-4 py-2.5 bg-[#E6DFD3]/40 hover:bg-[#E6DFD3]/60 text-[#2D3025] rounded-xl text-xs font-black transition-all cursor-pointer"
                       >
                         بازگشت
                       </button>
@@ -3855,7 +3855,7 @@ export default function CalendarSection({
                               className={`w-full p-3 rounded-2xl border text-xs font-black flex justify-between items-center transition-all cursor-pointer ${
                                 isLogged
                                   ? 'bg-emerald-50 border-emerald-300 text-emerald-800 shadow-3xs'
-                                  : 'bg-white border-[#E6DFD3]/80 text-gray-700 hover:bg-emerald-50/20'
+                                  : 'bg-white border-[#E6DFD3]/80 text-[#2D3025] hover:bg-emerald-50/20'
                               }`}
                             >
                               <span className="font-mono text-[10px]">
@@ -3870,7 +3870,7 @@ export default function CalendarSection({
                     <div className="pt-2">
                       <button
                         onClick={() => setQuickAddType(null)}
-                        className="w-full py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-black transition-all cursor-pointer"
+                        className="w-full py-2.5 bg-[#E6DFD3]/40 hover:bg-[#E6DFD3]/60 text-[#2D3025] rounded-xl text-xs font-black transition-all cursor-pointer"
                       >
                         بازگشت
                       </button>

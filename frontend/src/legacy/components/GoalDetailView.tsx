@@ -196,8 +196,8 @@ function LinkedProjectEditor({ goalId, lp, onUpdate }: {
     switch (contributionType) {
       case 'mandatory': return 'bg-red-50 border-red-200 text-red-700'
       case 'recommended': return 'bg-blue-50 border-blue-200 text-blue-700'
-      case 'supporting': return 'bg-gray-50 border-gray-200 text-gray-600'
-      default: return 'bg-gray-50 border-gray-200 text-gray-500'
+      case 'supporting': return 'bg-[#F9F6EE] border-[#D6CFC3] text-[#8D7F72]'
+      default: return 'bg-[#F9F6EE] border-[#D6CFC3] text-[#8D7F72]'
     }
   })()
 
@@ -1159,10 +1159,10 @@ export default function GoalDetailView({
   const getHealthStateColor = (state?: GoalHealthState) => {
     switch (state) {
       case 'on_track': return 'bg-emerald-50 border-emerald-200 text-emerald-700';
-      case 'at_risk': return 'bg-amber-50 border-amber-200 text-amber-700';
+      case 'at_risk': return 'bg-[#F9F1D8] border-[#EBE3C8] text-[#5A5A40]';
       case 'off_track': return 'bg-red-50 border-red-200 text-red-700';
       case 'needs_review': return 'bg-slate-50 border-slate-200 text-slate-700';
-      default: return 'bg-gray-50 border-gray-200 text-gray-600';
+      default: return 'bg-[#F9F6EE] border-[#D6CFC3] text-[#8D7F72]';
     }
   };
 
@@ -1190,8 +1190,8 @@ export default function GoalDetailView({
     switch (type) {
       case 'mandatory': return 'bg-red-50 border-red-200 text-red-700';
       case 'recommended': return 'bg-blue-50 border-blue-200 text-blue-700';
-      case 'supporting': return 'bg-gray-50 border-gray-200 text-gray-600';
-      default: return 'bg-gray-50 border-gray-200 text-gray-500';
+      case 'supporting': return 'bg-[#F9F6EE] border-[#D6CFC3] text-[#8D7F72]';
+      default: return 'bg-[#F9F6EE] border-[#D6CFC3] text-[#8D7F72]';
     }
   };
 
@@ -1347,7 +1347,7 @@ export default function GoalDetailView({
                     </div>
                   </div>
                 ) : (
-                  <div className="text-center py-4 bg-amber-50/20 border border-dashed border-amber-200 rounded-xl text-[10px] text-[#8D7F72] flex items-center justify-center gap-1">
+                  <div className="text-center py-4 bg-[#F9F1D8]/20 border border-dashed border-[#EBE3C8] rounded-xl text-[10px] text-[#8D7F72] flex items-center justify-center gap-1">
                     <Info className="w-4 h-4 text-[#8D7F72]" />
                     <span>هیچ حسابی به این هدف متصل نیست.</span>
                   </div>
@@ -1793,7 +1793,7 @@ export default function GoalDetailView({
                             {habit.name}
                           </h5>
                           <span className="bg-[#FDFBF7] border border-[#E6DFD3] text-[#8D7F72] text-[8px] px-2 py-0.5 rounded-full font-bold flex items-center gap-0.5 shrink-0 font-mono">
-                            <Flame className="w-2.5 h-2.5 text-amber-500 fill-amber-100" />
+                            <Flame className="w-2.5 h-2.5 text-[#9B6B61] fill-[#F4E9E4]" />
                             <span>{habit.streak} روز زنجیره</span>
                           </span>
                         </div>
@@ -2192,16 +2192,16 @@ export default function GoalDetailView({
                             <div className="bg-white/80 p-2.5 rounded-xl border border-[#E6DFD3]/60 space-y-1">
                               <div className="flex items-center justify-between">
                                 <span className="text-[9px] font-bold text-[#8D7F72] flex items-center gap-1">
-                                  <PenTool className="w-3.5 h-3.5 text-amber-600" />
+                                  <PenTool className="w-3.5 h-3.5 text-[#9B6B61]" />
                                   عاطفه و ژورنال روزانه
                                 </span>
-                                <span className="text-[9px] font-black text-amber-600 font-mono">{details.journalScore}٪</span>
+                                <span className="text-[9px] font-black text-[#9B6B61] font-mono">{details.journalScore}٪</span>
                               </div>
                               <p className="text-[8px] text-[#8D7F72] leading-tight">
                                 {details.totalJournal} یادداشت ثبت شده (هدف: ۵)
                               </p>
                               <div className="w-full bg-[#E6DFD3]/40 h-1 rounded-full overflow-hidden">
-                                <div className="bg-amber-500 h-full rounded-full" style={{ width: `${details.journalScore}%` }} />
+                                <div className="bg-[#F9F1D8]0 h-full rounded-full" style={{ width: `${details.journalScore}%` }} />
                               </div>
                             </div>
                           </div>
@@ -2753,7 +2753,7 @@ export default function GoalDetailView({
                     <div className="bg-[#FDFBF7] p-4 rounded-2xl border border-[#E6DFD3]/80 space-y-3 flex flex-col justify-between text-right">
                       <div className="space-y-1.5">
                         <div className="flex items-center gap-2">
-                          <div className="p-1.5 bg-amber-50 text-amber-700 rounded-lg">
+                          <div className="p-1.5 bg-[#F9F1D8] text-[#5A5A40] rounded-lg">
                             <PenTool className="w-4 h-4" />
                           </div>
                           <h5 className="text-[11px] font-black text-[#2D3025]">خودآگاهی عاطفی و احساسات (ژورنال)</h5>
@@ -2778,7 +2778,7 @@ export default function GoalDetailView({
                             metric: initialMetric
                           });
                         }}
-                        className="w-full py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 text-[10px] font-black rounded-xl transition-all cursor-pointer"
+                        className="w-full py-1.5 bg-[#F9F1D8] hover:bg-[#F9F1D8] text-[#5A5A40] text-[10px] font-black rounded-xl transition-all cursor-pointer"
                       >
                         ⚡ فعال‌سازی سریع شمارنده ژورنال برای این هدف
                       </button>
@@ -3241,7 +3241,7 @@ export default function GoalDetailView({
                 {[
                   { label: 'پیشرفت پروژه‌ها', icon: FolderKanban, value: editProjectProgressWeight, setter: setEditProjectProgressWeight, color: 'text-[#7C8363]', default: 40 },
                   { label: 'نقاط عطف (مایلستون)', icon: Flag, value: editMilestoneWeight, setter: setEditMilestoneWeight, color: 'text-emerald-600', default: 25 },
-                  { label: 'تسک‌های کلیدی', icon: CheckSquare, value: editKeyTaskWeight, setter: setEditKeyTaskWeight, color: 'text-amber-600', default: 20 },
+                  { label: 'تسک‌های کلیدی', icon: CheckSquare, value: editKeyTaskWeight, setter: setEditKeyTaskWeight, color: 'text-[#9B6B61]', default: 20 },
                   { label: 'زمان ردیابی‌شده', icon: Clock, value: editTrackedTimeWeight, setter: setEditTrackedTimeWeight, color: 'text-blue-600', default: 10 },
                   { label: 'سنجه عددی', icon: Activity, value: editMetricWeight, setter: setEditMetricWeight, color: 'text-purple-600', default: 5 },
                 ].map((item) => (
@@ -3442,7 +3442,7 @@ export default function GoalDetailView({
               {(goal.linkedHabits || []).length > 0 && (
                 <div className="space-y-2">
                   <h5 className="text-[11px] font-black text-[#2D3025] flex items-center gap-1">
-                    <Flame className="w-3.5 h-3.5 text-amber-500" />
+                    <Flame className="w-3.5 h-3.5 text-[#9B6B61]" />
                     <span>عادت‌های پیوندی ({goal.linkedHabits!.length})</span>
                   </h5>
                   <div className="grid grid-cols-1 gap-2">

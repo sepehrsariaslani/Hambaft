@@ -12,10 +12,10 @@ interface TaskKanbanViewProps {
 }
 
 const STATUS_COLUMNS: { value: Task['status']; label: string; color: string; border: string }[] = [
-  { value: 'inbox', label: 'صندوق ورودی', color: 'bg-gray-50', border: 'border-gray-200' },
+  { value: 'inbox', label: 'صندوق ورودی', color: 'bg-[#F9F6EE]', border: 'border-[#D6CFC3]' },
   { value: 'not_started', label: 'شروع نشده', color: 'bg-slate-50', border: 'border-slate-200' },
   { value: 'next', label: 'بعدی', color: 'bg-blue-50', border: 'border-blue-200' },
-  { value: 'today', label: 'امروز', color: 'bg-amber-50', border: 'border-amber-200' },
+  { value: 'today', label: 'امروز', color: 'bg-[#F9F1D8]', border: 'border-[#EBE3C8]' },
   { value: 'in_progress', label: 'در حال انجام', color: 'bg-orange-50', border: 'border-orange-200' },
   { value: 'done', label: 'انجام شده', color: 'bg-emerald-50', border: 'border-emerald-200' },
   { value: 'on_hold', label: 'متوقف', color: 'bg-purple-50', border: 'border-purple-200' },
@@ -25,15 +25,15 @@ const STATUS_COLUMNS: { value: Task['status']; label: string; color: string; bor
 
 const PRIORITY_COLUMNS: Record<string, { label: string; color: string; border: string }> = {
   high: { label: 'بالا', color: 'bg-red-50', border: 'border-red-200' },
-  medium: { label: 'متوسط', color: 'bg-amber-50', border: 'border-amber-200' },
+  medium: { label: 'متوسط', color: 'bg-[#F9F1D8]', border: 'border-[#EBE3C8]' },
   low: { label: 'پایین', color: 'bg-emerald-50', border: 'border-emerald-200' },
 }
 
 const STATUS_BADGE: Record<string, string> = {
-  inbox: 'bg-gray-100 text-gray-600',
+  inbox: 'bg-[#E6DFD3]/40 text-[#8D7F72]',
   not_started: 'bg-slate-100 text-slate-600',
   next: 'bg-blue-100 text-blue-600',
-  today: 'bg-amber-100 text-amber-600',
+  today: 'bg-[#F9F1D8] text-[#9B6B61]',
   in_progress: 'bg-orange-100 text-orange-600',
   done: 'bg-emerald-100 text-emerald-600',
   on_hold: 'bg-purple-100 text-purple-600',
@@ -43,7 +43,7 @@ const STATUS_BADGE: Record<string, string> = {
 
 const PRIORITY_BADGE: Record<string, string> = {
   high: 'bg-red-100 text-red-600',
-  medium: 'bg-amber-100 text-amber-600',
+  medium: 'bg-[#F9F1D8] text-[#9B6B61]',
   low: 'bg-emerald-100 text-emerald-600',
 }
 
@@ -67,7 +67,7 @@ export default function TaskKanbanView({
       return Object.entries(PRIORITY_COLUMNS).map(([key, col]) => ({ key, label: col.label, color: col.color, border: col.border }))
     }
     // project
-    const cols = [{ key: 'none', label: 'بدون پروژه', color: 'bg-gray-50', border: 'border-gray-200' }]
+    const cols = [{ key: 'none', label: 'بدون پروژه', color: 'bg-[#F9F6EE]', border: 'border-[#D6CFC3]' }]
     for (const goal of goals) {
       for (const project of (goal.projects || [])) {
         cols.push({ key: project.id, label: project.title, color: 'bg-[#e8ece0]', border: 'border-[#a8b898]' })
@@ -180,12 +180,12 @@ export default function TaskKanbanView({
                       </p>
                       <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
                         {task.status && (
-                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${STATUS_BADGE[task.status] || 'bg-gray-100 text-gray-600'}`}>
+                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${STATUS_BADGE[task.status] || 'bg-[#E6DFD3]/40 text-[#8D7F72]'}`}>
                             {STATUS_COLUMNS.find(s => s.value === task.status)?.label || task.status}
                           </span>
                         )}
                         {task.priority && (
-                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${PRIORITY_BADGE[task.priority] || 'bg-gray-100 text-gray-600'}`}>
+                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${PRIORITY_BADGE[task.priority] || 'bg-[#E6DFD3]/40 text-[#8D7F72]'}`}>
                             {task.priority === 'high' ? 'بالا' : task.priority === 'medium' ? 'متوسط' : 'پایین'}
                           </span>
                         )}

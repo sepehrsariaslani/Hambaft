@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, RadarChart, PolarGrid, PolarAngleAxis, Radar } from 'recharts';
+import SectionHeader from './SectionHeader';
 
 interface MoodSectionProps {
   moodLogs: MoodLog[];
@@ -14,7 +15,7 @@ interface MoodSectionProps {
 }
 
 const MOODS_CONFIG: Record<MoodType, { label: string; emoji: string; color: string; bg: string; border: string; desc: string }> = {
-  excited: { label: 'پرحرارت و عالی', emoji: '🤩', color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-950/30', border: 'border-amber-200 dark:border-amber-900/50', desc: 'انرژی خالص و اشتیاق بالا' },
+  excited: { label: 'پرحرارت و عالی', emoji: '🤩', color: 'text-[#9B6B61] dark:text-[#C59B93]', bg: 'bg-[#F9F1D8] dark:bg-[#201D13]', border: 'border-[#EBE3C8] dark:border-[#3D3929]', desc: 'انرژی خالص و اشتیاق بالا' },
   happy: { label: 'خوشحال و آرام', emoji: '😊', color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-950/30', border: 'border-emerald-200 dark:border-emerald-900/50', desc: 'آرامش ذهنی و رضایت درونی' },
   neutral: { label: 'معمولی و یکنواخت', emoji: '😐', color: 'text-slate-600 dark:text-slate-400', bg: 'bg-slate-50 dark:bg-slate-900/30', border: 'border-slate-200 dark:border-slate-800/50', desc: 'حالت خنثی و متمرکز' },
   tired: { label: 'بی‌رمق و خسته', emoji: '🥱', color: 'text-sky-600 dark:text-sky-400', bg: 'bg-sky-50 dark:bg-sky-950/30', border: 'border-sky-200 dark:border-sky-900/50', desc: 'نیاز به خواب و شارژ مجدد' },
@@ -163,42 +164,39 @@ export default function MoodSection({ moodLogs = [], onAddMoodLog, onDeleteMoodL
   };
 
   return (
-    <div className="space-y-6 text-right" dir="rtl">
+    <div className="space-y-5 text-right pb-8" dir="rtl">
       {/* Page Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h2 className="text-xl font-black text-[#2D3025] dark:text-[#E8ECE0] font-serif-elegant flex items-center gap-2">
-            <span className="p-1.5 rounded-xl bg-amber-500/10 text-amber-600">🎭</span>
-            <span>ارزیابی احساسات و مود روزانه</span>
-          </h2>
-          <p className="text-xs text-[#8D7F72] dark:text-[#9D978B] mt-1">طراحی بیومتریک برای پایش انرژی روانی و سیستم عصبی شما</p>
-        </div>
-
-        {/* Tabs switcher */}
-        <div className="bg-[#E6DFD3]/40 dark:bg-[#20241A]/50 p-1 rounded-2xl border border-[#E6DFD3]/80 dark:border-[#3D4133]/40 flex gap-1 w-full md:w-auto">
-          <button 
-            onClick={() => setActiveTab('log')}
-            className={`flex-1 md:flex-none px-4 py-2 text-xs font-black rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 ${activeTab === 'log' ? 'bg-[#E26645] text-white shadow-md' : 'text-[#8D7F72] hover:text-[#2D3025] dark:hover:text-white'}`}
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>ثبت حال هوای کنونی</span>
-          </button>
-          <button 
-            onClick={() => setActiveTab('history')}
-            className={`flex-1 md:flex-none px-4 py-2 text-xs font-black rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 ${activeTab === 'history' ? 'bg-[#E26645] text-white shadow-md' : 'text-[#8D7F72] hover:text-[#2D3025] dark:hover:text-white'}`}
-          >
-            <Calendar className="w-3.5 h-3.5" />
-            <span>تاریخچه ثبت‌ها</span>
-          </button>
-          <button 
-            onClick={() => setActiveTab('insights')}
-            className={`flex-1 md:flex-none px-4 py-2 text-xs font-black rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 ${activeTab === 'insights' ? 'bg-[#E26645] text-white shadow-md' : 'text-[#8D7F72] hover:text-[#2D3025] dark:hover:text-white'}`}
-          >
-            <BarChart2 className="w-3.5 h-3.5" />
-            <span>آنالیز و ریشه‌یابی</span>
-          </button>
-        </div>
-      </div>
+      <SectionHeader
+        icon={Smile}
+        title="ارزیابی احساسات"
+        subtitle="پایش انرژی روانی و سیستم عصبی"
+        badge={moodLogs.length > 0 ? moodLogs.length : undefined}
+        actions={
+          <div className="bg-[#E6DFD3]/40 dark:bg-[#20241A]/50 p-1 rounded-2xl border border-[#E6DFD3]/80 dark:border-[#3D4133]/40 flex gap-1">
+            <button 
+              onClick={() => setActiveTab('log')}
+              className={`px-3 py-1.5 text-[10px] font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${activeTab === 'log' ? 'bg-[#E26645] text-white shadow-md' : 'text-[#8D7F72] hover:text-[#2D3025] dark:hover:text-white'}`}
+            >
+              <Plus className="w-3 h-3" />
+              ثبت
+            </button>
+            <button 
+              onClick={() => setActiveTab('history')}
+              className={`px-3 py-1.5 text-[10px] font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${activeTab === 'history' ? 'bg-[#E26645] text-white shadow-md' : 'text-[#8D7F72] hover:text-[#2D3025] dark:hover:text-white'}`}
+            >
+              <Calendar className="w-3 h-3" />
+              تاریخچه
+            </button>
+            <button 
+              onClick={() => setActiveTab('insights')}
+              className={`px-3 py-1.5 text-[10px] font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${activeTab === 'insights' ? 'bg-[#E26645] text-white shadow-md' : 'text-[#8D7F72] hover:text-[#2D3025] dark:hover:text-white'}`}
+            >
+              <BarChart2 className="w-3 h-3" />
+              آنالیز
+            </button>
+          </div>
+        }
+      />
 
       {/* Main Container */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -208,7 +206,7 @@ export default function MoodSection({ moodLogs = [], onAddMoodLog, onDeleteMoodL
           {/* Active Summary Card */}
           <div className="bg-[#FDFBF7] dark:bg-[#1B1D16] border border-[#E6DFD3] dark:border-[#3D4133]/30 rounded-[24px] p-5 shadow-xs transition-colors">
             <h3 className="text-xs font-black text-[#2D3025] dark:text-[#E8ECE0] mb-4 flex items-center gap-2">
-              <span className="w-1.5 h-3 rounded bg-amber-500"></span>
+              <span className="w-1.5 h-3 rounded bg-[#9B6B61]"></span>
               خلاصه وضعیت روانی اخیر
             </h3>
 
@@ -238,8 +236,8 @@ export default function MoodSection({ moodLogs = [], onAddMoodLog, onDeleteMoodL
               </div>
 
               {/* Quick Wisdom Card */}
-              <div className="p-3.5 rounded-2xl bg-amber-500/5 dark:bg-amber-500/10 border border-amber-500/15 text-xs text-[#8D7F72] dark:text-[#C7B59F] leading-relaxed">
-                <span className="text-amber-500 font-bold block mb-1">💡 توصیه خودآگاهی بیومتریک:</span>
+              <div className="p-3.5 rounded-2xl bg-[#9B6B61]/5 dark:bg-[#9B6B61]/10 border border-[#9B6B61]/15 text-xs text-[#8D7F72] dark:text-[#C7B59F] leading-relaxed">
+                <span className="text-[#9B6B61] font-bold block mb-1">💡 توصیه خودآگاهی بیومتریک:</span>
                 {dominantMood === 'stressed' && 'میزان اضطراب ثبت‌شده بالا است. توصیه می‌شود همین حالا ۵ دقیقه تمرین تنفس عمیق جعبه‌ای را در بخش ذهن‌آگاهی انجام دهید.'}
                 {dominantMood === 'tired' && 'سطح خستگی بدنی بالا است. از مصرف بیش از حد قهوه خودداری کرده و امشب خواب خود را با کیفیت بالاتر و بدون صفحه نمایش تنظیم کنید.'}
                 {dominantMood === 'happy' || dominantMood === 'excited' ? 'انرژی روانی شما در فرکانس فوق‌العاده‌ای قرار دارد! بهترین زمان برای پیشبرد سخت‌ترین کارهای لیست و اتخاذ تصمیمات مهم کاری است.' : ''}
@@ -311,7 +309,7 @@ export default function MoodSection({ moodLogs = [], onAddMoodLog, onDeleteMoodL
                         onClick={() => setSelectedMood(key)}
                         className={`flex flex-col items-center justify-center p-4 rounded-2xl border-2 transition-all cursor-pointer text-center relative overflow-hidden ${
                           isSelected 
-                            ? `${item.bg} ${item.border} border-amber-500/80 ring-2 ring-amber-500/10` 
+                            ? `${item.bg} ${item.border} border-[#9B6B61]/80 ring-2 ring-[#9B6B61]/10` 
                             : 'bg-white dark:bg-[#20241A] border-[#E6DFD3]/50 dark:border-[#3D4133]/20 hover:border-[#8D7F72]/50'
                         }`}
                       >
@@ -323,7 +321,7 @@ export default function MoodSection({ moodLogs = [], onAddMoodLog, onDeleteMoodL
                         {isSelected && (
                           <motion.div 
                             layoutId="selected-mood-glow" 
-                            className="absolute inset-0 bg-amber-500/5 dark:bg-amber-500/10 -z-10 pointer-events-none" 
+                            className="absolute inset-0 bg-[#9B6B61]/5 dark:bg-[#9B6B61]/10 -z-10 pointer-events-none" 
                             transition={{ type: "spring", stiffness: 200, damping: 20 }}
                           />
                         )}
@@ -341,7 +339,7 @@ export default function MoodSection({ moodLogs = [], onAddMoodLog, onDeleteMoodL
                         <span>⚡</span>
                         <span>انرژی بدنی و جسمانی</span>
                       </label>
-                      <span className="text-xs font-mono font-black text-amber-600 bg-amber-500/10 px-2 py-0.5 rounded-lg">
+                      <span className="text-xs font-mono font-black text-[#9B6B61] bg-[#9B6B61]/10 px-2 py-0.5 rounded-lg">
                         {getPersianNumber(energyLevel)} از ۱۰
                       </span>
                     </div>
@@ -352,7 +350,7 @@ export default function MoodSection({ moodLogs = [], onAddMoodLog, onDeleteMoodL
                       max="10" 
                       value={energyLevel}
                       onChange={(e) => setEnergyLevel(parseInt(e.target.value, 10))}
-                      className="w-full accent-amber-500 bg-slate-200 dark:bg-slate-800 h-2 rounded-lg cursor-pointer"
+                      className="w-full accent-[#9B6B61] bg-slate-200 dark:bg-slate-800 h-2 rounded-lg cursor-pointer"
                     />
                     <div className="flex justify-between text-[8px] font-bold text-[#8D7F72] dark:text-[#9D978B]">
                       <span>بسیار ضعیف (خالی)</span>
@@ -425,7 +423,7 @@ export default function MoodSection({ moodLogs = [], onAddMoodLog, onDeleteMoodL
                         value={customTrigger}
                         onChange={(e) => setCustomTrigger(e.target.value)}
                         placeholder="افزودن محرک شخصی..."
-                        className="flex-1 text-[11px] font-extrabold px-3 py-1.5 rounded-xl border border-[#E6DFD3] dark:border-[#3D4133]/50 bg-white dark:bg-[#20241A] focus:outline-none focus:ring-1 focus:ring-amber-500/50"
+                        className="flex-1 text-[11px] font-extrabold px-3 py-1.5 rounded-xl border border-[#E6DFD3] dark:border-[#3D4133]/50 bg-white dark:bg-[#20241A] focus:outline-none focus:ring-1 focus:ring-[#9B6B61]/50"
                       />
                       <button 
                         type="submit" 
@@ -451,7 +449,7 @@ export default function MoodSection({ moodLogs = [], onAddMoodLog, onDeleteMoodL
                             onClick={() => setSelectedWeather(item.id as any)}
                             className={`flex-1 py-2 rounded-xl text-[10px] font-black border transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                               isSelected 
-                                ? 'bg-amber-500/10 text-amber-600 border-amber-300 dark:border-amber-900/50' 
+                                ? 'bg-[#9B6B61]/10 text-[#9B6B61] border-[#EBE3C8] dark:border-[#3D3929]' 
                                 : 'bg-white dark:bg-[#20241A] text-[#8D7F72] border-[#E6DFD3]/60 dark:border-[#3D4133]/20'
                             }`}
                           >
@@ -474,7 +472,7 @@ export default function MoodSection({ moodLogs = [], onAddMoodLog, onDeleteMoodL
                       value={notes}
                       onChange={(e) => setNotes(e.target.value)}
                       placeholder="امروز چه شد؟ بنویسید تا بعدا الگوها را ارزیابی کنیم..."
-                      className="w-full text-xs font-extrabold p-3.5 rounded-2xl border border-[#E6DFD3] dark:border-[#3D4133]/50 bg-white dark:bg-[#20241A] focus:outline-none focus:ring-1 focus:ring-amber-500/50 resize-none"
+                      className="w-full text-xs font-extrabold p-3.5 rounded-2xl border border-[#E6DFD3] dark:border-[#3D4133]/50 bg-white dark:bg-[#20241A] focus:outline-none focus:ring-1 focus:ring-[#9B6B61]/50 resize-none"
                     />
                   </div>
                 </div>
@@ -611,7 +609,7 @@ export default function MoodSection({ moodLogs = [], onAddMoodLog, onDeleteMoodL
                     {/* Trend Line Chart */}
                     <div className="bg-[#FDFBF7] dark:bg-[#1B1D16] border border-[#E6DFD3] dark:border-[#3D4133]/30 rounded-[24px] p-5 shadow-xs transition-colors">
                       <h3 className="text-xs font-black text-[#2D3025] dark:text-[#E8ECE0] mb-4 flex items-center gap-2">
-                        <span className="w-1.5 h-3 rounded bg-amber-500"></span>
+                        <span className="w-1.5 h-3 rounded bg-[#9B6B61]"></span>
                         نوسانات انرژی فیزیکی در مقابل تمرکز فکری (۱۰ ثبت اخیر)
                       </h3>
                       <div className="h-60 w-full" dir="ltr">

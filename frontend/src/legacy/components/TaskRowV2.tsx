@@ -19,13 +19,13 @@ import { DENSITY_CONFIG, isColumnVisible } from './ViewConfigStore'
 
 // ─── Status quick-switch ─────────────────────────────────────
 const STATUS_OPTIONS = [
-  { id: 'inbox', label: 'ورودی', color: 'bg-amber-50 text-amber-700 border-amber-200' },
+  { id: 'inbox', label: 'ورودی', color: 'bg-[#F9F1D8] text-[#5A5A40] border-[#EBE3C8]' },
   { id: 'today', label: 'امروز', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
   { id: 'next', label: 'بعدی', color: 'bg-blue-50 text-blue-700 border-blue-200' },
   { id: 'in_progress', label: 'درحال', color: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
   { id: 'done', label: 'انجام‌شده', color: 'bg-green-50 text-green-700 border-green-200' },
   { id: 'on_hold', label: 'متوقف', color: 'bg-orange-50 text-orange-700 border-orange-200' },
-  { id: 'someday', label: 'شاید', color: 'bg-gray-50 text-gray-500 border-gray-200' },
+  { id: 'someday', label: 'شاید', color: 'bg-[#F9F6EE] text-[#8D7F72] border-[#D6CFC3]' },
 ] as const
 
 const PRIORITY_QUICK = [
@@ -36,9 +36,9 @@ const PRIORITY_QUICK = [
 ] as const
 
 const IMPORTANCE_QUICK: { id: ImportanceLevel; label: string; color: string }[] = [
-  { id: 'normal', label: 'عادی', color: 'bg-gray-100 text-gray-600' },
+  { id: 'normal', label: 'عادی', color: 'bg-[#E6DFD3]/40 text-[#8D7F72]' },
   { id: 'key', label: 'کلیدی', color: 'bg-blue-100 text-blue-800' },
-  { id: 'milestone', label: 'نقطه‌عطف', color: 'bg-amber-100 text-amber-800' },
+  { id: 'milestone', label: 'نقطه‌عطف', color: 'bg-[#F9F1D8] text-[#5A5A40]' },
 ]
 
 interface TaskRowV2Props {
@@ -88,7 +88,7 @@ export default function TaskRowV2({
       : isBlocked
         ? 'border-orange-200 bg-orange-50/30'
         : isMilestone
-          ? 'border-amber-300/50 bg-amber-50/20'
+          ? 'border-[#EBE3C8]/50 bg-[#F9F1D8]/20'
           : isHighImpact
             ? 'border-[#7C8363]/30 bg-[#7C8363]/5'
             : 'border-[#E6DFD3] bg-white hover:border-[#7C8363]/40'
@@ -145,7 +145,7 @@ export default function TaskRowV2({
 
             {/* Visual indicators — always visible (no column toggle needed) */}
             {isMilestone && !task.completed && (
-              <span className="text-[9px] font-bold bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded-full border border-amber-200">◆ نقطه‌عطف</span>
+              <span className="text-[9px] font-bold bg-[#F9F1D8] text-[#5A5A40] px-1.5 py-0.5 rounded-full border border-[#EBE3C8]">◆ نقطه‌عطف</span>
             )}
             {isKey && !task.completed && (
               <span className="text-[9px] font-bold bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded-full border border-blue-200">★ کلیدی</span>
@@ -167,7 +167,7 @@ export default function TaskRowV2({
               <button
                 onClick={() => setActionMode(actionMode === 'status' ? null : 'status')}
                 className={`${dCfg.badgeSize} font-bold rounded border cursor-pointer transition-all hover:shadow-sm ${
-                  STATUS_OPTIONS.find(s => s.id === task.status)?.color || 'bg-gray-50 text-gray-600 border-gray-200'
+                  STATUS_OPTIONS.find(s => s.id === task.status)?.color || 'bg-[#F9F6EE] text-[#8D7F72] border-[#D6CFC3]'
                 }`}
               >
                 {STATUS_OPTIONS.find(s => s.id === task.status)?.label || task.status}

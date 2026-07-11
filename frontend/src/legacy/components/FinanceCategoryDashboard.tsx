@@ -253,7 +253,7 @@ export default function FinanceCategoryDashboard({
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold text-[#8D7F72] flex justify-between">
                     <span>لیست زیردسته‌ها (با کاما یا اینتر جدا کنید)</span>
-                    <span className="text-[8px] text-amber-800">اختیاری</span>
+                    <span className="text-[8px] text-[#5A5A40]">اختیاری</span>
                   </label>
                   <textarea
                     rows={5}
@@ -409,7 +409,7 @@ export default function FinanceCategoryDashboard({
                     {toPersianDigits((activeCategoryStats?.totalAmount || 0).toLocaleString('fa-IR'))} <span className="text-xs font-normal text-[#8D7F72]">تومان</span>
                   </div>
                   {activeCategoryObject.type === 'expense' && overallExpenseSum > 0 && (
-                    <span className="text-[9px] text-[#8D7F72] font-bold block mt-1 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200/40">
+                    <span className="text-[9px] text-[#8D7F72] font-bold block mt-1 bg-[#F9F1D8] px-2 py-0.5 rounded-md border border-[#EBE3C8]/40">
                       سهم از کل مخارج: {toPersianDigits(Math.round(((activeCategoryStats?.totalAmount || 0) / overallExpenseSum) * 100))}%
                     </span>
                   )}

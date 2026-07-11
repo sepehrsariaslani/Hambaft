@@ -308,7 +308,7 @@ export default function ProfileSection({ lifeData, onUpdateProfile, onImportData
                 <div className="bg-white p-3.5 rounded-2xl border border-[#EBE3C8] text-right space-y-1.5">
                   <div className="flex items-center justify-between">
                     <span className="text-[9px] font-black text-[#8D7F72]">عادت‌های فعال</span>
-                    <Flame className="w-4 h-4 text-amber-500" />
+                    <Flame className="w-4 h-4 text-[#9B6B61]" />
                   </div>
                   <h4 className="text-sm font-black text-[#2D3025]">{habitsCount} عادت منظم</h4>
                   <p className="text-[8px] text-[#8D7F72] font-semibold">برای ایجاد استمرار روزانه</p>

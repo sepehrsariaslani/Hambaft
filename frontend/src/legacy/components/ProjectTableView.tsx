@@ -134,7 +134,7 @@ export default function ProjectTableView({
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                       project.status === 'completed' || project.completed ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
                       project.status === 'in_progress' ? 'bg-blue-50 text-blue-700 border border-blue-200' :
-                      project.status === 'paused' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
+                      project.status === 'paused' ? 'bg-[#F9F1D8] text-[#5A5A40] border border-[#EBE3C8]' :
                       'bg-slate-50 text-slate-700 border border-slate-200'
                     }`}>
                       {project.status === 'waiting' ? 'در انتظار' :

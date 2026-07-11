@@ -27,7 +27,7 @@ const BADGE_STYLES: Record<string, string> = {
   default: 'bg-[#E8ECE0] dark:bg-[#1E2218] text-[#7C8363] dark:text-[#9ECE9A] border-[#DDE2D5] dark:border-[#3D4133]',
   accent: 'bg-[#E26645]/10 text-[#E26645] border-[#E26645]/20',
   success: 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800',
-  warning: 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800',
+  warning: 'bg-[#F9F1D8] dark:bg-[#201D13] text-[#5A5A40] dark:text-[#C59B93] border-[#EBE3C8] dark:border-[#3D3929]',
 }
 
 export default function SectionHeader({

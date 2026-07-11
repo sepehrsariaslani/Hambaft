@@ -902,7 +902,7 @@ export default function FinanceSection({
           <div className="bg-[#FDFBF7] p-4 rounded-2xl border border-[#E6DFD3] space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-bold text-[#2D3025] flex items-center gap-1.5 font-serif-elegant">
-                <Zap className="w-4 h-4 text-[#E26645] fill-amber-400 animate-pulse" />
+                <Zap className="w-4 h-4 text-[#E26645] fill-[#9B6B61] animate-pulse" />
                 <span>الگوهای ثبت سریع (کلیک برای ثبت فوری تراکنش)</span>
               </h3>
               <button type="button" onClick={() => setShowTemplateForm(p => !p)}

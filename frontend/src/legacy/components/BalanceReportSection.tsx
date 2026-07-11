@@ -258,7 +258,7 @@ export default function BalanceReportSection({
     nervousStatusDesc = 'سیستم عصبی شما در فاز گریز و جنگ طولانی‌مدت قرار گرفته است. ساعات کار طولانی، خواب ناکافی یا استرس انباشته زنگ خطری برای خستگی مفرط هستند.';
   } else if (metrics.balanceRatio > 65) {
     nervousStatusLabel = 'ریکاوری فوق‌العاده قوی 🔋';
-    nervousStatusColor = 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/20 border-amber-200';
+    nervousStatusColor = 'text-[#9B6B61] dark:text-[#C59B93] bg-[#F9F1D8] dark:bg-[#201D13] border-[#EBE3C8]';
     nervousStatusDesc = 'سطح ریکاوری بدنی و ذهنی بسیار عالی است. انرژی انباشته خوبی برای شروع چالش‌های سنگین کاری و خلاقانه دارید.';
   }
 
@@ -298,7 +298,7 @@ export default function BalanceReportSection({
         <div className="lg:col-span-4 bg-[#FDFBF7] dark:bg-[#1B1D16] border border-[#E6DFD3] dark:border-[#3D4133]/30 rounded-[28px] p-6 shadow-sm flex flex-col justify-between text-center items-center">
           <div className="w-full text-right mb-4">
             <h3 className="text-xs font-black text-[#2D3025] dark:text-[#E8ECE0] flex items-center gap-2">
-              <span className="w-1.5 h-3 rounded bg-amber-500"></span>
+              <span className="w-1.5 h-3 rounded bg-[#F9F1D8]0"></span>
               نمره کلی توازن زندگی (Work-Life)
             </h3>
           </div>
@@ -333,7 +333,7 @@ export default function BalanceReportSection({
           <div className="mt-4">
             <span className={`text-xs font-black px-3.5 py-1.5 rounded-full border ${
               metrics.score > 75 ? 'bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900/50' : 
-              metrics.score > 50 ? 'bg-amber-50 text-amber-600 border-amber-200 dark:bg-amber-950/20 dark:text-amber-400 dark:border-amber-900/50' : 
+              metrics.score > 50 ? 'bg-[#F9F1D8] text-[#9B6B61] border-[#EBE3C8] dark:bg-[#201D13] dark:text-[#C59B93] dark:border-[#3D3929]' : 
               'bg-rose-50 text-rose-600 border-rose-200 dark:bg-rose-950/20 dark:text-rose-400 dark:border-rose-900/50'
             }`}>
               {metrics.score > 80 ? 'توازن فوق‌العاده طلایی 🌟' : metrics.score > 60 ? 'توازن قابل قبول و پایدار 👍' : 'هشدار خستگی کاری و عدم توازن 🚨'}
@@ -384,15 +384,15 @@ export default function BalanceReportSection({
             </div>
 
             {/* Social / Family */}
-            <div className="p-4 rounded-2xl bg-amber-50/40 dark:bg-amber-950/10 border border-amber-100 dark:border-amber-900/30 text-right">
-              <div className="flex justify-between items-center text-amber-600">
-                <Smile className="w-4 h-4 text-amber-500" />
-                <span className="text-[10px] font-black text-amber-600 bg-amber-500/10 px-2 py-0.5 rounded-md">شخصی و تفریح</span>
+            <div className="p-4 rounded-2xl bg-[#F9F1D8]/40 dark:bg-[#201D13]/10 border border-[#EBE3C8] dark:border-[#3D3929] text-right">
+              <div className="flex justify-between items-center text-[#9B6B61]">
+                <Smile className="w-4 h-4 text-[#9B6B61]" />
+                <span className="text-[10px] font-black text-[#9B6B61] bg-[#F9F1D8]0/10 px-2 py-0.5 rounded-md">شخصی و تفریح</span>
               </div>
               <span className="text-2xl font-black text-[#2D3025] dark:text-[#E8ECE0] font-mono mt-3 block">{getPersianNumber(metrics.lifeSocialHrs)} <span className="text-xs font-sans">ساعت</span></span>
               <span className="text-[9px] text-[#8D7F72] dark:text-[#9D978B] mt-1 block">هدف ایده‌آل: ۲ تا ۴ ساعت</span>
               {onNavigate && (
-                <button onClick={() => onNavigate('occasions')} className="mt-2 text-[9px] font-bold text-amber-500 hover:underline cursor-pointer">مشاهده مناسبت‌ها ←</button>
+                <button onClick={() => onNavigate('occasions')} className="mt-2 text-[9px] font-bold text-[#9B6B61] hover:underline cursor-pointer">مشاهده مناسبت‌ها ←</button>
               )}
             </div>
 
@@ -415,14 +415,14 @@ export default function BalanceReportSection({
           <div className="h-2 py-1.5 rounded-full flex overflow-hidden">
             <div style={{ width: `${(metrics.workHrs/24)*100}%` }} className="bg-[#E26645] h-full" title="کار" />
             <div style={{ width: `${(metrics.sleepHrs/24)*100}%` }} className="bg-slate-400 dark:bg-slate-700 h-full" title="خواب" />
-            <div style={{ width: `${(metrics.lifeSocialHrs/24)*100}%` }} className="bg-amber-400 h-full" title="زندگی شخصی" />
+            <div style={{ width: `${(metrics.lifeSocialHrs/24)*100}%` }} className="bg-[#9B6B61] h-full" title="زندگی شخصی" />
             <div style={{ width: `${(metrics.healthHrs/24)*100}%` }} className="bg-[#7C8363] h-full" title="ورزش و ذهن" />
             <div style={{ width: `${(metrics.freeHrs/24)*100}%` }} className="bg-slate-200 dark:bg-slate-800 h-full" title="آزاد و شناور" />
           </div>
           <div className="flex justify-center gap-4 text-[9px] font-black text-[#8D7F72] dark:text-[#9D978B]">
             <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 bg-[#E26645] rounded-full"></span> کار ({getPersianNumber(Math.round((metrics.workHrs/24)*100))}٪)</span>
             <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 bg-slate-400 dark:bg-slate-700 rounded-full"></span> خواب ({getPersianNumber(Math.round((metrics.sleepHrs/24)*100))}٪)</span>
-            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 bg-amber-400 rounded-full"></span> تفریح ({getPersianNumber(Math.round((metrics.lifeSocialHrs/24)*100))}٪)</span>
+            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 bg-[#9B6B61] rounded-full"></span> تفریح ({getPersianNumber(Math.round((metrics.lifeSocialHrs/24)*100))}٪)</span>
             <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 bg-[#7C8363] rounded-full"></span> ورزش ({getPersianNumber(Math.round((metrics.healthHrs/24)*100))}٪)</span>
           </div>
         </div>
@@ -437,7 +437,7 @@ export default function BalanceReportSection({
           {/* Nervous system state */}
           <div className="bg-[#FDFBF7] dark:bg-[#1B1D16] border border-[#E6DFD3] dark:border-[#3D4133]/30 rounded-[28px] p-6 shadow-sm space-y-4">
             <h3 className="text-xs font-black text-[#2D3025] dark:text-[#E8ECE0] flex items-center gap-2">
-              <span className="p-1 rounded bg-amber-500/10 text-amber-500">🧠</span>
+              <span className="p-1 rounded bg-[#F9F1D8]0/10 text-[#9B6B61]">🧠</span>
               وضعیت تنش غدد فوق‌کلیوی و سیستم عصبی
             </h3>
 
@@ -503,7 +503,7 @@ export default function BalanceReportSection({
         <div className="lg:col-span-6 bg-[#FDFBF7] dark:bg-[#1B1D16] border border-[#E6DFD3] dark:border-[#3D4133]/30 rounded-[28px] p-6 shadow-sm flex flex-col justify-between">
           <div>
             <h3 className="text-xs font-black text-[#2D3025] dark:text-[#E8ECE0] mb-2 flex items-center gap-2">
-              <span className="w-1.5 h-3 rounded bg-amber-500"></span>
+              <span className="w-1.5 h-3 rounded bg-[#F9F1D8]0"></span>
               روند توازن زمانی هفتگی
             </h3>
             <p className="text-[10px] text-[#8D7F72] dark:text-[#9D978B] mb-5">تغییرات ساعات اختصاص‌یافته به چهار ستون اصلی توازن در روزهای گذشته</p>

@@ -420,7 +420,7 @@ export default function ContactsSection({
                         <div className="flex items-center gap-2">
                           <h4 className="text-xs font-black text-[#2D3025] dark:text-[#E8ECE0]">{contact.name}</h4>
                           <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-md ${
-                            contact.closenessTier === 'inner' ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/20' :
+                            contact.closenessTier === 'inner' ? 'bg-[#F9F1D8] text-[#5A5A40] dark:bg-[#201D13]' :
                             contact.closenessTier === 'outer' ? 'bg-slate-100 text-slate-700 dark:bg-slate-800' :
                             'bg-blue-50 text-blue-700 dark:bg-blue-950/20'
                           }`}>
@@ -446,7 +446,7 @@ export default function ContactsSection({
                     <div className="text-center" title="شاخص نگهداری رابطه">
                       <span className={`text-xs font-mono font-black px-2 py-1 rounded-lg block ${
                         score > 80 ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/20' :
-                        score > 50 ? 'bg-amber-50 text-amber-600 dark:bg-amber-950/20' :
+                        score > 50 ? 'bg-[#F9F1D8] text-[#9B6B61] dark:bg-[#201D13]' :
                         'bg-rose-50 text-rose-600 dark:bg-rose-950/20'
                       }`}>
                         {getPersianNumber(score)}٪
@@ -491,7 +491,7 @@ export default function ContactsSection({
                       <span className="text-[9px] font-black bg-rose-50 text-rose-600 px-2 py-0.5 rounded-md border border-rose-200">
                         {CATEGORY_LABELS[activeContact.category]}
                       </span>
-                      <span className="text-[9px] font-black bg-amber-50 text-amber-700 px-2 py-0.5 rounded-md border border-amber-200">
+                      <span className="text-[9px] font-black bg-[#F9F1D8] text-[#5A5A40] px-2 py-0.5 rounded-md border border-[#EBE3C8]">
                         {CLONESESS_LABELS[activeContact.closenessTier]}
                       </span>
                     </div>
@@ -510,7 +510,7 @@ export default function ContactsSection({
 
                   <button
                     onClick={handleOpenEditModal}
-                    className="p-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 border border-transparent hover:border-amber-300/30 cursor-pointer transition-colors"
+                    className="p-2 rounded-xl bg-[#F9F1D8]0/10 hover:bg-[#F9F1D8]0/20 text-[#9B6B61] border border-transparent hover:border-[#EBE3C8]/30 cursor-pointer transition-colors"
                     title="ویرایش مشخصات مخاطب"
                   >
                     <Edit2 className="w-4 h-4" />
@@ -531,12 +531,12 @@ export default function ContactsSection({
                 
                 {/* Birthday Info Card */}
                 {activeContact.birthday && (
-                  <div className="p-3.5 rounded-2xl bg-amber-500/5 dark:bg-amber-500/10 border border-amber-200/50 dark:border-amber-900/30">
-                    <div className="flex justify-between items-center text-amber-600">
+                  <div className="p-3.5 rounded-2xl bg-[#F9F1D8]0/5 dark:bg-[#F9F1D8]0/10 border border-[#EBE3C8]/50 dark:border-[#3D3929]">
+                    <div className="flex justify-between items-center text-[#9B6B61]">
                       <span className="font-black flex items-center gap-1.5">
                         <span>🎂</span> تاریخ تولد و تقویم مناسبت
                       </span>
-                      <span className="font-mono font-black bg-amber-100 px-2 py-0.5 rounded-md text-[10px]">
+                      <span className="font-mono font-black bg-[#F9F1D8] px-2 py-0.5 rounded-md text-[10px]">
                         {getPersianNumber(activeContact.birthday)}
                       </span>
                     </div>
@@ -545,7 +545,7 @@ export default function ContactsSection({
                       if (!countdown) return null;
                       return (
                         <div className="mt-2.5 text-[10px] text-[#8D7F72] dark:text-[#C7B59F] leading-relaxed">
-                          مخاطب شما در حال حاضر <span className="font-extrabold text-amber-600">{getPersianNumber(countdown.age)} سال</span> دارد و <span className="font-extrabold text-[#2D3025] dark:text-[#E8ECE0]">{getPersianNumber(countdown.daysLeft)} روز</span> تا تولد بعدی او باقی مانده است.
+                          مخاطب شما در حال حاضر <span className="font-extrabold text-[#9B6B61]">{getPersianNumber(countdown.age)} سال</span> دارد و <span className="font-extrabold text-[#2D3025] dark:text-[#E8ECE0]">{getPersianNumber(countdown.daysLeft)} روز</span> تا تولد بعدی او باقی مانده است.
                         </div>
                       );
                     })()}
@@ -641,7 +641,7 @@ export default function ContactsSection({
                             {getPersianNumber(log.date)}
                           </span>
                           <span className={`px-2 py-0.5 rounded-md font-black text-[9px] ${
-                            log.type === 'meeting' ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/20' :
+                            log.type === 'meeting' ? 'bg-[#F9F1D8] text-[#5A5A40] dark:bg-[#201D13]' :
                             log.type === 'call' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/20' :
                             log.type === 'chat' ? 'bg-blue-100 text-blue-700 dark:bg-blue-950/20' :
                             'bg-slate-100 text-slate-700 dark:bg-slate-800'
@@ -1097,7 +1097,7 @@ export default function ContactsSection({
                 {/* buttons */}
                 <button
                   type="submit"
-                  className="w-full py-3.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-black rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  className="w-full py-3.5 bg-[#F9F1D8]0 hover:bg-[#9B6B61] text-white text-xs font-black rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <Check className="w-4 h-4 stroke-[3]" />
                   <span>ذخیره تغییرات مخاطب</span>

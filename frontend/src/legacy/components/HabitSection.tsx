@@ -28,6 +28,7 @@ import {
   Sliders,
   Sparkle
 } from 'lucide-react';
+import SectionHeader from './SectionHeader';
 import { motion } from 'motion/react';
 import { 
   ResponsiveContainer, 
@@ -764,7 +765,7 @@ export default function HabitSection({
                     isDone 
                       ? 'bg-[#E8ECE0]/40 border-[#DDE2D5]' 
                       : isToday 
-                        ? 'bg-amber-50/30 border-[#9B6B61]'
+                        ? 'bg-[#F9F1D8]/30 border-[#9B6B61]'
                         : 'bg-white border-[#E6DFD3]/60'
                   }`}
                 >
@@ -867,7 +868,7 @@ export default function HabitSection({
                     <button
                       type="button"
                       onClick={() => setActiveQtyLogger({ ...activeQtyLogger, currentVal: Math.round(activeQtyLogger.targetQty * 1.5) })}
-                      className="py-1 text-[9px] font-bold bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 rounded-md transition-colors"
+                      className="py-1 text-[9px] font-bold bg-[#F9F1D8] hover:bg-[#EBE3C8] border border-[#EBE3C8] text-[#5A5A40] rounded-md transition-colors"
                     >
                       ۱۵۰٪ هدف
                     </button>
@@ -974,7 +975,23 @@ export default function HabitSection({
   const identitiesList = getIdentityAlignmentPoints();
 
   return (
-    <div className="space-y-6 text-right pb-12" dir="rtl">
+    <div className="space-y-5 text-right pb-8" dir="rtl">
+      <SectionHeader
+        icon={Flame}
+        title="عادت‌ها"
+        subtitle="ساخت، ردیابی و تقویت عادت‌های روزانه"
+        badge={totalHabitsCount > 0 ? `${completedTodayCount}/${totalHabitsCount}` : undefined}
+        badgeVariant={completedTodayCount === totalHabitsCount && totalHabitsCount > 0 ? 'success' : 'default'}
+        actions={
+          <button
+            onClick={() => { setNewHabitName(''); setIsModalOpen(true); }}
+            className="px-3 py-1.5 bg-[#7C8363] dark:bg-[#5A5A40] text-white text-[10px] font-bold rounded-xl hover:bg-[#5A5A40] dark:hover:bg-[#7C8363] transition-colors flex items-center gap-1.5 cursor-pointer"
+          >
+            <Plus className="w-3 h-3" />
+            عادت جدید
+          </button>
+        }
+      />
       
       {/* Top Banner Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
