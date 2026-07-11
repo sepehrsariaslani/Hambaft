@@ -20,7 +20,7 @@ def _get_asset_paths():
     """
     # Resolve paths relative to the app's public directory.
     # Works from both templates/pages/ and www/hambaft/ locations.
-    public_dir = os.path.join(os.path.dirname(__file__), '..', 'public')
+    public_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'public')
     assets_dir = os.path.join(public_dir, 'assets')
     js_path = None
     css_path = None

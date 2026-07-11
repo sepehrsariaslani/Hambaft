@@ -2,7 +2,12 @@
 Migration: Normalize old Persian task statuses to English equivalents.
 
 Run on the Frappe server:
-    bench --site <site_name> execute hambaft.patches.migrate_task_status.execute
+    bench --site <site_name> execute hambaft.hambaft.api.run_task_status_migration
+or, if you really need the patch entry point:
+    bench --site <site_name> execute hambaft.hambaft.patches.migrate_task_status.execute
+
+Do not use `hambaft.patches...` in this repo layout. The importable Python package
+is `hambaft.hambaft`, not a top-level `hambaft.patches`.
 
 This patches all Task records that still have Persian status values
 (e.g. "انجام‌شده") and converts them to the canonical English values

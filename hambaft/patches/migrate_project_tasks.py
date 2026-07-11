@@ -13,9 +13,12 @@ This patch:
 3. Handles idempotency: skips if a Task with matching title/project already exists
 
 Run via:
-  bench --site <site> execute hambaft.patches.migrate_project_tasks.execute
+  bench --site <site> execute hambaft.hambaft.api.run_project_tasks_migration
   OR
-  bench --site <site> migrate  (if listed in patches.txt)
+  bench --site <site> execute hambaft.hambaft.patches.migrate_project_tasks.execute
+
+Do not use `hambaft.patches...` in this repo layout. The importable Python package
+is `hambaft.hambaft`, not a top-level `hambaft.patches`.
 """
 
 from __future__ import unicode_literals
