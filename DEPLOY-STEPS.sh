@@ -2,14 +2,26 @@
 # === مراحل دیپلوی سرور ===
 # بعد از git pull روی سرور، این مراحل رو به ترتیب اجرا کن
 #
-# 1. bash deploy-fix.sh
-# 2. bench --site hambaft.ir migrate
-# 3. bench --site hambaft.ir execute hambaft.hambaft.api.run_task_status_migration
-# 4. bench --site hambaft.ir execute hambaft.hambaft.api.run_project_tasks_migration
-# 5. bench build && bench clear-cache && bench clear-website-cache && bench restart
-# 6. Hard-refresh browser (Ctrl+Shift+R)
+# مرحله ۱: پاکسازی و بیلد فرانت‌اند
+#   bash deploy-fix.sh
 #
-# نکته مهم: bench build باید بعد از npm run build اجرا بشه
-# چون deploy-fix.sh خودش npm run build رو اجرا میکنه
-# و bench build ممکنه index.html رو overwrite کنه
-# اگه bench build اجرا کردی، دوباره deploy-fix.sh رو اجرا کن
+# مرحله ۲: مایگریت دیتابیس
+#   bench --site hambaft.ir migrate
+#
+# مرحله ۳: مایگریت وضعیت تسک‌ها (فارسی → انگلیسی)
+#   bench --site hambaft.ir execute hambaft.hambaft.api.run_task_status_migration
+#
+# مرحله ۴: مایگریت تسک‌های پروژه (child table → Task اصلی)
+#   bench --site hambaft.ir execute hambaft.hambaft.api.run_project_tasks_migration
+#
+# مرحله ۵: بیلد و ریستارت
+#   bench build && bench clear-cache && bench clear-website-cache && bench restart
+#
+# مرحله ۶: بیلد فرانت‌اند دوباره (bench build ممکنه index.html رو تغییر بده)
+#   cd frontend && npm run build && cd ..
+#
+# مرحله ۷: هارد رفرش مرورگر (Ctrl+Shift+R)
+#
+# ⚠️ نکته مهم: اگر بعد از همه مراحل بالا اپ هنوز لود نمیشه:
+#   1. برو به DevTools > Application > Storage > Clear site data
+#   2. یا در آدرس بار بزن: chrome://serviceworker-internals/ و unregister کن
