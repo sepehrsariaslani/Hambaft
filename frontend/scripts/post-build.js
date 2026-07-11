@@ -1,4 +1,4 @@
-import { readFileSync, copyFileSync, mkdirSync, readdirSync, rmSync, existsSync } from 'fs'
+import { readFileSync, writeFileSync, mkdirSync, readdirSync, rmSync, existsSync } from 'fs'
 import { resolve, dirname } from 'path'
 import { fileURLToPath } from 'url'
 
@@ -8,6 +8,7 @@ const publicSource = resolve(__dirname, '../public')
 const publicTarget = resolve(rootDir, 'hambaft/public')
 
 // 1. Copy static public assets (manifest.json, sw.js, hambaft-icon.svg) to hambaft/public
+// Use read+write instead of copyFile to avoid EPERM on read-only target files
 const staticAssets = ['manifest.json', 'sw.js', 'hambaft-icon.svg']
 for (const asset of staticAssets) {
   const src = resolve(publicSource, asset)
@@ -15,7 +16,8 @@ for (const asset of staticAssets) {
   if (existsSync(src)) {
     try {
       mkdirSync(dirname(dst), { recursive: true })
-      copyFileSync(src, dst)
+      const content = readFileSync(src)
+      writeFileSync(dst, content)
       console.log('[post-build] copied', asset)
     } catch (err) {
       console.error('[post-build] failed to copy', asset, err.message)

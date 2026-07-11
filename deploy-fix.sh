@@ -1,67 +1,87 @@
 #!/bin/bash
-# deploy-fix.sh — Run on the production server after git pull
-# Cleans stale build artifacts that git no longer tracks
-# and ensures the latest frontend build is active.
-
+# deploy-fix.sh — Run on the production server AFTER git pull
+# Fixes stale assets, service worker, and ensures the latest build is active.
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR"
 
-echo "=== Hambaft Deploy Cleanup ==="
+echo "=== Hambaft Deploy Fix ==="
 echo ""
 
-# 1. Remove stale hambaft/public/frontend/ directory
-#    This was from an old Vite config that output to a nested frontend/ path.
-#    It causes 404s because the old index.html references /assets/hambaft/frontend/assets/
+# ────────────────────────────────────────────────────────────────
+# STEP 1: Remove stale /frontend/ directories that cause 404s
+# ────────────────────────────────────────────────────────────────
+echo "[1/7] Removing stale /frontend/ directories..."
 if [ -d "$SCRIPT_DIR/hambaft/public/frontend" ]; then
-    echo "[1/6] Removing stale hambaft/public/frontend/ ..."
     rm -rf "$SCRIPT_DIR/hambaft/public/frontend"
-    echo "  ✓ Removed"
+    echo "  ✓ Removed hambaft/public/frontend/"
 else
-    echo "[1/6] No stale hambaft/public/frontend/ found (good)"
+    echo "  ✓ No stale hambaft/public/frontend/ (good)"
+fi
+if [ -d "$SCRIPT_DIR/public/frontend" ]; then
+    rm -rf "$SCRIPT_DIR/public/frontend"
+    echo "  ✓ Removed public/frontend/"
+else
+    echo "  ✓ No stale public/frontend/ (good)"
 fi
 
-# 2. Remove stale root-level public/ directory
+# ────────────────────────────────────────────────────────────────
+# STEP 2: Remove stale root-level public/ and www/sw.js
+# ────────────────────────────────────────────────────────────────
+echo "[2/7] Removing stale root public/ and www/sw.js..."
 if [ -d "$SCRIPT_DIR/public" ]; then
-    echo "[2/6] Removing stale root public/ ..."
     rm -rf "$SCRIPT_DIR/public"
-    echo "  ✓ Removed"
+    echo "  ✓ Removed root public/"
 else
-    echo "[2/6] No stale root public/ found (good)"
+    echo "  ✓ No stale root public/ (good)"
 fi
-
-# 3. Remove stale www/sw.js (old v3 service worker)
 if [ -f "$SCRIPT_DIR/www/sw.js" ]; then
-    echo "[3/6] Removing stale www/sw.js ..."
     rm -f "$SCRIPT_DIR/www/sw.js"
-    echo "  ✓ Removed"
+    echo "  ✓ Removed stale www/sw.js"
 else
-    echo "[3/6] No stale www/sw.js found (good)"
+    echo "  ✓ No stale www/sw.js (good)"
 fi
 
-# 4. CRITICAL: Ensure hambaft/public/index.html is up-to-date from git.
-#    This guarantees the asset path regex below can find the correct filenames.
-echo "[4/6] Restoring hambaft/public/index.html from git ..."
-cd "$SCRIPT_DIR"
-git checkout -- hambaft/public/index.html 2>/dev/null && echo "  ✓ Restored from git" || echo "  ⚠ Could not restore (will be created by npm run build)"
+# ────────────────────────────────────────────────────────────────
+# STEP 3: Restore index.html from git (ensures correct paths)
+# ────────────────────────────────────────────────────────────────
+echo "[3/7] Restoring index.html from git..."
+git checkout -- hambaft/public/index.html 2>/dev/null && echo "  ✓ Restored" || echo "  ⚠ Could not restore"
 
-# 5. Rebuild frontend FIRST so index.html has the latest hashes, then clean stale assets.
-#    The build overwrites index.html with the correct new asset references.
-echo "[5/6] Rebuilding frontend..."
+# ────────────────────────────────────────────────────────────────
+# STEP 4: Install frontend deps and build
+# ────────────────────────────────────────────────────────────────
+echo "[4/7] Building frontend..."
 cd "$SCRIPT_DIR/frontend"
-if [ -d "node_modules" ]; then
-    npm run build 2>&1 | tail -3
-    echo "  ✓ Frontend rebuilt"
+if [ ! -d "node_modules" ]; then
+    echo "  Installing npm dependencies..."
+    npm install --legacy-peer-deps 2>&1 | tail -1
+fi
+npm run build 2>&1 | tail -3
+echo "  ✓ Frontend built"
+
+# ────────────────────────────────────────────────────────────────
+# STEP 5: Force-copy sw.js even if target is read-only
+# (post-build.js uses read+write to avoid EPERM)
+# ────────────────────────────────────────────────────────────────
+echo "[5/7] Verifying sw.js..."
+cd "$SCRIPT_DIR"
+SW_SRC="frontend/public/sw.js"
+SW_DST="hambaft/public/sw.js"
+if [ -f "$SW_SRC" ]; then
+    # Use cat+write to bypass EPERM on read-only target
+    cat "$SW_SRC" > "$SW_DST" 2>/dev/null && echo "  ✓ sw.js updated" || echo "  ⚠ Could not update sw.js (check permissions)"
 else
-    echo "  ⚠ node_modules not found — run: cd frontend && npm install && npm run build"
+    echo "  ⚠ sw.js source not found"
 fi
 
-# Now clean stale hashed assets from hambaft/public/assets/
-cd "$SCRIPT_DIR"
+# ────────────────────────────────────────────────────────────────
+# STEP 6: Clean stale hashed assets
+# ────────────────────────────────────────────────────────────────
+echo "[6/7] Cleaning stale hashed assets..."
 if [ -f "$SCRIPT_DIR/hambaft/public/index.html" ] && [ -d "$SCRIPT_DIR/hambaft/public/assets" ]; then
-    echo "[6/6] Cleaning stale hashed assets..."
     REFS=$(grep -oP 'assets/[A-Za-z0-9_.-]+\.(js|css)' "$SCRIPT_DIR/hambaft/public/index.html" | sort -u)
-    # Also scan the main JS for dynamic imports
     MAIN_JS=$(grep -oP 'index\.[A-Za-z0-9_-]+\.js' "$SCRIPT_DIR/hambaft/public/index.html" | head -1)
     if [ -n "$MAIN_JS" ] && [ -f "$SCRIPT_DIR/hambaft/public/assets/$MAIN_JS" ]; then
         REFS="$REFS
@@ -79,20 +99,42 @@ $(grep -oP '[A-Za-z0-9_.-]+\.(js|css)' "$SCRIPT_DIR/hambaft/public/assets/$MAIN_
             REMOVED=$((REMOVED + 1))
         fi
     done
-    echo "  ✓ Kept $KEPT current assets, removed $REMOVED stale assets"
+    echo "  ✓ Kept $KEPT, removed $REMOVED stale assets"
 else
-    echo "[6/6] No index.html or assets dir — skipping"
+    echo "  ✓ No assets to clean"
+fi
+
+# ────────────────────────────────────────────────────────────────
+# STEP 7: Verify index.html references
+# ────────────────────────────────────────────────────────────────
+echo "[7/7] Verifying index.html..."
+echo ""
+echo "  Script src:"
+grep "script.*src" "$SCRIPT_DIR/hambaft/public/index.html" 2>/dev/null || echo "    (not found)"
+echo "  Stylesheet href:"
+grep "stylesheet" "$SCRIPT_DIR/hambaft/public/index.html" 2>/dev/null || echo "    (not found)"
+echo ""
+echo "  sw.js cache version:"
+grep "CACHE_VERSION" "$SCRIPT_DIR/hambaft/public/sw.js" 2>/dev/null || echo "    (sw.js not found)"
+echo ""
+
+# Check for stale /frontend/ references
+if grep -q "/frontend/" "$SCRIPT_DIR/hambaft/public/index.html" 2>/dev/null; then
+    echo "  ⚠⚠⚠ WARNING: index.html still contains /frontend/ references!"
+    echo "  This will cause 404s. Something is wrong with the build."
+else
+    echo "  ✓ No stale /frontend/ references in index.html"
 fi
 
 echo ""
-echo "=== Cleanup complete ==="
+echo "=== Deploy fix complete ==="
 echo ""
-echo "VERIFICATION — hambaft/public/index.html should reference /assets/hambaft/assets/:"
-grep "script.*src" "$SCRIPT_DIR/hambaft/public/index.html" 2>/dev/null || echo "  (index.html not found)"
-echo ""
-echo "Next steps:"
-echo "  1. bench --site <site_name> migrate"
-echo "  2. bench --site <site_name> execute hambaft.hambaft.api.run_task_status_migration"
-echo "  3. bench --site <site_name> execute hambaft.hambaft.api.run_project_tasks_migration"
-echo "  4. bench build && bench clear-cache && bench clear-website-cache && bench restart"
-echo "  5. Hard-refresh browser (Ctrl+Shift+R) or clear browser cache"
+echo "NEXT STEPS (run in order):"
+echo "  1. bench --site hambaft.ir migrate"
+echo "  2. bench --site hambaft.ir execute hambaft.hambaft.api.run_task_status_migration"
+echo "  3. bench --site hambaft.ir execute hambaft.hambaft.api.run_project_tasks_migration"
+echo "  4. bench build"
+echo "  5. AFTER bench build, re-run this script to restore index.html:"
+echo "     bash deploy-fix.sh"
+echo "  6. bench clear-cache && bench clear-website-cache && bench restart"
+echo "  7. Hard-refresh browser (Ctrl+Shift+R) or clear browser site data"
