@@ -39,16 +39,27 @@ else
     echo "[3/6] No stale www/sw.js found (good)"
 fi
 
-# 4. CRITICAL: Replace hambaft/public/index.html with the git-tracked version
-#    The npm build may have overwritten it with an old version, or bench build
-#    may have cached it. We restore the git version to guarantee correct paths.
+# 4. CRITICAL: Ensure hambaft/public/index.html is up-to-date from git.
+#    This guarantees the asset path regex below can find the correct filenames.
 echo "[4/6] Restoring hambaft/public/index.html from git ..."
 cd "$SCRIPT_DIR"
 git checkout -- hambaft/public/index.html 2>/dev/null && echo "  ✓ Restored from git" || echo "  ⚠ Could not restore (will be created by npm run build)"
 
-# 5. Remove stale hashed assets from hambaft/public/assets/
+# 5. Rebuild frontend FIRST so index.html has the latest hashes, then clean stale assets.
+#    The build overwrites index.html with the correct new asset references.
+echo "[5/6] Rebuilding frontend..."
+cd "$SCRIPT_DIR/frontend"
+if [ -d "node_modules" ]; then
+    npm run build 2>&1 | tail -3
+    echo "  ✓ Frontend rebuilt"
+else
+    echo "  ⚠ node_modules not found — run: cd frontend && npm install && npm run build"
+fi
+
+# Now clean stale hashed assets from hambaft/public/assets/
+cd "$SCRIPT_DIR"
 if [ -f "$SCRIPT_DIR/hambaft/public/index.html" ] && [ -d "$SCRIPT_DIR/hambaft/public/assets" ]; then
-    echo "[5/6] Cleaning stale hashed assets..."
+    echo "[6/6] Cleaning stale hashed assets..."
     REFS=$(grep -oP 'assets/[A-Za-z0-9_.-]+\.(js|css)' "$SCRIPT_DIR/hambaft/public/index.html" | sort -u)
     # Also scan the main JS for dynamic imports
     MAIN_JS=$(grep -oP 'index\.[A-Za-z0-9_-]+\.js' "$SCRIPT_DIR/hambaft/public/index.html" | head -1)
@@ -70,17 +81,7 @@ $(grep -oP '[A-Za-z0-9_.-]+\.(js|css)' "$SCRIPT_DIR/hambaft/public/assets/$MAIN_
     done
     echo "  ✓ Kept $KEPT current assets, removed $REMOVED stale assets"
 else
-    echo "[5/6] No index.html or assets dir — will be created by npm run build"
-fi
-
-# 6. Rebuild frontend (must run AFTER git checkout of index.html so Vite can overwrite)
-echo "[6/6] Rebuilding frontend..."
-cd "$SCRIPT_DIR/frontend"
-if [ -d "node_modules" ]; then
-    npm run build 2>&1 | tail -3
-    echo "  ✓ Frontend rebuilt"
-else
-    echo "  ⚠ node_modules not found — run: cd frontend && npm install && npm run build"
+    echo "[6/6] No index.html or assets dir — skipping"
 fi
 
 echo ""
