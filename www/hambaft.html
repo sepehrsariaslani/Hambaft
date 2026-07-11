@@ -10,10 +10,15 @@
     <meta name="apple-mobile-web-app-title" content="هم‌بافت" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="description" content="هم‌بافت، داشبورد شخصی مدیریت زندگی، عادت‌ها، اهداف، مالی، ژورنال و برنامه‌ریزی روزانه." />
-    <link rel="manifest" href="/assets/hambaft/manifest.json">
-    <link rel="icon" href="/assets/hambaft/hambaft-icon.svg" type="image/svg+xml">
+    <link rel="manifest" href="/assets/hambaft/manifest.json" />
+    <link rel="icon" href="/assets/hambaft/hambaft-icon.svg" type="image/svg+xml" />
     <title>هم‌بافت</title>
-    <!-- Assets are loaded dynamically by the Frappe page controller or resolved by Jinja context -->
+    {% if css_path %}
+    <link rel="stylesheet" crossorigin href="{{ css_path }}">
+    {% endif %}
+    {% if js_path %}
+    <script type="module" crossorigin src="{{ js_path }}"></script>
+    {% endif %}
   </head>
   <body class="h-full antialiased">
     <div id="root" class="h-full"></div>
