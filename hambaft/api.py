@@ -4903,3 +4903,44 @@ def quick_add_task(title, project=None, area=None, goal=None, importance=None, c
     result["noteBlocks"] = _extract_note_blocks(doc)
     enriched = _enrich_task_with_impact(dict(result))
     return _api_response({"task": enriched})
+
+
+# ─── One-time Migration Helpers ───────────────────────────────────
+
+@frappe.whitelist()
+def run_task_status_migration():
+    """Migrate old Persian task statuses to English equivalents.
+    
+    Run via: bench --site <site> execute hambaft.hambaft.api.run_task_status_migration
+    Or call as API from browser console (admin only).
+    """
+    if frappe.session.user == "Guest":
+        frappe.throw("Authentication required", frappe.AuthenticationError)
+
+    _STATUS_MAP = {
+        "انجام‌شده": "done",
+        "انجام شده": "done",
+        "در حال انجام": "in_progress",
+        "در_حال_انجام": "in_progress",
+        "انجام‌نشده": "inbox",
+        "انجام نشده": "inbox",
+        "لغو‌شده": "dropped",
+        "لغو شده": "dropped",
+    }
+
+    task_dt = "Task"
+    updated = 0
+    if not frappe.db.exists("DocType", task_dt):
+        return _api_response({"status": "skipped", "reason": "Task DocType not found"})
+
+    for old_status, new_status in _STATUS_MAP.items():
+        names = frappe.get_all(task_dt, filters={"status": old_status}, pluck="name")
+        for name in names:
+            try:
+                frappe.db.set_value(task_dt, name, "status", new_status, update_modified=True)
+                updated += 1
+            except Exception as e:
+                frappe.logger().warning(f"migrate_task_status: failed {name}: {e}")
+
+    frappe.db.commit()
+    return _api_response({"status": "done", "updated": updated})
