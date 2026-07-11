@@ -24,6 +24,17 @@ frappe.pages['hambaft'].on_page_load = function (wrapper) {
             const parser = new DOMParser();
             const doc = parser.parseFromString(html, 'text/html');
 
+            // Inject modulepreload links for faster chunk loading
+            doc.querySelectorAll('link[rel="modulepreload"]').forEach(link => {
+                const href = link.getAttribute('href');
+                if (!href || document.querySelector(`link[href="${href}"]`)) return;
+                const node = document.createElement('link');
+                node.rel = 'modulepreload';
+                node.href = href;
+                if (link.crossOrigin) node.crossOrigin = link.crossOrigin;
+                document.head.appendChild(node);
+            });
+
             doc.querySelectorAll('link[rel="stylesheet"]').forEach(link => {
                 if (document.querySelector(`link[href="${link.getAttribute('href')}"]`)) return;
                 const node = document.createElement('link');

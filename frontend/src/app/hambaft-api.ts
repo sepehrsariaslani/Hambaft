@@ -644,6 +644,9 @@ export function toProjectPayload(project: Project, goalId?: string | null) {
       ? project.linkedGoalId
       : null
 
+  // Tasks are now real Task records linked via project=projectId.
+  // We send the tasks array so the backend can _sync_project_tasks(),
+  // but the child table is no longer the source of truth.
   return {
     title: project.title,
     description: project.description || '',
@@ -665,9 +668,13 @@ export function toProjectPayload(project: Project, goalId?: string | null) {
       title: task.title,
       description: task.description || '',
       completed: task.completed,
+      status: task.completed ? 'done' : (task.status || 'inbox'),
       dueDate: task.dueDate,
       priority: taskPriorityToBackend[task.priority || 'medium'] || 'متوسط',
-      status: task.completed ? 'انجام‌شده' : 'انجام‌نشده',  // Hambaft Task child table uses Persian
+      importance: task.importance === 'key' ? 'کلیدی' : task.importance === 'milestone' ? 'نقطه‌عطف' : 'عادی',
+      isDailyHighlight: task.isDailyHighlight || false,
+      estimatedMinutes: task.estimatedMinutes || undefined,
+      actualMinutes: task.actualMinutes || undefined,
     })),
   }
 }

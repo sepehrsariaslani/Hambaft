@@ -2095,8 +2095,8 @@ export default function App({
         }
       } catch (e) {
         console.error('[hambaft] add task to project failed:', e);
-        // Fallback: sync project state the old way (child table rows)
-        syncProjectState(goalId, projectId, 'update project');
+        // No child-table fallback — tasks are real Task records now.
+        // The optimistic update stays; user can refresh to retry.
       }
     });
   };
@@ -2194,9 +2194,8 @@ export default function App({
       runSync('toggle project task', async () => {
         await updateTaskRecord({ id: taskId, completed: !projectTask?.completed, status: !projectTask?.completed ? 'done' : 'inbox' } as Task);
       });
-    } else {
-      syncProjectState(goalId, projectId, 'update project');
     }
+    // Temp IDs can't be persisted — they'll be saved when the project syncs.
   };
 
   const handleToggleTaskTracking = async (goalId: string, projectId: string, taskId: string) => {
@@ -2248,9 +2247,8 @@ export default function App({
       runSync('delete task from project', async () => {
         await deleteTaskRecord(taskId);
       });
-    } else {
-      syncProjectState(goalId, projectId, 'update project');
     }
+    // Temp IDs don't need backend deletion — they only exist in local state.
   };
 
   const handleToggleProjectCompletion = (goalId: string, projectId: string) => {
@@ -2293,7 +2291,23 @@ export default function App({
         }
         return g;
       });
-      return { ...prev, goals: updatedGoals };
+
+      // If tasks are being updated, sync them to the global task list too
+      let updatedTasks = prev.tasks;
+      if (updates.tasks) {
+        const updatedTaskMap = new Map(updates.tasks.map(t => [t.id, t]))
+        // Add/update tasks that are in the project update
+        for (const [id, task] of updatedTaskMap) {
+          const exists = updatedTasks.some(t => t.id === id)
+          if (exists) {
+            updatedTasks = updatedTasks.map(t => t.id === id ? task : t)
+          } else {
+            updatedTasks = [task, ...updatedTasks]
+          }
+        }
+      }
+
+      return { ...prev, goals: updatedGoals, tasks: updatedTasks };
     });
     syncProjectState(goalId, projectId, 'update project');
   };

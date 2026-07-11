@@ -588,6 +588,124 @@ def _inject_note_blocks(data):
     return data
 
 
+def _create_project_task(project_name, task_data):
+    """Create a real Task record linked to a project. Used instead of child table rows."""
+    status = task_data.get("status") or ("done" if task_data.get("completed") else "inbox")
+    # Normalize Persian statuses to English
+    status = _STATUS_FA_TO_EN.get(status, status)
+    priority = task_data.get("priority") or "متوسط"
+    priority = _normalize_task_priority(priority)
+    task_doc = frappe.new_doc("Task")
+    task_doc.title = task_data.get("title")
+    task_doc.description = task_data.get("description") or ""
+    task_doc.project = project_name
+    task_doc.status = status
+    task_doc.priority = priority
+    task_doc.importance = task_data.get("importance") or "عادی"
+    task_doc.due_date = task_data.get("dueDate") or task_data.get("due_date")
+    task_doc.is_daily_highlight = 1 if task_data.get("isDailyHighlight") or task_data.get("is_daily_highlight") else 0
+    task_doc.estimated_minutes = task_data.get("estimatedMinutes") or task_data.get("estimated_minutes")
+    task_doc.actual_minutes = task_data.get("actualMinutes") or task_data.get("actual_minutes")
+    task_doc.user = frappe.session.user
+    # Inherit area/goal from project if not provided
+    try:
+        proj_doc = frappe.get_doc("Hambaft Project", project_name)
+        if not task_data.get("area") and proj_doc.area:
+            task_doc.area = proj_doc.area
+        if not task_data.get("goal") and proj_doc.goal:
+            task_doc.goal = proj_doc.goal
+    except Exception:
+        pass
+    task_doc.insert(ignore_permissions=True)
+    frappe.db.commit()
+    return task_doc
+
+
+def _sync_project_tasks(project_name, tasks_list, user=None):
+    """Synchronize project tasks: existing Task records are updated,
+    new ones are created, and stale ones (no longer in the list) are unlinked.
+    This replaces the old child-table sync."""
+    user = user or frappe.session.user
+    _done_statuses = {"done", "completed", "انجام‌شده", "انجام شده"}
+
+    # Get current linked tasks from the Task doctype
+    existing = frappe.get_all(
+        "Task",
+        filters={"project": project_name},
+        fields=["name"],
+    )
+    existing_names = {row.name for row in existing}
+    sent_names = set()
+
+    # Cache project doc for area/goal inheritance
+    try:
+        proj_doc = frappe.get_doc("Hambaft Project", project_name)
+    except Exception:
+        proj_doc = None
+
+    for task in tasks_list:
+        tid = task.get("id") or task.get("name")
+        # Skip optimistic/frontend-generated IDs
+        is_temp = not tid or str(tid).startswith(("pt-", "tk-p-", "tk-", "new-"))
+        status = task.get("status") or ("done" if task.get("completed") else "inbox")
+        status = _STATUS_FA_TO_EN.get(status, status)
+        priority = task.get("priority") or "متوسط"
+        priority = _normalize_task_priority(priority)
+
+        if is_temp or tid not in existing_names:
+            # Create new Task
+            task_doc = frappe.new_doc("Task")
+            task_doc.title = task.get("title")
+            task_doc.description = task.get("description") or ""
+            task_doc.project = project_name
+            task_doc.status = status
+            task_doc.priority = priority
+            task_doc.importance = task.get("importance") or "عادی"
+            task_doc.due_date = task.get("dueDate") or task.get("due_date")
+            task_doc.is_daily_highlight = 1 if task.get("isDailyHighlight") or task.get("is_daily_highlight") else 0
+            task_doc.estimated_minutes = task.get("estimatedMinutes") or task.get("estimated_minutes")
+            task_doc.actual_minutes = task.get("actualMinutes") or task.get("actual_minutes")
+            task_doc.user = user
+            if proj_doc:
+                if not task.get("area") and proj_doc.area:
+                    task_doc.area = proj_doc.area
+                if not task.get("goal") and proj_doc.goal:
+                    task_doc.goal = proj_doc.goal
+            task_doc.insert(ignore_permissions=True)
+            sent_names.add(task_doc.name)
+        else:
+            # Update existing Task
+            task_doc = frappe.get_doc("Task", tid)
+            if task.get("title") is not None:
+                task_doc.title = task.get("title")
+            if task.get("description") is not None:
+                task_doc.description = task.get("description")
+            task_doc.status = status
+            task_doc.priority = priority
+            if task.get("importance") is not None:
+                task_doc.importance = task.get("importance")
+            if task.get("dueDate") or task.get("due_date"):
+                task_doc.due_date = task.get("dueDate") or task.get("due_date")
+            task_doc.is_daily_highlight = 1 if task.get("isDailyHighlight") or task.get("is_daily_highlight") else 0
+            if task.get("estimatedMinutes") or task.get("estimated_minutes"):
+                task_doc.estimated_minutes = task.get("estimatedMinutes") or task.get("estimated_minutes")
+            if task.get("actualMinutes") or task.get("actual_minutes"):
+                task_doc.actual_minutes = task.get("actualMinutes") or task.get("actual_minutes")
+            task_doc.save(ignore_permissions=True)
+            sent_names.add(tid)
+
+    # Remove project link from tasks that are no longer in the list
+    for name in existing_names - sent_names:
+        try:
+            task_doc = frappe.get_doc("Task", name)
+            task_doc.project = None
+            task_doc.save(ignore_permissions=True)
+        except Exception:
+            pass
+
+    frappe.db.commit()
+
+
 def _project_to_frontend(doc):
     _done_statuses = {"done", "completed", "انجام‌شده", "انجام شده"}
     task_rows = []
@@ -595,9 +713,22 @@ def _project_to_frontend(doc):
     milestone_done = 0
     key_total = 0
     key_done = 0
-    for row in doc.get("tasks") or []:
-        imp = getattr(row, "importance", None) or "عادی"
-        is_done = row.status in _done_statuses
+
+    # Read tasks from the main Task doctype (single source of truth).
+    # A task belongs to a project when task.project == project_name.
+    linked_tasks = frappe.get_all(
+        "Task",
+        filters={"project": doc.name, "user": doc.user or frappe.session.user},
+        fields=["name", "title", "status", "priority", "importance",
+                "description", "due_date", "creation", "is_daily_highlight",
+                "category", "area", "goal", "parent_task",
+                "estimated_minutes", "actual_minutes", "effort_type",
+                "note_blocks_json", "blocked_by_json", "blocking_json"],
+        order_by="creation asc",
+    )
+    for row in linked_tasks:
+        imp = row.get("importance") or "عادی"
+        is_done = row.get("status") in _done_statuses
         if imp == "نقطه‌عطف":
             milestone_total += 1
             if is_done:
@@ -607,25 +738,33 @@ def _project_to_frontend(doc):
             if is_done:
                 key_done += 1
         task_rows.append({
-            "id": row.name,
-            "title": row.title,
+            "id": row.get("name"),
+            "title": row.get("title"),
             "completed": is_done,
-            "createdAt": str(getattr(row, "creation", None) or doc.creation or today())[:10],
-            "description": row.description or "",
-            "dueDate": str(row.due_date)[:10] if getattr(row, "due_date", None) else None,
-            "priority": row.priority,
-            "status": row.status,
+            "status": row.get("status"),
             "importance": imp,
+            "createdAt": str(row.get("creation") or doc.creation or today())[:10],
+            "description": row.get("description") or "",
+            "dueDate": str(row.get("due_date"))[:10] if row.get("due_date") else None,
+            "priority": row.get("priority"),
+            "category": row.get("category"),
+            "areaId": row.get("area"),
+            "goalId": row.get("goal"),
+            "parentTaskId": row.get("parent_task"),
+            "isDailyHighlight": bool(row.get("is_daily_highlight")),
+            "estimatedMinutes": row.get("estimated_minutes"),
+            "actualMinutes": row.get("actual_minutes"),
+            "effortType": row.get("effort_type"),
         })
 
-    # Quality-aware progress
+    # Quality-aware progress (same logic as compute_progress on the doc)
     total_weight = 0
     done_weight = 0
-    for row in doc.get("tasks") or []:
-        imp = getattr(row, "importance", None) or "عادی"
+    for row in linked_tasks:
+        imp = row.get("importance") or "عادی"
         w = 3 if imp == "نقطه‌عطف" else 2 if imp == "کلیدی" else 1
         total_weight += w
-        if row.status in _done_statuses:
+        if row.get("status") in _done_statuses:
             done_weight += w
     quality_progress = int((done_weight / total_weight) * 100) if total_weight > 0 else 0
 
@@ -2201,18 +2340,13 @@ def create_project(data):
     doc.blocked_by_json = data.get("blocked_by_json")
     if data.get("note_blocks_json"):
         doc.note_blocks_json = data.get("note_blocks_json")
-    for task in data.get("tasks") or []:
-        doc.append("tasks", {
-            "title": task.get("title"),
-            "description": task.get("description"),
-            "status": task.get("status") or ("انجام‌شده" if task.get("completed") else "انجام‌نشده"),
-            "priority": _normalize_task_priority(task.get("priority")),
-            "due_date": task.get("dueDate") or task.get("due_date"),
-            "user": frappe.session.user,
-            "completed": 1 if task.get("completed") else 0,
-        })
+    # Do NOT write tasks to the child table — tasks are now linked via Task.project.
+    # If tasks are provided, create real Task records instead.
     doc.insert(ignore_permissions=True)
     frappe.db.commit()
+    # Create linked Task records for any tasks provided
+    for task in data.get("tasks") or []:
+        _create_project_task(doc.name, task)
     return _api_response({"project": _project_to_frontend(doc)})
 
 
@@ -2243,19 +2377,10 @@ def update_project(name, data):
     doc.blocked_by_json = data.get("blocked_by_json", doc.blocked_by_json)
     if data.get("note_blocks_json"):
         doc.note_blocks_json = data.get("note_blocks_json")
+    # Tasks are no longer stored in the child table — they are real Task records.
+    # When "tasks" is provided in the update, sync them with the Task doctype.
     if "tasks" in data:
-        doc.set("tasks", [])
-        for task in data.get("tasks") or []:
-            doc.append("tasks", {
-                "name": task.get("id") if task.get("id") and not str(task.get("id")).startswith(("pt-", "tk-p-", "tk-")) else None,
-                "title": task.get("title"),
-                "description": task.get("description"),
-                "status": task.get("status") or ("انجام‌شده" if task.get("completed") else "انجام‌نشده"),
-                "priority": _normalize_task_priority(task.get("priority")),
-                "due_date": task.get("dueDate") or task.get("due_date"),
-                "user": frappe.session.user,
-                "completed": 1 if task.get("completed") else 0,
-            })
+        _sync_project_tasks(doc.name, data.get("tasks") or [], doc.user or frappe.session.user)
     doc.save(ignore_permissions=True)
     frappe.db.commit()
     return _api_response({"project": _project_to_frontend(doc)})
@@ -4944,3 +5069,15 @@ def run_task_status_migration():
 
     frappe.db.commit()
     return _api_response({"status": "done", "updated": updated})
+
+
+@frappe.whitelist()
+def run_project_tasks_migration():
+    """Migrate child-table tasks (Hambaft Task) into real Task records.
+    Safe to run multiple times — idempotent.
+    """
+    if frappe.session.user == "Guest":
+        frappe.throw("Authentication required", frappe.AuthenticationError)
+    from hambaft.patches.migrate_project_tasks import execute as _migrate
+    _migrate()
+    return _api_response({"status": "done"})

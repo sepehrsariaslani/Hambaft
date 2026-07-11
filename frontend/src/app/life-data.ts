@@ -69,7 +69,9 @@ function parseNoteBlocks(raw: any): any[] | undefined {
 }
 
 function mapTasks(items: any[]): Task[] {
-  return items.map((item) => ({
+  return items.map((item) => {
+    try {
+    return {
     id: item.name,
     title: item.title || item.subject || item.name,
     completed: ['done', 'completed', 'انجام‌شده', 'انجام شده'].includes(String(item.status || '')),
@@ -83,8 +85,8 @@ function mapTasks(items: any[]): Task[] {
     category: mapBackendTaskCategory(item.category),
     projectId: item.project || undefined,
     parentTaskId: item.parent_task || undefined,
-    blockedBy: item.blocked_by_json ? JSON.parse(item.blocked_by_json) : [],
-    blocking: item.blocking_json ? JSON.parse(item.blocking_json) : [],
+    blockedBy: (() => { try { return item.blocked_by_json ? JSON.parse(item.blocked_by_json) : [] } catch { return [] } })(),
+    blocking: (() => { try { return item.blocking_json ? JSON.parse(item.blocking_json) : [] } catch { return [] } })(),
     isDailyHighlight: !!item.is_daily_highlight,
     importance: item.importance === 'کلیدی' ? 'key' : item.importance === 'نقطه‌عطف' ? 'milestone' : item.importance === 'عادی' ? 'normal' : undefined,
     actualMinutes: item.actual_minutes || undefined,
@@ -103,7 +105,12 @@ function mapTasks(items: any[]): Task[] {
     impactProjectProgress: item.impact_project_progress || undefined,
     blockedByTitles: item.blocked_by_titles || undefined,
     blockedByStatuses: item.blocked_by_statuses || undefined,
-  }))
+  }
+    } catch (e) {
+      console.warn('[hambaft] mapTasks: skipping malformed task', item?.name, e)
+      return null as unknown as Task
+    }
+  }).filter(Boolean)
 }
 
 function mapGoals(items: any[]): Goal[] {
@@ -357,16 +364,26 @@ function mapProjects(items: any[]): Project[] {
     description: item.description || '',
     notes: item.notes || '',
     completed: ['completed', 'تکمیل‌شده', 'تکمیل شده'].includes(String(item.status || '')),
+    // Tasks come from _project_to_frontend which now reads from the main Task doctype.
+    // These are the SAME tasks as in the global tasks list, just scoped to the project.
     tasks: (item.tasks || []).map((task: any) => ({
       id: task.id || task.name,
       title: task.title || task.name,
-      completed: Boolean(task.completed || task.status === 'انجام‌شده'),
+      completed: Boolean(task.completed || task.status === 'انجام‌شده' || task.status === 'done'),
       status: task.status || undefined,
       createdAt: (task.creation || item.creation || new Date().toISOString()).slice(0, 10),
       description: task.description || '',
       dueDate: task.dueDate || task.due_date || undefined,
       priority: mapBackendTaskPriority(task.priority),
       category: mapBackendTaskCategory(task.category),
+      projectId: item.name,  // all project tasks belong to this project
+      importance: task.importance === 'کلیدی' ? 'key' : task.importance === 'نقطه‌عطف' ? 'milestone' : task.importance === 'عادی' ? 'normal' : undefined,
+      isDailyHighlight: !!task.isDailyHighlight,
+      estimatedMinutes: task.estimatedMinutes || undefined,
+      actualMinutes: task.actualMinutes || undefined,
+      effortType: task.effortType || undefined,
+      areaId: task.areaId || undefined,
+      goalId: task.goalId || undefined,
     })),
     createdAt: (item.creation || item.modified || new Date().toISOString()).slice(0, 10),
     linkedGoalId: item.goal || undefined,
@@ -596,7 +613,7 @@ export function useBootstrapLifeData() {
     async function load() {
       try {
         const results = await Promise.allSettled([
-          callGet<{ data?: { tasks?: any[] } }>('hambaft.hambaft.api.get_tasks'),
+          callGet<{ data?: { tasks?: any[] } }>('hambaft.hambaft.api.get_tasks', { limit: 500 }),
           callGet<{ data?: { goals?: any[] } }>('hambaft.hambaft.api.get_goals'),
           callGet<{ data?: { habits?: any[] } }>('hambaft.hambaft.api.get_habits'),
           callGet<{ data?: { logs?: any[] } }>('hambaft.hambaft.api.get_habit_logs'),
@@ -687,32 +704,39 @@ export function useBootstrapLifeData() {
           return
         }
 
-        const measurements = mapMeasurements(measurementsRows)
-        const mappedGoals = mergeProjectsIntoGoals(mapGoals(goals), mapProjects(projects))
-        const mappedContacts = mapContacts(contacts)
-        const mappedOccasions = mergeContactBirthdayOccasions(mapOccasions(occasions), mappedContacts)
+        // ─── Data assembly (resilient: one domain failure must not blank the app) ───
         const emptyData = createEmptyLifeData()
 
-        // Restore state stored as JSON blobs on Profile Settings
-        const debtsBlob = parseJsonArray<any>(settings.debts_json)
-        const subscriptionsBlob = parseJsonArray<any>(settings.subscriptions_json)
-        const recurringBlob = parseJsonArray<any>(settings.recurring_transactions_json)
-        const assetsBlob = parseJsonArray<any>(settings.assets_json)
-        const installmentsBlob = parseJsonArray<any>(settings.installments_json)
-        const dietBlob = parseJsonArray<any>(settings.diet_setting_json)
-        const dietSetting = dietBlob.length ? dietBlob[0] : undefined
-        const budgetBlob = parseJsonArray<any>(settings.budget_settings_json)
-        const budgetSettingsOverride = budgetBlob.length ? budgetBlob[0] : null
-        const subcategoriesMap = parseSubcategoriesMap(settings.subcategories_json)
-        const taskTimeMap = parseTaskTime(settings.task_time_json)
-        const dailyHighlightsMap = parseDailyHighlights(settings.daily_highlights_json)
-        const goalHabitsMap = parseSubcategoriesMap(settings.goal_habits_json) as unknown as Record<string, any[]>
+        // Helper: run a mapping function safely; on error, return fallback
+        const safe = <T>(fn: () => T, fallback: T, label: string): T => {
+          try { return fn() } catch (e) { console.warn(`[hambaft] ${label} mapping failed:`, e); return fallback }
+        }
 
-        const mappedCategories = mapCategories(categoryRows).map((cat) => (
+        const measurements = safe(() => mapMeasurements(measurementsRows), { weightLogs: [], bodyMeasurementLogs: [] }, 'measurements')
+        const mappedGoals = safe(() => mergeProjectsIntoGoals(mapGoals(goals), mapProjects(projects)), [], 'goals+projects')
+        const mappedContacts = safe(() => mapContacts(contacts), [], 'contacts')
+        const mappedOccasions = safe(() => mergeContactBirthdayOccasions(mapOccasions(occasions), mappedContacts), [], 'occasions')
+
+        // Restore state stored as JSON blobs on Profile Settings
+        const debtsBlob = safe(() => parseJsonArray<any>(settings.debts_json), [], 'debts_json')
+        const subscriptionsBlob = safe(() => parseJsonArray<any>(settings.subscriptions_json), [], 'subscriptions_json')
+        const recurringBlob = safe(() => parseJsonArray<any>(settings.recurring_transactions_json), [], 'recurring_json')
+        const assetsBlob = safe(() => parseJsonArray<any>(settings.assets_json), [], 'assets_json')
+        const installmentsBlob = safe(() => parseJsonArray<any>(settings.installments_json), [], 'installments_json')
+        const dietBlob = safe(() => parseJsonArray<any>(settings.diet_setting_json), [], 'diet_json')
+        const dietSetting = dietBlob.length ? dietBlob[0] : undefined
+        const budgetBlob = safe(() => parseJsonArray<any>(settings.budget_settings_json), [], 'budget_json')
+        const budgetSettingsOverride = budgetBlob.length ? budgetBlob[0] : null
+        const subcategoriesMap = safe(() => parseSubcategoriesMap(settings.subcategories_json), {}, 'subcategories')
+        const taskTimeMap = safe(() => parseTaskTime(settings.task_time_json), {}, 'task_time')
+        const dailyHighlightsMap = safe(() => parseDailyHighlights(settings.daily_highlights_json), {}, 'highlights')
+        const goalHabitsMap = safe(() => parseSubcategoriesMap(settings.goal_habits_json), {}, 'goal_habits') as unknown as Record<string, any[]>
+
+        const mappedCategories = safe(() => mapCategories(categoryRows).map((cat) => (
           subcategoriesMap[cat.id]?.length
             ? { ...cat, subcategories: subcategoriesMap[cat.id] }
             : cat
-        ))
+        )), [], 'categories')
 
         const applyTaskEnhancements = (tasksList: any[]): any[] => tasksList.map((task) => ({
           ...task,
@@ -720,7 +744,7 @@ export function useBootstrapLifeData() {
           isDailyHighlight: dailyHighlightsMap[task.id] ?? task.isDailyHighlight ?? false,
         }))
 
-        const enhancedGoals = mappedGoals.map((goal) => ({
+        const enhancedGoals = mappedGoals.map((goal: any) => ({
           ...goal,
           habits: Array.isArray(goalHabitsMap[goal.id]) ? goalHabitsMap[goal.id] : goal.habits,
           projects: (goal.projects || []).map((p: any) => ({
@@ -731,25 +755,25 @@ export function useBootstrapLifeData() {
 
         const data: LifeData = {
           ...emptyData,
-          tasks: applyTaskEnhancements(mapTasks(tasks)),
+          tasks: safe(() => applyTaskEnhancements(mapTasks(tasks)), [], 'tasks'),
           goals: enhancedGoals,
-          habits: mapHabits(habits, habitLogs),
-          transactions: mapTransactions(financeEntries),
-          journalEntries: mapJournalEntries(notes, moodLogs as any[]),
+          habits: safe(() => mapHabits(habits, habitLogs), [], 'habits'),
+          transactions: safe(() => mapTransactions(financeEntries), [], 'transactions'),
+          journalEntries: safe(() => mapJournalEntries(notes, moodLogs as any[]), [], 'journal'),
           categories: mappedCategories,
-          bankAccounts: mapBankAccounts(accountRows),
-          profile: mapProfile(profile, settings),
-          sleepLogs: mapSleepLogs(sleepLogs),
+          bankAccounts: safe(() => mapBankAccounts(accountRows), [], 'bankAccounts'),
+          profile: safe(() => mapProfile(profile, settings), emptyData.profile, 'profile'),
+          sleepLogs: safe(() => mapSleepLogs(sleepLogs), [], 'sleepLogs'),
           budgetSettings: budgetSettingsOverride && typeof budgetSettingsOverride === 'object'
             ? budgetSettingsOverride
             : { monthlyTotal: Number(settings.monthly_budget || 0), categoryBudgets: {} },
-          documents: mapDocuments(documents),
+          documents: safe(() => mapDocuments(documents), [], 'documents'),
           occasions: mappedOccasions,
-          mindfulnessSessions: mapMindfulnessSessions(mindfulnessSessions),
-          weightLogs: measurements.weightLogs,
-          mealLogs: mapMealLogs(nutritionLogs),
-          workoutLogs: mapWorkoutLogs(workoutLogs),
-          bodyMeasurementLogs: measurements.bodyMeasurementLogs,
+          mindfulnessSessions: safe(() => mapMindfulnessSessions(mindfulnessSessions), [], 'mindfulness'),
+          weightLogs: measurements?.weightLogs || [],
+          mealLogs: safe(() => mapMealLogs(nutritionLogs), [], 'mealLogs'),
+          workoutLogs: safe(() => mapWorkoutLogs(workoutLogs), [], 'workoutLogs'),
+          bodyMeasurementLogs: measurements?.bodyMeasurementLogs || [],
           contacts: mappedContacts,
           moodLogs: moodLogs as any[],
           debts: debtsBlob,
@@ -758,7 +782,7 @@ export function useBootstrapLifeData() {
           assets: assetsBlob,
           installments: installmentsBlob,
           dietSetting: dietSetting || emptyData.dietSetting,
-          areas: areasRows.map((item: any) => ({
+          areas: safe(() => areasRows.map((item: any) => ({
             id: item.name,
             title: item.title || item.name,
             description: item.description || '',
@@ -772,7 +796,7 @@ export function useBootstrapLifeData() {
             completedTasks: item.completed_tasks || undefined,
             completedProjects: item.completed_projects || undefined,
             trackedMinutes: item.tracked_minutes || undefined,
-          })),
+          })), [], 'areas'),
         }
 
         if (!cancelled) {

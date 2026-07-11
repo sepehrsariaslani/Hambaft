@@ -56,13 +56,29 @@ const categoryColors: Record<string, string> = {
 }
 
 function collectAllTasks(tasks: Task[], goals: Goal[]): Array<Task & { sourceGoal?: string; sourceProject?: string }> {
-  const all: Array<Task & { sourceGoal?: string; sourceProject?: string }> = [...tasks.map(t => ({ ...t }))]
+  // Tasks are now unified — project tasks ARE real Task records with projectId set.
+  // The global tasks list already includes them, so we just need to annotate
+  // which project/goal they belong to. We NO longer merge project.tasks separately
+  // because that would duplicate tasks that already exist in the global list.
+  const projectMap = new Map<string, { goalTitle: string; projectTitle: string }>()
   for (const goal of goals) {
     for (const project of (goal.projects || [])) {
-      for (const task of (project.tasks || [])) {
-        all.push({ ...task, sourceGoal: goal.title, sourceProject: project.title })
-      }
+      projectMap.set(project.id, { goalTitle: goal.title, projectTitle: project.title })
     }
+  }
+
+  const seen = new Set<string>()
+  const all: Array<Task & { sourceGoal?: string; sourceProject?: string }> = []
+  for (const t of tasks) {
+    const key = t.id
+    if (seen.has(key)) continue
+    seen.add(key)
+    const meta = t.projectId ? projectMap.get(t.projectId) : undefined
+    all.push({
+      ...t,
+      sourceGoal: meta?.goalTitle || undefined,
+      sourceProject: meta?.projectTitle || undefined,
+    })
   }
   return all
 }
