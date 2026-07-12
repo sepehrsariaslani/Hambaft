@@ -978,6 +978,10 @@ export default function PlannerSection({ initialView, onNavigate }: PlannerSecti
           }}
           onClose={() => setDrawerTaskId(null)}
           onNavigate={onNavigate}
+          onOpenFullPage={(taskId) => {
+            setDrawerTaskId(null)
+            if (onNavigate) onNavigate('task-detail', taskId)
+          }}
         />
       )}
     </div>

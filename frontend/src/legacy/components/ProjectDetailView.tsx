@@ -641,8 +641,8 @@ export default function ProjectDetailView({
         {activeTab === 'tasks' && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             
-            {/* Task list (Left) */}
-            <div className="lg:col-span-7 space-y-4">
+            {/* Task list — full width since notes section moved to dedicated page */}
+            <div className="lg:col-span-12 space-y-4">
               <div className="bg-white dark:bg-[#1C1D17] rounded-3xl border border-[#E6DFD3] p-5 space-y-3 shadow-xs">
                 <div className="flex justify-between items-center pb-2 border-b border-[#E6DFD3]/40">
                   <h3 className="text-xs font-black text-[#2D3025] dark:text-[#E8ECE0] flex items-center gap-1.5">
@@ -780,39 +780,6 @@ export default function ProjectDetailView({
                   )}
                 </div>
                 )}
-              </div>
-            </div>
-
-            {/* Notes & Coaching (Right) */}
-            <div className="lg:col-span-5 space-y-4">
-              <div className="bg-white dark:bg-[#1C1D17] rounded-3xl border border-[#E6DFD3] p-5 space-y-3 shadow-xs">
-                <h3 className="text-xs font-black text-[#2D3025] dark:text-[#E8ECE0] flex items-center gap-1.5 pb-2 border-b border-[#E6DFD3]/40">
-                  <BookOpen className="w-3.5 h-3.5 text-[#E26645]" />
-                  <span>دفترچه یادداشت و طوفان فکری پروژه</span>
-                </h3>
-                <textarea
-                  value={projectNotes}
-                  onChange={(e) => setProjectNotes(e.target.value)}
-                  placeholder="ایده‌ها، منابع، آدرس‌ها و یادداشت‌های مربوط به این پروژه..."
-                  className="w-full px-3 py-2 text-xs bg-[#F9F6EE] dark:bg-[#121411] border border-[#D6CFC3] rounded-xl text-[#3D3D3D] dark:text-[#E8ECE0] h-48 resize-none focus:outline-none"
-                />
-                <button
-                  onClick={handleSaveNotesOnly}
-                  className="w-full py-1.5 bg-[#7C8363] text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1"
-                >
-                  {isSavingNotes ? <Clock className="w-3 h-3 animate-spin" /> : <FileText className="w-3 h-3" />}
-                  <span>ذخیره یادداشت‌ها</span>
-                </button>
-              </div>
-
-              <div className="bg-[#E8ECE0]/40 dark:bg-[#1F241A]/20 p-4 rounded-3xl border border-[#DDE2D5]/60">
-                <div className="flex items-center gap-1.5 text-[#7C8363] font-black text-[10px] mb-1">
-                  <AlertCircle className="w-3.5 h-3.5" />
-                  <span>پیشنهاد کوچینگ پروژه</span>
-                </div>
-                <p className="text-[10px] text-[#8D7F72] dark:text-[#9D978B] leading-relaxed">
-                  سعی کنید کارها را به بسته‌های ۲۵ دقیقه‌ای تمرکز (پومودورو) بشکنید. ارتباط تنگاتنگ بین کارایی ذهنی و توازن در بخش اهداف بلندمدت با تکمیل گام‌به‌گام زیرکارها محقق می‌شود.
-                </p>
               </div>
             </div>
 
@@ -1294,6 +1261,10 @@ export default function ProjectDetailView({
             }
             setSelectedTaskForDetails(null)
             onNavigateEntity?.(tab, id)
+          }}
+          onOpenFullPage={(taskId) => {
+            setSelectedTaskForDetails(null)
+            onNavigateTask?.(taskId)
           }}
           onStartTimer={(taskId) => onToggleTaskTracking(project.goalId, project.id, taskId)}
           onPauseTimer={() => {

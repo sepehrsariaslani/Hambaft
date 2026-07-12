@@ -16,6 +16,7 @@ import {
   FolderKanban, Target, Layers, AlertCircle, Play, Pause,
   Square, RotateCcw, Sparkles, Pin, Link2, ArrowUpRight,
   BookOpen, Timer, History, Plus, ChevronDown, Check, GripVertical,
+  Maximize2,
 } from 'lucide-react'
 import type { Task, SubTask } from '../types'
 import {
@@ -64,6 +65,7 @@ interface TaskDetailDrawerProps {
   onDeleteTask: (id: string) => void
   onClose: () => void
   onNavigate?: (tab: string, id?: string) => void
+  onOpenFullPage?: (taskId: string) => void
   // Session
   activeTimerTaskId?: string | null
   activeTimerSeconds?: number
@@ -84,6 +86,7 @@ export default function TaskDetailDrawer({
   onDeleteTask,
   onClose,
   onNavigate,
+  onOpenFullPage,
   activeTimerTaskId,
   activeTimerSeconds = 0,
   isTimerRunning = false,
@@ -202,6 +205,15 @@ export default function TaskDetailDrawer({
               </div>
             ) : (
               <button onClick={() => setShowDeleteConfirm(true)} className="p-1.5 text-[#8D7F72] hover:text-red-500 rounded-lg"><Trash2 className="w-3.5 h-3.5" /></button>
+            )}
+            {onOpenFullPage && (
+              <button
+                onClick={() => onOpenFullPage(task.id)}
+                className="p-1.5 text-[#8D7F72] hover:text-[#7C8363] hover:bg-[#E8ECE0]/50 rounded-lg"
+                title="مشاهده جزئیات کامل"
+              >
+                <Maximize2 className="w-3.5 h-3.5" />
+              </button>
             )}
             <button onClick={onClose} className="p-1.5 text-[#8D7F72] hover:text-[#2D3025] rounded-lg"><X className="w-4 h-4" /></button>
           </div>

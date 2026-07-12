@@ -574,6 +574,7 @@ export default function TaskManagerSection({
           onDeleteTask={(id) => { onDeleteTask(id); setDrawerTaskId(null) }}
           onClose={() => setDrawerTaskId(null)}
           onNavigate={onNavigate}
+          onOpenFullPage={(taskId) => { setDrawerTaskId(null); onViewTaskDetails?.(taskId); }}
         />
       )}
     </div>
