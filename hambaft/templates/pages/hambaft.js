@@ -7,13 +7,10 @@ frappe.pages['hambaft'].on_page_load = function (wrapper) {
 
     $(wrapper).find('.layout-main-section').html('<div id="root" class="h-full"></div>');
 
-    // Dynamically load assets from the Vite-generated index.html so hashed filenames work.
-    // Frappe serves {app}/public/ at /assets/{app}/, so hambaft/public/index.html
-    // is available at /assets/hambaft/index.html.
-    if (window.__hambaftAssetsLoaded) return;
-    window.__hambaftAssetsLoaded = true;
-
-    // Cache-bust the index.html fetch so we always get the latest hashed asset paths.
+    // Dynamically load assets from the Vite-generated index.html.
+    // We always fetch a fresh copy and check if the inline content has changed
+    // compared to what's currently loaded, so deploys are picked up without
+    // requiring a hard refresh or closing the tab.
     const cacheBust = '_t=' + Date.now();
     fetch('/assets/hambaft/index.html?' + cacheBust)
         .then(r => {
@@ -23,6 +20,24 @@ frappe.pages['hambaft'].on_page_load = function (wrapper) {
         .then(html => {
             const parser = new DOMParser();
             const doc = parser.parseFromString(html, 'text/html');
+
+            // Check if inline assets already loaded with the same content
+            const existingInline = document.querySelector('script[data-hambaft-inline="app"]');
+            const newInline = doc.querySelector('script[data-hambaft-inline="app"]');
+
+            if (existingInline && newInline) {
+                const existingHash = existingInline.textContent.length;
+                const newHash = newInline.textContent.length;
+                // If the inline script is roughly the same size, skip reload
+                if (Math.abs(existingHash - newHash) < 100) {
+                    return;
+                }
+                // Content changed — remove old assets and reload
+                document.querySelectorAll('[data-hambaft-inline="app"]').forEach(el => el.remove());
+            } else if (existingInline && !newInline) {
+                // Old inline mode, new is external — remove inline
+                document.querySelectorAll('[data-hambaft-inline="app"]').forEach(el => el.remove());
+            }
 
             // Inject modulepreload links for faster chunk loading
             doc.querySelectorAll('link[rel="modulepreload"]').forEach(link => {
