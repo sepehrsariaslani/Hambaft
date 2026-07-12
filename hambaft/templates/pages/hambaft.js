@@ -7,39 +7,43 @@ frappe.pages['hambaft'].on_page_load = function (wrapper) {
 
     $(wrapper).find('.layout-main-section').html('<div id="root" class="h-full"></div>');
 
-    // Dynamically load assets from the Vite-generated index.html.
-    // We always fetch a fresh copy and check if the inline content has changed
-    // compared to what's currently loaded, so deploys are picked up without
-    // requiring a hard refresh or closing the tab.
-    const cacheBust = '_t=' + Date.now();
+    // Always load fresh assets on page load.
+    // We use a unique timestamp to bust all caches.
+    const cacheBust = '_v=' + Date.now();
     fetch('/assets/hambaft/index.html?' + cacheBust)
         .then(r => {
             if (!r.ok) throw new Error('index.html fetch failed: ' + r.status);
             return r.text();
         })
         .then(html => {
+            // First, remove any previously loaded hambaft assets
+            // so a fresh deploy always takes effect.
+            document.querySelectorAll('[data-hambaft-inline="app"]').forEach(el => el.remove());
+            document.querySelectorAll('link[data-hambaft-asset]').forEach(el => el.remove());
+            document.querySelectorAll('script[data-hambaft-asset]').forEach(el => el.remove());
+
             const parser = new DOMParser();
             const doc = parser.parseFromString(html, 'text/html');
 
-            // Check if inline assets already loaded with the same content
-            const existingInline = document.querySelector('script[data-hambaft-inline="app"]');
-            const newInline = doc.querySelector('script[data-hambaft-inline="app"]');
+            // Inject stylesheets
+            doc.querySelectorAll('link[rel="stylesheet"]').forEach(link => {
+                const node = document.createElement('link');
+                node.rel = 'stylesheet';
+                node.href = link.getAttribute('href');
+                node.setAttribute('data-hambaft-asset', '1');
+                if (link.crossOrigin) node.crossOrigin = link.crossOrigin;
+                document.head.appendChild(node);
+            });
 
-            if (existingInline && newInline) {
-                const existingHash = existingInline.textContent.length;
-                const newHash = newInline.textContent.length;
-                // If the inline script is roughly the same size, skip reload
-                if (Math.abs(existingHash - newHash) < 100) {
-                    return;
-                }
-                // Content changed — remove old assets and reload
-                document.querySelectorAll('[data-hambaft-inline="app"]').forEach(el => el.remove());
-            } else if (existingInline && !newInline) {
-                // Old inline mode, new is external — remove inline
-                document.querySelectorAll('[data-hambaft-inline="app"]').forEach(el => el.remove());
-            }
+            // Inject inline styles
+            doc.querySelectorAll('style[data-hambaft-inline="app"]').forEach(style => {
+                const node = document.createElement('style');
+                node.setAttribute('data-hambaft-inline', 'app');
+                node.textContent = style.textContent || '';
+                document.head.appendChild(node);
+            });
 
-            // Inject modulepreload links for faster chunk loading
+            // Inject modulepreload links
             doc.querySelectorAll('link[rel="modulepreload"]').forEach(link => {
                 const href = link.getAttribute('href');
                 if (!href || document.querySelector(`link[href="${href}"]`)) return;
@@ -50,33 +54,16 @@ frappe.pages['hambaft'].on_page_load = function (wrapper) {
                 document.head.appendChild(node);
             });
 
-            doc.querySelectorAll('link[rel="stylesheet"]').forEach(link => {
-                if (document.querySelector(`link[href="${link.getAttribute('href')}"]`)) return;
-                const node = document.createElement('link');
-                node.rel = 'stylesheet';
-                node.href = link.getAttribute('href');
-                if (link.crossOrigin) node.crossOrigin = link.crossOrigin;
-                document.head.appendChild(node);
-            });
-
-            doc.querySelectorAll('style[data-hambaft-inline="app"]').forEach(style => {
-                if (document.querySelector('style[data-hambaft-inline="app"]')) return;
-                const node = document.createElement('style');
-                node.setAttribute('data-hambaft-inline', 'app');
-                node.textContent = style.textContent || '';
-                document.head.appendChild(node);
-            });
-
+            // Inject scripts
             doc.querySelectorAll('script[type="module"]').forEach(script => {
                 const src = script.getAttribute('src');
                 const node = document.createElement('script');
                 node.type = 'module';
                 if (src) {
-                    if (document.querySelector(`script[src="${src}"]`)) return;
                     node.src = src;
+                    node.setAttribute('data-hambaft-asset', '1');
                     if (script.crossOrigin) node.crossOrigin = script.crossOrigin;
                 } else {
-                    if (document.querySelector('script[data-hambaft-inline="app"]')) return;
                     node.setAttribute('data-hambaft-inline', 'app');
                     node.textContent = script.textContent || '';
                 }

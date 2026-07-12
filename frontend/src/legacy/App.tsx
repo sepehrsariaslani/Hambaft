@@ -314,6 +314,9 @@ export default function App({
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(initialTaskId);
   const [selectedGoalId, setSelectedGoalId] = useState<string | null>(initialGoalId);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(initialProjectId);
+
+  // Version marker — remove after deploy verification
+  useEffect(() => { console.log('[hambaft] version 2025-07-13-v9 — TaskDetailPage active'); }, []);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const runSync = (label: string, job: () => Promise<void>) => {
