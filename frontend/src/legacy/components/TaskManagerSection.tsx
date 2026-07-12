@@ -498,7 +498,7 @@ export default function TaskManagerSection({
                     onToggleSelect={() => toggleSelect(task.id)}
                     onToggle={() => onToggleTask(task.id)}
                     onDelete={() => onDeleteTask(task.id)}
-                    onView={() => setDrawerTaskId(task.id)}
+                    onView={() => onViewTaskDetails ? onViewTaskDetails(task.id) : setDrawerTaskId(task.id)}
                     onQuickAction={handleQuickAction}
                     onAddSubtask={() => {/* subtask add handled via drawer */}}
                     todayDate={todayDate}

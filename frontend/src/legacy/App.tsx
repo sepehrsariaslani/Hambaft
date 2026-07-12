@@ -103,6 +103,7 @@ const FitnessSection = React.lazy(() => import('./components/FitnessSection'));
 const MoodSection = React.lazy(() => import('./components/MoodSection'));
 const BalanceReportSection = React.lazy(() => import('./components/BalanceReportSection'));
 const ContactsSection = React.lazy(() => import('./components/ContactsSection'));
+const TaskDetailPage = React.lazy(() => import('./components/TaskDetailPage'));
 import { Contact, MoodLog } from './types';
 
 import { 
@@ -524,7 +525,7 @@ export default function App({
   };
 
   const goToTaskDetail = (taskId: string) => {
-    // Temp IDs should not become deep links — open drawer without URL change
+    // Temp IDs should not become deep links — show page without URL change
     if (taskId.startsWith('tk-')) {
       setSelectedTaskId(taskId);
       setActiveTab('task-detail');
@@ -3289,31 +3290,58 @@ export default function App({
         return <PlannerSection initialView="board" onNavigate={(tab, id) => { if (tab === 'goals' && id) goToGoal(id); else if (tab === 'projects' && id) goToProject(id); else goToTab(tab); }} />;
       case 'planner-areas':
         return <PlannerSection initialView="areas" onNavigate={(tab, id) => { if (tab === 'goals' && id) goToGoal(id); else if (tab === 'projects' && id) goToProject(id); else goToTab(tab); }} />;
-      case 'task-detail':
-        // Deep-link: show task list with the drawer open for the selected task.
-        // This replaces the old TaskDetailView full-page, which duplicated
-        // functionality now in TaskDetailDrawer.
+      case 'task-detail': {
+        // Full-page task detail — replaces the old side-drawer.
+        const matchedTask = selectedTaskId
+          ? lifeData.tasks.find(t => t.id === selectedTaskId)
+          : null;
+        if (!matchedTask) {
+          // No valid task selected — go back to tasks list
+          return (
+            <TaskManagerSection
+              tasks={lifeData.tasks}
+              goals={lifeData.goals}
+              areas={lifeData.areas || []}
+              onToggleTask={handleToggleTask}
+              onDeleteTask={handleDeleteTask}
+              onUpdateTask={handleUpdateTask}
+              onAddTask={handleAddTask}
+              onViewTaskDetails={(id) => goToTaskDetail(id)}
+              todayDate={TODAY_DATE}
+              onNavigate={(tab, id) => {
+                if (tab === 'goals' && id) goToGoal(id);
+                else if (tab === 'projects' && id) goToProject(id);
+                else goToTab(tab);
+              }}
+            />
+          );
+        }
         return (
-          <TaskManagerSection
-            tasks={lifeData.tasks}
-            goals={lifeData.goals}
-            areas={lifeData.areas || []}
-            onToggleTask={handleToggleTask}
-            onDeleteTask={handleDeleteTask}
-            onUpdateTask={handleUpdateTask}
-            onAddTask={handleAddTask}
-            onViewTaskDetails={(id) => {
-              goToTaskDetail(id);
-            }}
-            todayDate={TODAY_DATE}
-            initialDrawerTaskId={selectedTaskId}
-            onNavigate={(tab, id) => {
-              if (tab === 'goals' && id) goToGoal(id);
-              else if (tab === 'projects' && id) goToProject(id);
-              else goToTab(tab);
-            }}
-          />
+          <React.Suspense fallback={<div className="text-center py-10 text-sm text-[#9D978B]">در حال بارگذاری...</div>}>
+            <TaskDetailPage
+              task={matchedTask}
+              allTasks={lifeData.tasks}
+              goals={lifeData.goals}
+              projects={lifeData.goals.flatMap(g => (g.projects || []).map(p => ({ id: p.id, title: p.title })))}
+              areas={lifeData.areas || []}
+              onUpdateTask={handleUpdateTask}
+              onDeleteTask={(id) => { handleDeleteTask(id); goToTab('tasks'); }}
+              onBack={() => goToTab('tasks')}
+              onNavigate={(tab, id) => {
+                if (tab === 'goals' && id) goToGoal(id);
+                else if (tab === 'projects' && id) goToProject(id);
+                else goToTab(tab);
+              }}
+              activeTimerTaskId={activeTimerTaskId}
+              activeTimerSeconds={activeTimerSeconds}
+              isTimerRunning={isTimerRunning}
+              onStartTimer={handleStartTimer}
+              onPauseTimer={handlePauseTimer}
+              onStopTimer={handleStopTimer}
+            />
+          </React.Suspense>
         );
+      }
       case 'goals':
         if (selectedGoalId) {
           const matchedGoal = lifeData.goals.find(g => g.id === selectedGoalId);
@@ -3400,6 +3428,7 @@ export default function App({
                 onDeleteTaskFromProject={handleDeleteTaskFromProject}
                 onToggleProjectCompletion={handleToggleProjectCompletion}
                 onUpdateProjectDetails={handleUpdateProjectDetails}
+                onNavigateTask={(taskId) => goToTaskDetail(taskId)}
               />
             );
           }

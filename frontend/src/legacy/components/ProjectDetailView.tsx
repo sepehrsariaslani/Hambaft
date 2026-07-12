@@ -91,6 +91,7 @@ interface ProjectDetailViewProps {
   onDeleteTaskFromProject: (goalId: string, projectId: string, taskId: string) => void;
   onToggleProjectCompletion: (goalId: string, projectId: string) => void;
   onUpdateProjectDetails?: (goalId: string, projectId: string, updates: { title?: string; description?: string; notes?: string; milestones?: Milestone[]; tasks?: Task[]; noteBlocks?: any[] }) => void;
+  onNavigateTask?: (taskId: string) => void;
 }
 
 export default function ProjectDetailView({
@@ -105,7 +106,8 @@ export default function ProjectDetailView({
   onToggleTaskInProject,
   onDeleteTaskFromProject,
   onToggleProjectCompletion,
-  onUpdateProjectDetails
+  onUpdateProjectDetails,
+  onNavigateTask
 }: ProjectDetailViewProps) {
   // Views/Tabs State
   const [activeTab, setActiveTab] = useState<'tasks' | 'finance' | 'planning' | 'milestones' | 'report' | 'notes'>('tasks');
@@ -690,6 +692,7 @@ export default function ProjectDetailView({
                     onUpdateTask={(task) => handleUpdateSingleTask(task)}
                     onAddTask={(titleOrTask) => onAddTaskToProject(project.goalId, project.id, titleOrTask)}
                     onViewTaskDetails={(taskId) => {
+                      if (onNavigateTask) { onNavigateTask(taskId); return; }
                       const t = tasksList.find(x => x.id === taskId)
                       if (t) setSelectedTaskForDetails(t)
                     }}
@@ -707,8 +710,8 @@ export default function ProjectDetailView({
                           key={t.id}
                           className="flex items-center justify-between p-3 bg-[#FDFBF7] dark:bg-[#121411] border border-[#E6DFD3] rounded-xl hover:border-[#7C8363] transition-colors"
                         >
-                          <div 
-                            onClick={() => setSelectedTaskForDetails(t)}
+                          <div
+                            onClick={() => onNavigateTask ? onNavigateTask(t.id) : setSelectedTaskForDetails(t)}
                             className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer"
                           >
                             <button
@@ -953,6 +956,7 @@ export default function ProjectDetailView({
                             key={t.id}
                             onClick={(e) => {
                               e.stopPropagation();
+                              if (onNavigateTask) { onNavigateTask(t.id); return; }
                               setSelectedTaskForDetails(t);
                             }}
                             className={`text-[8px] p-1 rounded truncate leading-none font-bold select-none cursor-pointer ${
@@ -989,7 +993,7 @@ export default function ProjectDetailView({
                     <div key={t.id} className="p-2.5 bg-[#FDFBF7] dark:bg-[#121411] border border-[#E6DFD3]/60 rounded-xl flex items-center justify-between">
                       <div className="min-w-0 flex-1 text-right">
                         <div 
-                          onClick={() => setSelectedTaskForDetails(t)}
+                          onClick={() => onNavigateTask ? onNavigateTask(t.id) : setSelectedTaskForDetails(t)}
                           className="text-[11px] font-bold text-[#3D3D3D] dark:text-[#E8ECE0] truncate cursor-pointer hover:underline"
                         >
                           {t.title}
@@ -1091,7 +1095,7 @@ export default function ProjectDetailView({
                               {associated.map(t => (
                                 <div
                                   key={t.id}
-                                  onClick={() => setSelectedTaskForDetails(t)}
+                                  onClick={() => onNavigateTask ? onNavigateTask(t.id) : setSelectedTaskForDetails(t)}
                                   className="flex items-center justify-between text-[9px] bg-white dark:bg-[#1C1D17] border p-1 rounded-lg cursor-pointer hover:border-[#7C8363]"
                                 >
                                   <span className={`truncate ${t.completed ? 'line-through text-[#8D7F72]' : 'text-[#3D3D3D] dark:text-[#E8ECE0]'}`}>{t.title}</span>
