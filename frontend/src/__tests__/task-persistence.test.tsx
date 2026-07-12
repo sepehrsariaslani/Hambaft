@@ -206,4 +206,30 @@ describe('task persistence wiring', () => {
       )
     })
   })
+
+  it('opens the task drawer from an initial deep-link id without crashing render order', async () => {
+    render(
+      <TaskManagerSection
+        tasks={[
+          {
+            id: 'TASK-INIT-1',
+            title: 'تسک دیپ‌لینک',
+            completed: false,
+            createdAt: '2026-07-11',
+            status: 'today',
+          },
+        ]}
+        goals={[]}
+        areas={[]}
+        onToggleTask={vi.fn()}
+        onDeleteTask={vi.fn()}
+        onUpdateTask={vi.fn()}
+        onAddTask={vi.fn()}
+        todayDate="2026-07-11"
+        initialDrawerTaskId="TASK-INIT-1"
+      />,
+    )
+
+    expect(await screen.findByRole('button', { name: 'persist-drawer-update' })).toBeInTheDocument()
+  })
 })

@@ -44,13 +44,27 @@ frappe.pages['hambaft'].on_page_load = function (wrapper) {
                 document.head.appendChild(node);
             });
 
+            doc.querySelectorAll('style[data-hambaft-inline="app"]').forEach(style => {
+                if (document.querySelector('style[data-hambaft-inline="app"]')) return;
+                const node = document.createElement('style');
+                node.setAttribute('data-hambaft-inline', 'app');
+                node.textContent = style.textContent || '';
+                document.head.appendChild(node);
+            });
+
             doc.querySelectorAll('script[type="module"]').forEach(script => {
                 const src = script.getAttribute('src');
-                if (!src || document.querySelector(`script[src="${src}"]`)) return;
                 const node = document.createElement('script');
                 node.type = 'module';
-                node.src = src;
-                if (script.crossOrigin) node.crossOrigin = script.crossOrigin;
+                if (src) {
+                    if (document.querySelector(`script[src="${src}"]`)) return;
+                    node.src = src;
+                    if (script.crossOrigin) node.crossOrigin = script.crossOrigin;
+                } else {
+                    if (document.querySelector('script[data-hambaft-inline="app"]')) return;
+                    node.setAttribute('data-hambaft-inline', 'app');
+                    node.textContent = script.textContent || '';
+                }
                 document.body.appendChild(node);
             });
         })

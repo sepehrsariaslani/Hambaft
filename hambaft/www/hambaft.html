@@ -10,13 +10,17 @@
     <meta name="apple-mobile-web-app-title" content="هم‌بافت" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="description" content="هم‌بافت، داشبورد شخصی مدیریت زندگی، عادت‌ها، اهداف، مالی، ژورنال و برنامه‌ریزی روزانه." />
-    <link rel="manifest" href="/assets/hambaft/manifest.json" />
-    <link rel="icon" href="/assets/hambaft/hambaft-icon.svg" type="image/svg+xml" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" href="/hambaft-icon.svg" type="image/svg+xml" />
     <title>هم‌بافت</title>
-    {% if css_path %}
+    {% if inline_css %}
+    <style data-hambaft-inline="app">{{ inline_css | safe }}</style>
+    {% elif css_path %}
     <link rel="stylesheet" crossorigin href="{{ css_path }}">
     {% endif %}
-    {% if js_path %}
+    {% if inline_js %}
+    <script type="module" data-hambaft-inline="app">{{ inline_js | safe }}</script>
+    {% elif js_path %}
     <script type="module" crossorigin src="{{ js_path }}"></script>
     {% endif %}
   </head>

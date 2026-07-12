@@ -122,7 +122,6 @@ export default function TaskManagerSection({
       setDrawerTaskId(initialDrawerTaskId)
     }
   }, [initialDrawerTaskId])
-  const drawerTask = drawerTaskId ? allTasks.find(t => t.id === drawerTaskId) || null : null
 
   // Notion-like view config (columns, density, saved views)
   const [viewConfig, setViewConfig] = useState<ViewConfig>(() =>
@@ -136,6 +135,7 @@ export default function TaskManagerSection({
   }
 
   const allTasks = useMemo(() => collectAllTasks(tasks, goals), [tasks, goals])
+  const drawerTask = drawerTaskId ? allTasks.find(t => t.id === drawerTaskId) || null : null
 
   const filteredTasks = useMemo(() => {
     let result = allTasks.filter((t) => {

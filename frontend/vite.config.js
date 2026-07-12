@@ -20,18 +20,13 @@ export default defineConfig({
     // In the production container that path may not be deletable by the build user,
     // so we keep old assets around and let post-build handle lightweight cleanup.
     emptyOutDir: false,
+    cssCodeSplit: false,
     rollupOptions: {
       output: {
+        inlineDynamicImports: true,
         entryFileNames: 'assets/[name].[hash].js',
         chunkFileNames: 'assets/[name].[hash].js',
         assetFileNames: 'assets/[name].[hash].[ext]',
-        manualChunks: {
-          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
-          'vendor-motion': ['motion/react'],
-          'vendor-recharts': ['recharts'],
-          'vendor-markdown': ['react-markdown'],
-          'vendor-lucide': ['lucide-react'],
-        },
       },
     },
   },
