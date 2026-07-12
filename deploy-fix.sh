@@ -107,7 +107,22 @@ fi
 # ────────────────────────────────────────────────────────────────
 # STEP 7: Verify index.html references
 # ────────────────────────────────────────────────────────────────
-echo "[7/7] Verifying index.html..."
+echo "[7/7] Verifying published copies..."
+if [ -f "$SCRIPT_DIR/hambaft/public/index.html" ] && [ -f "/home/frappe/frappe-bench/sites/hambaft.ir/public/index.html" ]; then
+    APP_HASH=$(sha256sum "$SCRIPT_DIR/hambaft/public/index.html" | awk '{print $1}')
+    SITE_HASH=$(sha256sum "/home/frappe/frappe-bench/sites/hambaft.ir/public/index.html" | awk '{print $1}')
+    if [ "$APP_HASH" = "$SITE_HASH" ]; then
+        echo "  ✓ site public is synced with app public"
+    else
+        echo "  ⚠ site public is NOT synced with app public"
+        echo "    app : $APP_HASH"
+        echo "    site: $SITE_HASH"
+    fi
+else
+    echo "  ✓ Site public verification skipped"
+fi
+echo ""
+echo "[8/8] Verifying index.html..."
 echo ""
 echo "  Script src:"
 grep "script.*src" "$SCRIPT_DIR/hambaft/public/index.html" 2>/dev/null || echo "    (not found)"

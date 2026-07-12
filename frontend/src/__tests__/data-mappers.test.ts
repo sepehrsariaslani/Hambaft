@@ -37,7 +37,7 @@ describe('hambaft data mappers', () => {
       }),
     ).toMatchObject({
       title: 'پرداخت قبض',
-      status: 'انجام‌شده',
+      status: 'done',
       priority: 'بالا',
       category: 'مالی',
     })

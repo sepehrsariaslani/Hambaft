@@ -8,6 +8,7 @@ interface TaskKanbanViewProps {
   onToggleTask: (id: string) => void
   onDeleteTask: (id: string) => void
   onViewTaskDetails?: (id: string) => void
+  onOpenTaskDrawer?: (id: string) => void
   groupBy: 'status' | 'priority' | 'project'
 }
 
@@ -54,6 +55,7 @@ export default function TaskKanbanView({
   onToggleTask,
   onDeleteTask,
   onViewTaskDetails,
+  onOpenTaskDrawer,
   groupBy,
 }: TaskKanbanViewProps) {
   const [draggingId, setDraggingId] = useState<string | null>(null)
@@ -194,12 +196,23 @@ export default function TaskKanbanView({
                         <p className="text-[10px] text-[#8D7F72] mt-1">📅 {task.dueDate}</p>
                       )}
                     </div>
-                    <button
-                      onClick={() => onDeleteTask(task.id)}
-                      className="text-[#c44a3d] hover:bg-[#c44a3d]/10 rounded p-1 shrink-0"
-                    >
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-                    </button>
+                    <div className="flex flex-col gap-1 shrink-0">
+                      {onOpenTaskDrawer && (
+                        <button
+                          onClick={() => onOpenTaskDrawer(task.id)}
+                          className="text-[#5a6b8a] hover:bg-blue-50 rounded p-1"
+                          title="باز کردن در پنل"
+                        >
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 4h18"/><path d="M15 4v16"/><path d="M3 20h18"/><path d="M3 4v16"/></svg>
+                        </button>
+                      )}
+                      <button
+                        onClick={() => onDeleteTask(task.id)}
+                        className="text-[#c44a3d] hover:bg-[#c44a3d]/10 rounded p-1"
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}

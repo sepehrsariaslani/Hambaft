@@ -43,6 +43,38 @@ export async function probeServiceWorkerScript(scriptUrl: string) {
   }
 }
 
+async function unregisterHambaftServiceWorkers() {
+  if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {
+    return
+  }
+
+  try {
+    const origin = window.location.origin
+    const registrations = await navigator.serviceWorker.getRegistrations()
+    await Promise.all(
+      registrations
+        .filter((registration) => {
+          const activeScript =
+            registration.active?.scriptURL ||
+            registration.waiting?.scriptURL ||
+            registration.installing?.scriptURL ||
+            ''
+
+          return (
+            registration.scope.startsWith(origin) &&
+            (registration.scope === `${origin}/` ||
+              registration.scope.includes('/hambaft') ||
+              activeScript.includes('/hambaft') ||
+              activeScript.endsWith('/sw.js'))
+          )
+        })
+        .map((registration) => registration.unregister().catch(() => false))
+    )
+  } catch {
+    // Ignore cleanup failures
+  }
+}
+
 export function registerPwaServiceWorker() {
   if (import.meta.env.DEV || typeof window === 'undefined' || !('serviceWorker' in navigator)) {
     return
@@ -54,10 +86,16 @@ export function registerPwaServiceWorker() {
     probeServiceWorkerScript(serviceWorkerUrl)
       .then((isValidScript) => {
         if (!isValidScript) {
-          return
+          return unregisterHambaftServiceWorkers()
         }
 
-        return navigator.serviceWorker.register(serviceWorkerUrl)
+        return navigator.serviceWorker.getRegistration(serviceWorkerUrl).then((registration) => {
+          if (registration?.active?.scriptURL === serviceWorkerUrl) {
+            return registration
+          }
+
+          return navigator.serviceWorker.register(serviceWorkerUrl)
+        })
       })
       .catch(() => {
         // SW registration failed — not fatal

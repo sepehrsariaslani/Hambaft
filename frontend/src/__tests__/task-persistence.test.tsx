@@ -57,10 +57,15 @@ vi.mock('../legacy/components/QuickAddBar', () => ({
 }))
 
 vi.mock('../legacy/components/TaskRowV2', () => ({
-  default: ({ task, onView }: any) => (
-    <button type="button" onClick={onView}>
-      {task.title}
-    </button>
+  default: ({ task, onView, onOpenDrawer }: any) => (
+    <div>
+      <button type="button" onClick={onView}>
+        {task.title}
+      </button>
+      <button type="button" onClick={onOpenDrawer}>
+        {`open-drawer-${task.id}`}
+      </button>
+    </div>
   ),
 }))
 
@@ -230,6 +235,39 @@ describe('task persistence wiring', () => {
       />,
     )
 
+    expect(await screen.findByRole('button', { name: 'persist-drawer-update' })).toBeInTheDocument()
+  })
+
+  it('navigates on task title click and opens drawer only from the explicit drawer action', async () => {
+    const onViewTaskDetails = vi.fn()
+
+    render(
+      <TaskManagerSection
+        tasks={[
+          {
+            id: 'TASK-ROUTE-1',
+            title: 'تسک مسیر',
+            completed: false,
+            createdAt: '2026-07-11',
+            status: 'today',
+          },
+        ]}
+        goals={[]}
+        areas={[]}
+        onToggleTask={vi.fn()}
+        onDeleteTask={vi.fn()}
+        onUpdateTask={vi.fn()}
+        onAddTask={vi.fn()}
+        todayDate="2026-07-11"
+        onViewTaskDetails={onViewTaskDetails}
+      />,
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: 'تسک مسیر' }))
+    expect(onViewTaskDetails).toHaveBeenCalledWith('TASK-ROUTE-1')
+    expect(screen.queryByRole('button', { name: 'persist-drawer-update' })).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'open-drawer-TASK-ROUTE-1' }))
     expect(await screen.findByRole('button', { name: 'persist-drawer-update' })).toBeInTheDocument()
   })
 })

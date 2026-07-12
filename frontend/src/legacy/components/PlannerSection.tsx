@@ -385,7 +385,8 @@ export default function PlannerSection({ initialView, onNavigate }: PlannerSecti
         onToggleSelect={() => {}}
         onToggle={() => handleMove(task.id, task.status === 'done' ? 'inbox' : 'done')}
         onDelete={() => { deleteTaskRecord(task.id); fetchBucket(activeBucket) }}
-        onView={() => setDrawerTaskId(task.id)}
+        onView={() => onNavigate ? onNavigate('task-detail', task.id) : setDrawerTaskId(task.id)}
+        onOpenDrawer={() => setDrawerTaskId(task.id)}
         onQuickAction={(taskId, field, value) => {
           if (field === 'status') handleMove(taskId, value)
           else if (field === 'importance') {

@@ -8,7 +8,7 @@ import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import {
   CheckCircle2, Circle, Flag, Zap, Calendar, Clock, AlertCircle,
-  FolderKanban, Target, Plus, ChevronDown, ChevronRight, Trash2,
+  FolderKanban, Target, Plus, ChevronDown, ChevronRight, Trash2, PanelRightOpen,
   Sparkles, Pin, MoreHorizontal,
 } from 'lucide-react'
 import type { Task } from '../types'
@@ -48,6 +48,7 @@ interface TaskRowV2Props {
   onToggle: () => void
   onDelete: () => void
   onView?: () => void
+  onOpenDrawer?: () => void
   onQuickAction: (taskId: string, field: string, value: any) => void
   onAddSubtask?: (parentId: string, title: string) => void
   todayDate: string
@@ -62,6 +63,7 @@ export default function TaskRowV2({
   onToggle,
   onDelete,
   onView,
+  onOpenDrawer,
   onQuickAction,
   onAddSubtask,
   todayDate,
@@ -274,6 +276,15 @@ export default function TaskRowV2({
         <div className="flex flex-col gap-1 shrink-0">
           {showActions && !task.completed && (
             <>
+              {onOpenDrawer && (
+                <button
+                  onClick={onOpenDrawer}
+                  className="p-1 text-[#9D978B] hover:text-[#5a6b8a] hover:bg-blue-50 rounded-lg transition-all"
+                  title="باز کردن در پنل"
+                >
+                  <PanelRightOpen className="w-3.5 h-3.5" />
+                </button>
+              )}
               <button
                 onClick={() => setShowSubtaskInput(!showSubtaskInput)}
                 className="p-1 text-[#9D978B] hover:text-[#7C8363] hover:bg-[#E8ECE0]/50 rounded-lg transition-all"

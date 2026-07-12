@@ -11,6 +11,7 @@ interface TaskTreeViewProps {
   onUpdateTask: (task: Task) => void
   onAddTask: (titleOrTask: string | Task) => void
   onViewTaskDetails?: (id: string) => void
+  onOpenTaskDrawer?: (id: string) => void
   todayDate: string
 }
 
@@ -79,7 +80,7 @@ function flattenHierarchy(roots: Task[], taskMap: Map<string, Task & { _depth?: 
   return result
 }
 
-export default function TaskTreeView({ tasks, goals, onToggleTask, onDeleteTask, onUpdateTask, onAddTask, onViewTaskDetails, todayDate }: TaskTreeViewProps) {
+export default function TaskTreeView({ tasks, goals, onToggleTask, onDeleteTask, onUpdateTask, onAddTask, onViewTaskDetails, onOpenTaskDrawer, todayDate }: TaskTreeViewProps) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editTitle, setEditTitle] = useState('')
@@ -231,6 +232,15 @@ export default function TaskTreeView({ tasks, goals, onToggleTask, onDeleteTask,
                       >
                         <Plus className="w-3 h-3" />
                       </button>
+                      {onOpenTaskDrawer && (
+                        <button
+                          onClick={() => onOpenTaskDrawer(task.id)}
+                          className="p-1 text-[#5a6b8a] hover:bg-blue-50 rounded"
+                          title="باز کردن در پنل"
+                        >
+                          <span className="text-[10px] font-black">پنل</span>
+                        </button>
+                      )}
                       <button
                         onClick={() => { setEditingId(task.id); setEditTitle(task.title) }}
                         className="p-1 text-[#8D7F72] hover:bg-[#E6DFD3] rounded"

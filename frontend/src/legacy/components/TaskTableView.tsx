@@ -8,6 +8,7 @@ interface TaskTableViewProps {
   onToggleTask: (id: string) => void
   onDeleteTask: (id: string) => void
   onViewTaskDetails?: (id: string) => void
+  onOpenTaskDrawer?: (id: string) => void
   todayDate: string
 }
 
@@ -45,6 +46,7 @@ export default function TaskTableView({
   onToggleTask,
   onDeleteTask,
   onViewTaskDetails,
+  onOpenTaskDrawer,
   todayDate,
 }: TaskTableViewProps) {
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -313,6 +315,9 @@ export default function TaskTableView({
                     </div>
                   ) : (
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100">
+                      {onOpenTaskDrawer && (
+                        <button onClick={() => onOpenTaskDrawer(task.id)} className="text-[10px] text-[#5a6b8a] hover:bg-blue-50 px-2 py-1 rounded">پنل</button>
+                      )}
                       <button onClick={() => startEdit(task, 'title')} className="text-[10px] text-[#7C8363] hover:bg-[#7C8363]/10 px-2 py-1 rounded">ویرایش</button>
                       <button onClick={() => onDeleteTask(task.id)} className="text-[10px] text-[#c44a3d] hover:bg-[#c44a3d]/10 px-2 py-1 rounded">حذف</button>
                     </div>

@@ -499,6 +499,7 @@ export default function TaskManagerSection({
                     onToggle={() => onToggleTask(task.id)}
                     onDelete={() => onDeleteTask(task.id)}
                     onView={() => onViewTaskDetails ? onViewTaskDetails(task.id) : setDrawerTaskId(task.id)}
+                    onOpenDrawer={() => setDrawerTaskId(task.id)}
                     onQuickAction={handleQuickAction}
                     onAddSubtask={() => {/* subtask add handled via drawer */}}
                     todayDate={todayDate}
@@ -524,6 +525,7 @@ export default function TaskManagerSection({
             onDeleteTask={onDeleteTask}
             onUpdateTask={onUpdateTask}
             onViewTaskDetails={onViewTaskDetails}
+            onOpenTaskDrawer={(id) => setDrawerTaskId(id)}
             todayDate={todayDate}
           />
         </Suspense>
@@ -538,6 +540,7 @@ export default function TaskManagerSection({
             onDeleteTask={onDeleteTask}
             onUpdateTask={onUpdateTask}
             onViewTaskDetails={onViewTaskDetails}
+            onOpenTaskDrawer={(id) => setDrawerTaskId(id)}
             groupBy={kanbanGroup}
           />
         </Suspense>
@@ -553,6 +556,7 @@ export default function TaskManagerSection({
             onUpdateTask={onUpdateTask}
             onAddTask={onAddTask}
             onViewTaskDetails={onViewTaskDetails}
+            onOpenTaskDrawer={(id) => setDrawerTaskId(id)}
             todayDate={todayDate}
           />
         </Suspense>

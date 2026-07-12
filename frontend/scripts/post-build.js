@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, mkdirSync, readdirSync, rmSync, existsSync } from 'fs'
+import { readFileSync, writeFileSync, mkdirSync, readdirSync, rmSync, existsSync, statSync } from 'fs'
 import { resolve, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { findPrimaryAssets, inlineBuiltAssetsFromDir } from './post-build-lib.js'
@@ -7,6 +7,95 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const rootDir = resolve(__dirname, '../..')
 const publicSource = resolve(__dirname, '../public')
 const publicTarget = resolve(rootDir, 'hambaft/public')
+const benchRoot = resolve(rootDir, '../..')
+const sitesRoot = resolve(benchRoot, 'sites')
+
+function syncFile(src, dst) {
+  mkdirSync(dirname(dst), { recursive: true })
+  const content = readFileSync(src)
+  try {
+    writeFileSync(dst, content)
+  } catch (err) {
+    if (!existsSync(dst)) {
+      throw err
+    }
+
+    removeIfExists(dst)
+    writeFileSync(dst, content)
+  }
+}
+
+function removeIfExists(targetPath) {
+  if (!existsSync(targetPath)) return
+  try {
+    rmSync(targetPath, { recursive: true, force: true })
+  } catch (err) {
+    console.warn('[post-build] could not remove', targetPath, err.message)
+  }
+}
+
+function syncDir(srcDir, dstDir) {
+  mkdirSync(dstDir, { recursive: true })
+
+  if (!existsSync(srcDir)) {
+    return
+  }
+
+  const srcEntries = new Set(readdirSync(srcDir))
+  for (const dstEntry of readdirSync(dstDir)) {
+    if (!srcEntries.has(dstEntry)) {
+      removeIfExists(resolve(dstDir, dstEntry))
+    }
+  }
+
+  for (const entry of srcEntries) {
+    const srcPath = resolve(srcDir, entry)
+    const dstPath = resolve(dstDir, entry)
+    const srcStat = statSync(srcPath)
+
+    if (srcStat.isDirectory()) {
+      if (existsSync(dstPath) && !statSync(dstPath).isDirectory()) {
+        removeIfExists(dstPath)
+      }
+      syncDir(srcPath, dstPath)
+      continue
+    }
+
+    syncFile(srcPath, dstPath)
+  }
+}
+
+function syncPublishedCopies() {
+  if (!existsSync(sitesRoot)) {
+    return
+  }
+
+  const defaultSite = process.env.HAMBAFT_SITE_NAME || 'hambaft.ir'
+  const publishTargets = [
+    resolve(sitesRoot, 'assets/hambaft'),
+    resolve(sitesRoot, defaultSite, 'public'),
+  ]
+
+  for (const target of publishTargets) {
+    const parentDir = dirname(target)
+    if (!existsSync(parentDir)) {
+      continue
+    }
+
+    try {
+      removeIfExists(resolve(target, 'frontend'))
+      syncDir(resolve(publicTarget, 'assets'), resolve(target, 'assets'))
+      for (const fileName of ['index.html', 'manifest.json', 'sw.js', 'hambaft-icon.svg']) {
+        const src = resolve(publicTarget, fileName)
+        if (!existsSync(src)) continue
+        syncFile(src, resolve(target, fileName))
+      }
+      console.log('[post-build] published to', target)
+    } catch (err) {
+      console.error('[post-build] failed to publish to', target, err.message)
+    }
+  }
+}
 
 function collectReferencedAssets(html, assetsDir) {
   const referencedAssets = new Set()
@@ -116,3 +205,4 @@ if (existsSync(assetsDir)) {
 }
 
 console.log('[post-build] done')
+syncPublishedCopies()

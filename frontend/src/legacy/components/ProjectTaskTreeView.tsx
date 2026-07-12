@@ -10,6 +10,7 @@ interface ProjectTaskTreeViewProps {
   onUpdateTask: (task: Task) => void
   onAddTask: (title: string) => void
   onViewTaskDetails?: (taskId: string) => void
+  onOpenTaskDrawer?: (taskId: string) => void
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -71,7 +72,7 @@ function flatten(roots: Task[], map: Map<string, Task & { _children?: Task[] }>,
   return res
 }
 
-export default function ProjectTaskTreeView({ tasks, onToggleTask, onDeleteTask, onUpdateTask, onAddTask, onViewTaskDetails }: ProjectTaskTreeViewProps) {
+export default function ProjectTaskTreeView({ tasks, onToggleTask, onDeleteTask, onUpdateTask, onAddTask, onViewTaskDetails, onOpenTaskDrawer }: ProjectTaskTreeViewProps) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editTitle, setEditTitle] = useState('')
@@ -267,6 +268,15 @@ export default function ProjectTaskTreeView({ tasks, onToggleTask, onDeleteTask,
                       >
                         <Plus className="w-3 h-3" />
                       </button>
+                      {onOpenTaskDrawer && (
+                        <button
+                          onClick={() => onOpenTaskDrawer(task.id)}
+                          className="p-1 text-[#5a6b8a] hover:bg-blue-50 rounded"
+                          title="باز کردن در پنل"
+                        >
+                          <span className="text-[10px] font-black">پنل</span>
+                        </button>
+                      )}
                       <button
                         onClick={() => { setEditingId(task.id); setEditTitle(task.title) }}
                         className="p-1 text-[#8D7F72] hover:bg-[#E6DFD3] rounded"

@@ -38,6 +38,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import PersianDatePicker from './PersianDatePicker';
 import ProjectTaskTreeView from './ProjectTaskTreeView';
+import TaskDetailDrawer from './TaskDetailDrawer';
 import { DateObject } from 'react-multi-date-picker';
 import persian from 'react-date-object/calendars/persian';
 import persian_fa from 'react-date-object/locales/persian_fa';
@@ -92,6 +93,7 @@ interface ProjectDetailViewProps {
   onToggleProjectCompletion: (goalId: string, projectId: string) => void;
   onUpdateProjectDetails?: (goalId: string, projectId: string, updates: { title?: string; description?: string; notes?: string; milestones?: Milestone[]; tasks?: Task[]; noteBlocks?: any[] }) => void;
   onNavigateTask?: (taskId: string) => void;
+  onNavigateEntity?: (tab: string, id?: string) => void;
 }
 
 export default function ProjectDetailView({
@@ -107,7 +109,8 @@ export default function ProjectDetailView({
   onDeleteTaskFromProject,
   onToggleProjectCompletion,
   onUpdateProjectDetails,
-  onNavigateTask
+  onNavigateTask,
+  onNavigateEntity,
 }: ProjectDetailViewProps) {
   // Views/Tabs State
   const [activeTab, setActiveTab] = useState<'tasks' | 'finance' | 'planning' | 'milestones' | 'report' | 'notes'>('tasks');
@@ -696,6 +699,10 @@ export default function ProjectDetailView({
                       const t = tasksList.find(x => x.id === taskId)
                       if (t) setSelectedTaskForDetails(t)
                     }}
+                    onOpenTaskDrawer={(taskId) => {
+                      const t = tasksList.find(x => x.id === taskId)
+                      if (t) setSelectedTaskForDetails(t)
+                    }}
                   />
                 )}
 
@@ -742,6 +749,12 @@ export default function ProjectDetailView({
                               </div>
                             </div>
                           </div>
+                          <button
+                            onClick={() => setSelectedTaskForDetails(t)}
+                            className="px-2 py-1 text-[10px] font-bold text-[#5a6b8a] hover:bg-blue-50 rounded-lg shrink-0"
+                          >
+                            پنل
+                          </button>
 
                           <div className="flex items-center gap-1.5 shrink-0">
                             <button
@@ -1265,236 +1278,46 @@ export default function ProjectDetailView({
 
       </div>
 
-      {/* TASK DETAILS SLIDE-OVER OVERLAY MODAL */}
-      <AnimatePresence>
-        {selectedTaskForDetails && (
-          <>
-            {/* Backdrop */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 0.5 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setSelectedTaskForDetails(null)}
-              className="fixed inset-0 bg-black z-50 cursor-pointer"
-            />
-
-            {/* Slide over */}
-            <motion.div
-              initial={{ x: '100%' }}
-              animate={{ x: 0 }}
-              exit={{ x: '100%' }}
-              transition={{ type: 'spring', damping: 20, stiffness: 200 }}
-              className="fixed top-0 bottom-0 right-0 w-full sm:w-[480px] bg-white dark:bg-[#1C1D17] border-l border-[#E6DFD3] dark:border-[#3D4133] z-50 shadow-2xl p-6 flex flex-col justify-between overflow-y-auto text-right"
-              dir="rtl"
-            >
-              <div className="space-y-5">
-                {/* Close & Completed */}
-                <div className="flex items-center justify-between pb-3 border-b border-[#E6DFD3] dark:border-[#3D4133]">
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => handleUpdateSingleTask({ ...selectedTaskForDetails, completed: !selectedTaskForDetails.completed })}
-                      className="text-[#8D7F72] hover:text-[#7C8363]"
-                    >
-                      {selectedTaskForDetails.completed ? <CheckSquare className="w-5 h-5 text-[#7C8363]" /> : <Square className="w-5 h-5" />}
-                    </button>
-                    <span className="text-[10px] font-black text-[#8D7F72]">شناسه کار: {selectedTaskForDetails.id.split('-')[1] || 'جدید'}</span>
-                  </div>
-
-                  <button
-                    onClick={() => setSelectedTaskForDetails(null)}
-                    className="p-1 hover:bg-[#E6DFD3]/40 dark:hover:bg-[#2D3025] rounded-lg cursor-pointer"
-                  >
-                    <X className="w-4 h-4 text-[#8D7F72]" />
-                  </button>
-                </div>
-
-                {/* Editable Title */}
-                <div className="space-y-1">
-                  <label className="text-[9px] text-[#8D7F72] font-black">عنوان کار</label>
-                  <input
-                    type="text"
-                    value={selectedTaskForDetails.title}
-                    onChange={(e) => handleUpdateSingleTask({ ...selectedTaskForDetails, title: e.target.value })}
-                    className="w-full px-3 py-2 text-xs bg-[#FDFBF7] dark:bg-[#121411] border border-[#D6CFC3] rounded-xl text-[#3D3D3D] dark:text-[#E8ECE0] font-black focus:outline-none"
-                  />
-                </div>
-
-                {/* Editable Description */}
-                <div className="space-y-1">
-                  <label className="text-[9px] text-[#8D7F72] font-black font-sans">توضیحات و یادداشت‌ها</label>
-                  <textarea
-                    value={selectedTaskForDetails.description || ''}
-                    onChange={(e) => handleUpdateSingleTask({ ...selectedTaskForDetails, description: e.target.value })}
-                    placeholder="جزئیات این کار خرد..."
-                    className="w-full px-3 py-2 text-xs bg-[#FDFBF7] dark:bg-[#121411] border border-[#D6CFC3] rounded-xl text-[#3D3D3D] dark:text-[#E8ECE0] h-20 resize-none focus:outline-none leading-relaxed"
-                  />
-                </div>
-
-                {/* Priority, Category and Milestone */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-[9px] text-[#8D7F72] font-black">اولویت</label>
-                    <select
-                      value={selectedTaskForDetails.priority || ''}
-                      onChange={(e) => handleUpdateSingleTask({ ...selectedTaskForDetails, priority: (e.target.value || undefined) as any })}
-                      className="w-full px-2.5 py-2 text-xs bg-[#FDFBF7] dark:bg-[#121411] border border-[#D6CFC3] rounded-xl text-[#3D3D3D] dark:text-[#E8ECE0]"
-                    >
-                      <option value="">انتخاب نشده</option>
-                      {PRIORITIES.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
-                    </select>
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-[9px] text-[#8D7F72] font-black">دسته‌بندی</label>
-                    <select
-                      value={selectedTaskForDetails.category || ''}
-                      onChange={(e) => handleUpdateSingleTask({ ...selectedTaskForDetails, category: (e.target.value || undefined) as any })}
-                      className="w-full px-2.5 py-2 text-xs bg-[#FDFBF7] dark:bg-[#121411] border border-[#D6CFC3] rounded-xl text-[#3D3D3D] dark:text-[#E8ECE0]"
-                    >
-                      <option value="">انتخاب نشده</option>
-                      {TASK_CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-[9px] text-[#8D7F72] font-black">تاریخ مهلت / انجام</label>
-                    <PersianDatePicker
-                      value={selectedTaskForDetails.dueDate || ''}
-                      onChange={(val) => handleUpdateSingleTask({ ...selectedTaskForDetails, dueDate: val || undefined })}
-                      placeholder="بدون تاریخ انجام"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-[9px] text-[#8D7F72] font-black">مایلستون (نقطه عطف) متصل</label>
-                    <select
-                      value={selectedTaskForDetails.milestoneId || ''}
-                      onChange={(e) => handleUpdateSingleTask({ ...selectedTaskForDetails, milestoneId: e.target.value || undefined })}
-                      className="w-full px-2.5 py-2 text-xs bg-[#FDFBF7] dark:bg-[#121411] border border-[#D6CFC3] rounded-xl text-[#3D3D3D] dark:text-[#E8ECE0]"
-                    >
-                      <option value="">فاقد نقطه عطف</option>
-                      {(project.milestones || []).map(m => <option key={m.id} value={m.id}>{m.title}</option>)}
-                    </select>
-                  </div>
-                </div>
-
-                {/* Subtasks Section */}
-                <div className="pt-4 border-t border-[#E6DFD3] dark:border-[#3D4133] space-y-3">
-                  <div className="flex justify-between items-center">
-                    <h4 className="text-[11px] font-black text-[#2D3025] dark:text-[#E8ECE0]">زیرلیست کارها و چک‌لیست جزئی</h4>
-                    <span className="text-[8px] text-[#8D7F72] bg-[#E6DFD3]/40 dark:bg-[#3D4133] px-2 py-0.5 rounded-full">
-                      {(selectedTaskForDetails.subTasks || []).filter(st => st.completed).length} از {(selectedTaskForDetails.subTasks || []).length} مورد
-                    </span>
-                  </div>
-
-                  {/* Add Subtask */}
-                  <div className="flex gap-1.5">
-                    <input
-                      type="text"
-                      placeholder="مورد جدید در چک‌لیست..."
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          const input = e.currentTarget;
-                          const title = input.value.trim();
-                          if (!title) return;
-                          const newSub = { id: `subtk-${Date.now()}`, title, completed: false };
-                          const updated = [...(selectedTaskForDetails.subTasks || []), newSub];
-                          handleUpdateSingleTask({ ...selectedTaskForDetails, subTasks: updated });
-                          input.value = '';
-                        }
-                      }}
-                      className="flex-1 px-3 py-1 text-[11px] bg-[#FDFBF7] dark:bg-[#121411] border border-[#D6CFC3] rounded-xl focus:outline-none"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
-                    {(selectedTaskForDetails.subTasks || []).length > 0 ? (
-                      (selectedTaskForDetails.subTasks || []).map((sub) => (
-                        <div key={sub.id} className="flex items-center justify-between p-1.5 bg-[#FDFBF7]/60 dark:bg-[#121411]/50 border border-[#E6DFD3] dark:border-[#3D4133] rounded-lg">
-                          <button
-                            onClick={() => {
-                              const updated = (selectedTaskForDetails.subTasks || []).map(st => st.id === sub.id ? { ...st, completed: !st.completed } : st);
-                              handleUpdateSingleTask({ ...selectedTaskForDetails, subTasks: updated });
-                            }}
-                            className="flex items-center gap-2 text-right text-xs"
-                          >
-                            {sub.completed ? <CheckCircle className="w-3.5 h-3.5 text-[#7C8363]" /> : <Square className="w-3.5 h-3.5 text-[#8D7F72]" />}
-                            <span className={sub.completed ? 'line-through text-[#8D7F72]' : 'text-[#3D3D3D] dark:text-[#E8ECE0]'}>{sub.title}</span>
-                          </button>
-                          <button
-                            onClick={() => {
-                              const updated = (selectedTaskForDetails.subTasks || []).filter(st => st.id !== sub.id);
-                              handleUpdateSingleTask({ ...selectedTaskForDetails, subTasks: updated });
-                            }}
-                            className="text-red-500 hover:text-red-600 p-0.5"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
-                        </div>
-                      ))
-                    ) : (
-                      <p className="text-[9px] text-[#8D7F72] italic text-center py-2">هیچ موردی در چک‌لیست این کار ثبت نشده است.</p>
-                    )}
-                  </div>
-                </div>
-
-                {/* Stopwatch Tracker */}
-                <div className="p-3 bg-[#E8ECE0]/30 dark:bg-[#1E241A]/20 rounded-2xl border border-[#7C8363]/20 space-y-2">
-                  <div className="flex justify-between items-center text-[10px] font-black text-[#5A5A40]">
-                    <span>زمان‌سنج اختصاصی این تسک</span>
-                    <span className="font-mono">{formatSeconds(getTaskSeconds(selectedTaskForDetails))}</span>
-                  </div>
-
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => onToggleTaskTracking(project.goalId, project.id, selectedTaskForDetails.id)}
-                      className={`flex-1 py-1.5 text-xs font-bold rounded-xl flex items-center justify-center gap-1 cursor-pointer transition-colors ${
-                        selectedTaskForDetails.isTracking 
-                          ? 'bg-red-500 text-white hover:bg-red-600 animate-pulse' 
-                          : 'bg-[#7C8363] text-white hover:bg-[#5A5A40]'
-                      }`}
-                    >
-                      {selectedTaskForDetails.isTracking ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 fill-white" />}
-                      <span>{selectedTaskForDetails.isTracking ? 'توقف زمان‌سنج' : 'شروع زمان‌سنج'}</span>
-                    </button>
-                    <button
-                      onClick={() => {
-                        const updated = { ...selectedTaskForDetails, totalTimeSpent: 0, isTracking: false, trackingStartTime: undefined };
-                        handleUpdateSingleTask(updated);
-                      }}
-                      className="px-3 py-1.5 border border-[#D6CFC3] text-xs font-bold rounded-xl text-[#8D7F72] dark:text-[#8D7F72]"
-                    >
-                      بازنشانی زمان
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Bottom Actions */}
-              <div className="pt-4 border-t border-[#E6DFD3] dark:border-[#3D4133] flex justify-between gap-3">
-                <button
-                  onClick={() => {
-                    if (confirm('آیا از حذف این کار اطمینان دارید؟')) {
-                      handleDeleteSingleTask(selectedTaskForDetails.id);
-                    }
-                  }}
-                  className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-black rounded-xl cursor-pointer"
-                >
-                  حذف دائم تسک
-                </button>
-                <button
-                  onClick={() => setSelectedTaskForDetails(null)}
-                  className="px-6 py-2 bg-[#7C8363] hover:bg-[#5A5A40] text-white text-xs font-black rounded-xl cursor-pointer"
-                >
-                  بستن و ثبت جزئیات
-                </button>
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
+      {selectedTaskForDetails && (
+        <TaskDetailDrawer
+          task={selectedTaskForDetails}
+          allTasks={tasksList}
+          goals={[{ id: project.goalId, title: project.goalTitle, projects: [{ id: project.id, title: project.title }] }]}
+          projects={[{ id: project.id, title: project.title }]}
+          onUpdateTask={handleUpdateSingleTask}
+          onDeleteTask={(taskId) => handleDeleteSingleTask(taskId)}
+          onClose={() => setSelectedTaskForDetails(null)}
+          onNavigate={(tab, id) => {
+            if (tab === 'projects' && id === project.id) {
+              setSelectedTaskForDetails(null)
+              return
+            }
+            setSelectedTaskForDetails(null)
+            onNavigateEntity?.(tab, id)
+          }}
+          onStartTimer={(taskId) => onToggleTaskTracking(project.goalId, project.id, taskId)}
+          onPauseTimer={() => {
+            if (selectedTaskForDetails) {
+              onToggleTaskTracking(project.goalId, project.id, selectedTaskForDetails.id)
+            }
+          }}
+          onStopTimer={() => {
+            if (selectedTaskForDetails) {
+              onToggleTaskTracking(project.goalId, project.id, selectedTaskForDetails.id)
+            }
+          }}
+          onResetTimer={(taskId) => {
+            const task = tasksList.find((item) => item.id === taskId)
+            if (!task) return
+            handleUpdateSingleTask({ ...task, totalTimeSpent: 0, isTracking: false, trackingStartTime: undefined })
+          }}
+          activeTimerTaskId={tasksList.find((item) => item.isTracking)?.id || null}
+          activeTimerSeconds={selectedTaskForDetails.isTracking && selectedTaskForDetails.trackingStartTime
+            ? Math.floor((Date.now() - selectedTaskForDetails.trackingStartTime) / 1000) + (selectedTaskForDetails.totalTimeSpent || 0)
+            : selectedTaskForDetails.totalTimeSpent || 0}
+          isTimerRunning={!!selectedTaskForDetails.isTracking}
+        />
+      )}
 
     </div>
   );

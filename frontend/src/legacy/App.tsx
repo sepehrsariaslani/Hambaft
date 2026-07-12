@@ -3429,6 +3429,11 @@ export default function App({
                 onToggleProjectCompletion={handleToggleProjectCompletion}
                 onUpdateProjectDetails={handleUpdateProjectDetails}
                 onNavigateTask={(taskId) => goToTaskDetail(taskId)}
+                onNavigateEntity={(tab, id) => {
+                  if (tab === 'goals' && id) goToGoal(id)
+                  else if (tab === 'projects' && id) goToProject(id)
+                  else goToTab(tab)
+                }}
               />
             );
           }
