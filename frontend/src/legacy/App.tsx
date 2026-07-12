@@ -3279,17 +3279,17 @@ export default function App({
         );
       case 'planner':
       case 'inbox':
-        return <PlannerSection initialView="buckets" onNavigate={(tab, id) => { if (tab === 'goals' && id) goToGoal(id); else if (tab === 'projects' && id) goToProject(id); else goToTab(tab); }} />;
+        return <PlannerSection initialView="buckets" onNavigate={(tab, id) => { if (tab === 'goals' && id) goToGoal(id); else if (tab === 'projects' && id) goToProject(id); else if (tab === 'task-detail' && id) goToTaskDetail(id); else goToTab(tab); }} />;
       case 'planner-timeline':
-        return <PlannerSection initialView="timeline" onNavigate={(tab, id) => { if (tab === 'goals' && id) goToGoal(id); else if (tab === 'projects' && id) goToProject(id); else goToTab(tab); }} />;
+        return <PlannerSection initialView="timeline" onNavigate={(tab, id) => { if (tab === 'goals' && id) goToGoal(id); else if (tab === 'projects' && id) goToProject(id); else if (tab === 'task-detail' && id) goToTaskDetail(id); else goToTab(tab); }} />;
       case 'planner-week':
-        return <PlannerSection initialView="week" onNavigate={(tab, id) => { if (tab === 'goals' && id) goToGoal(id); else if (tab === 'projects' && id) goToProject(id); else goToTab(tab); }} />;
+        return <PlannerSection initialView="week" onNavigate={(tab, id) => { if (tab === 'goals' && id) goToGoal(id); else if (tab === 'projects' && id) goToProject(id); else if (tab === 'task-detail' && id) goToTaskDetail(id); else goToTab(tab); }} />;
       case 'planner-month':
-        return <PlannerSection initialView="month" onNavigate={(tab, id) => { if (tab === 'goals' && id) goToGoal(id); else if (tab === 'projects' && id) goToProject(id); else goToTab(tab); }} />;
+        return <PlannerSection initialView="month" onNavigate={(tab, id) => { if (tab === 'goals' && id) goToGoal(id); else if (tab === 'projects' && id) goToProject(id); else if (tab === 'task-detail' && id) goToTaskDetail(id); else goToTab(tab); }} />;
       case 'planner-board':
-        return <PlannerSection initialView="board" onNavigate={(tab, id) => { if (tab === 'goals' && id) goToGoal(id); else if (tab === 'projects' && id) goToProject(id); else goToTab(tab); }} />;
+        return <PlannerSection initialView="board" onNavigate={(tab, id) => { if (tab === 'goals' && id) goToGoal(id); else if (tab === 'projects' && id) goToProject(id); else if (tab === 'task-detail' && id) goToTaskDetail(id); else goToTab(tab); }} />;
       case 'planner-areas':
-        return <PlannerSection initialView="areas" onNavigate={(tab, id) => { if (tab === 'goals' && id) goToGoal(id); else if (tab === 'projects' && id) goToProject(id); else goToTab(tab); }} />;
+        return <PlannerSection initialView="areas" onNavigate={(tab, id) => { if (tab === 'goals' && id) goToGoal(id); else if (tab === 'projects' && id) goToProject(id); else if (tab === 'task-detail' && id) goToTaskDetail(id); else goToTab(tab); }} />;
       case 'task-detail': {
         // Full-page task detail — replaces the old side-drawer.
         const matchedTask = selectedTaskId
