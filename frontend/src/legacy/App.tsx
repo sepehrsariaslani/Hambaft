@@ -146,7 +146,8 @@ import {
   Dumbbell,
   Users,
   Activity,
-  Layers
+  Layers,
+  ChevronDown
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -633,7 +634,7 @@ export default function App({
     };
   }, [activeTimerTaskId, isTimerRunning]);
 
-  // Restore active session on mount
+  // Restore active session on mount — calculate elapsed seconds from started_at
   useEffect(() => {
     (async () => {
       try {
@@ -642,7 +643,16 @@ export default function App({
         if (sess) {
           setActiveSessionId(sess.name);
           setActiveTimerTaskId(sess.task);
-          setActiveTimerSeconds(0);
+          // Calculate elapsed seconds from started_at
+          let elapsed = 0;
+          if (sess.started_at) {
+            try {
+              const start = new Date(sess.started_at);
+              const now = new Date();
+              elapsed = Math.max(0, Math.floor((now.getTime() - start.getTime()) / 1000));
+            } catch { elapsed = 0; }
+          }
+          setActiveTimerSeconds(elapsed);
           setIsTimerRunning(true);
         }
       } catch {
@@ -4635,88 +4645,20 @@ export default function App({
 
       </div>
 
-      {/* Global Floating Timer Widget */}
+      {/* Global Floating Timer Widget — mini pill + expandable */}
       <AnimatePresence>
         {activeTimerTaskId && (
-          (() => {
-            const activeTaskObj = lifeData.tasks.find(t => t.id === activeTimerTaskId);
-            const activeTitle = activeTaskObj?.title || 'کار جاری';
-            return (
-              <motion.div
-                initial={{ opacity: 0, y: 50, scale: 0.95 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 50, scale: 0.95 }}
-                transition={{ type: 'spring', damping: 20, stiffness: 200 }}
-                className="fixed bottom-[88px] md:bottom-6 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] md:w-[460px] bg-[#2D3025] text-[#D6CFC3] px-4 py-3.5 rounded-[24px] shadow-2xl border border-white/10 flex items-center justify-between gap-3"
-              >
-                {/* Left: Indicator + Title + Live Clock */}
-                <div className="flex items-center gap-2.5 min-w-0 flex-1" dir="rtl">
-                  <div className="relative shrink-0 flex items-center justify-center">
-                    <span className="w-2.5 h-2.5 bg-rose-500 rounded-full animate-ping absolute" />
-                    <span className="w-2.5 h-2.5 bg-rose-500 rounded-full relative" />
-                  </div>
-                  
-                  <div className="text-right min-w-0 flex-1">
-                    <span className="text-[8px] text-[#DDE2D5]/50 block font-bold leading-none mb-1">تسک در حال ردیابی</span>
-                    <h4 className="text-[11px] font-black text-white truncate max-w-[120px] md:max-w-[180px] leading-tight">
-                      {activeTitle}
-                    </h4>
-                  </div>
-
-                  <div className="h-6 w-px bg-white/10 shrink-0 mx-1" />
-
-                  {/* Clock Display */}
-                  <div className="bg-white/5 border border-white/5 px-2.5 py-1 rounded-xl text-xs font-mono font-bold text-[#E26645] tracking-widest shrink-0">
-                    {formatTimeDigital(activeTimerSeconds)}
-                  </div>
-                </div>
-
-                {/* Right: Actions */}
-                <div className="flex items-center gap-1.5 shrink-0">
-                  {/* Play / Pause Toggle */}
-                  {isTimerRunning ? (
-                    <button
-                      onClick={handlePauseTimer}
-                      className="p-2 bg-[#9B6B61]/20 hover:bg-[#9B6B61]/30 text-[#C59B93] rounded-xl transition-all cursor-pointer active:scale-90"
-                      title="توقف موقت"
-                    >
-                      <Pause className="w-3.5 h-3.5 fill-current" />
-                    </button>
-                  ) : (
-                    <button
-                      onClick={handleResumeTimer}
-                      className="p-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 rounded-xl transition-all cursor-pointer active:scale-90"
-                      title="ادامه ردیابی"
-                    >
-                      <Play className="w-3.5 h-3.5 fill-current" />
-                    </button>
-                  )}
-
-                  {/* Stop / Complete Session */}
-                  <button
-                    onClick={handleStopTimer}
-                    className="p-2 bg-[#E26645]/20 hover:bg-[#E26645]/30 text-[#E26645] rounded-xl transition-all cursor-pointer active:scale-90"
-                    title="ثبت زمان و پایان"
-                  >
-                    <Square className="w-3.5 h-3.5 fill-current" />
-                  </button>
-
-                  {/* Reset Timer */}
-                  <button
-                    onClick={() => {
-                      if (confirm('آیا می‌خواهید زمان ردیابی شده در این جلسه را لغو کنید؟')) {
-                        handleResetTimerForTask(activeTimerTaskId);
-                      }
-                    }}
-                    className="p-2 bg-white/5 hover:bg-white/10 text-white/50 hover:text-white/80 rounded-xl transition-all cursor-pointer active:scale-90"
-                    title="لغو"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </motion.div>
-            );
-          })()
+          <FloatingTimerWidget
+            activeTimerTaskId={activeTimerTaskId}
+            activeTimerSeconds={activeTimerSeconds}
+            isTimerRunning={isTimerRunning}
+            tasks={lifeData.tasks}
+            onPause={handlePauseTimer}
+            onResume={handleResumeTimer}
+            onStop={handleStopTimer}
+            onReset={handleResetTimerForTask}
+            onGoToTask={goToTaskDetail}
+          />
         )}
       </AnimatePresence>
 
@@ -4919,5 +4861,162 @@ export default function App({
       </AnimatePresence>
 
     </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+// FloatingTimerWidget — Mini pill that expands to full controls
+// ══════════════════════════════════════════════════════════════
+function FloatingTimerWidget({
+  activeTimerTaskId,
+  activeTimerSeconds,
+  isTimerRunning,
+  tasks,
+  onPause,
+  onResume,
+  onStop,
+  onReset,
+  onGoToTask,
+}: {
+  activeTimerTaskId: string;
+  activeTimerSeconds: number;
+  isTimerRunning: boolean;
+  tasks: any[];
+  onPause: () => void;
+  onResume: () => void;
+  onStop: () => void;
+  onReset: (taskId: string) => void;
+  onGoToTask: (taskId: string) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const activeTask = tasks.find(t => t.id === activeTimerTaskId);
+  const activeTitle = activeTask?.title || 'کار جاری';
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 50 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: 50 }}
+      transition={{ type: 'spring', damping: 22, stiffness: 200 }}
+      className="fixed bottom-[88px] md:bottom-6 left-1/2 -translate-x-1/2 z-50"
+      dir="rtl"
+    >
+      {/* ── Mini pill (collapsed) ── */}
+      <AnimatePresence mode="wait">
+        {!expanded ? (
+          <motion.button
+            key="mini"
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            transition={{ duration: 0.15 }}
+            onClick={() => setExpanded(true)}
+            className="flex items-center gap-2 bg-[#2D3025] text-white pl-3 pr-2.5 py-2 rounded-full shadow-2xl border border-white/10 cursor-pointer hover:shadow-[0_0_20px_rgba(226,102,69,0.3)] transition-shadow active:scale-95"
+          >
+            {/* Pulse dot */}
+            <span className="relative flex items-center justify-center shrink-0">
+              <span className={`w-2 h-2 rounded-full absolute animate-ping ${isTimerRunning ? 'bg-rose-500' : 'bg-amber-400'}`} />
+              <span className={`w-2 h-2 rounded-full relative ${isTimerRunning ? 'bg-rose-500' : 'bg-amber-400'}`} />
+            </span>
+            {/* Time */}
+            <span className="text-[11px] font-mono font-black tracking-wide text-[#E26645]">
+              {formatTimeDigital(activeTimerSeconds)}
+            </span>
+            {/* Title — truncated */}
+            <span className="text-[9px] font-bold text-white/60 max-w-[80px] truncate hidden sm:inline">
+              {activeTitle}
+            </span>
+            {/* Play/Pause quick toggle */}
+            {isTimerRunning ? (
+              <span onClick={(e) => { e.stopPropagation(); onPause(); }} className="p-1 rounded-lg hover:bg-white/10 cursor-pointer transition-colors">
+                <Pause className="w-3 h-3 text-white/70" />
+              </span>
+            ) : (
+              <span onClick={(e) => { e.stopPropagation(); onResume(); }} className="p-1 rounded-lg hover:bg-emerald-500/20 cursor-pointer transition-colors">
+                <Play className="w-3 h-3 text-emerald-400 fill-current" />
+              </span>
+            )}
+          </motion.button>
+        ) : (
+          /* ── Expanded panel ── */
+          <motion.div
+            key="expanded"
+            initial={{ opacity: 0, scale: 0.9, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9, y: 10 }}
+            transition={{ type: 'spring', damping: 22, stiffness: 250 }}
+            className="w-[calc(100vw-2rem)] md:w-[420px] bg-[#2D3025] text-[#D6CFC3] rounded-2xl shadow-2xl border border-white/10 overflow-hidden"
+          >
+            {/* Header — clickable to go to task detail */}
+            <button
+              onClick={() => { onGoToTask(activeTimerTaskId); setExpanded(false); }}
+              className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors cursor-pointer text-right"
+            >
+              <span className="relative flex items-center justify-center shrink-0">
+                <span className={`w-2.5 h-2.5 rounded-full absolute animate-ping ${isTimerRunning ? 'bg-rose-500' : 'bg-amber-400'}`} />
+                <span className={`w-2.5 h-2.5 rounded-full relative ${isTimerRunning ? 'bg-rose-500' : 'bg-amber-400'}`} />
+              </span>
+              <div className="flex-1 min-w-0">
+                <span className="text-[8px] text-[#DDE2D5]/40 block font-bold leading-none mb-0.5">تسک در حال ردیابی — کلیک برای جزئیات</span>
+                <h4 className="text-[12px] font-black text-white truncate leading-tight">{activeTitle}</h4>
+              </div>
+              {/* Clock */}
+              <div className="bg-white/5 border border-white/5 px-3 py-1.5 rounded-xl text-sm font-mono font-black text-[#E26645] tracking-widest shrink-0">
+                {formatTimeDigital(activeTimerSeconds)}
+              </div>
+              {/* Collapse button */}
+              <span
+                onClick={(e) => { e.stopPropagation(); setExpanded(false); }}
+                className="p-1.5 rounded-lg hover:bg-white/10 cursor-pointer transition-colors shrink-0"
+              >
+                <ChevronDown className="w-4 h-4 text-white/40 rotate-180" />
+              </span>
+            </button>
+
+            {/* Controls bar */}
+            <div className="flex items-center gap-2 px-4 pb-3 pt-0.5">
+              {/* Play / Pause */}
+              {isTimerRunning ? (
+                <button
+                  onClick={onPause}
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-[#9B6B61]/20 hover:bg-[#9B6B61]/30 text-[#C59B93] rounded-xl transition-all cursor-pointer active:scale-95"
+                >
+                  <Pause className="w-3.5 h-3.5 fill-current" />
+                  <span className="text-[10px] font-bold">توقف موقت</span>
+                </button>
+              ) : (
+                <button
+                  onClick={onResume}
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 rounded-xl transition-all cursor-pointer active:scale-95"
+                >
+                  <Play className="w-3.5 h-3.5 fill-current" />
+                  <span className="text-[10px] font-bold">ادامه</span>
+                </button>
+              )}
+              {/* Stop */}
+              <button
+                onClick={onStop}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-[#E26645]/20 hover:bg-[#E26645]/30 text-[#E26645] rounded-xl transition-all cursor-pointer active:scale-95"
+              >
+                <Square className="w-3.5 h-3.5 fill-current" />
+                <span className="text-[10px] font-bold">ثبت و پایان</span>
+              </button>
+              {/* Cancel */}
+              <button
+                onClick={() => {
+                  if (confirm('آیا می‌خواهید زمان ردیابی شده در این جلسه را لغو کنید؟')) {
+                    onReset(activeTimerTaskId);
+                  }
+                }}
+                className="p-2 bg-white/5 hover:bg-white/10 text-white/40 hover:text-white/70 rounded-xl transition-all cursor-pointer active:scale-90 shrink-0"
+                title="لغو جلسه"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
   );
 }
