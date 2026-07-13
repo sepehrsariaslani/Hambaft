@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import type { Block, BlockType, NotePage } from '../types'
 import BlockEditor from './BlockEditor'
 import { FileText, Save } from 'lucide-react'
@@ -27,6 +27,7 @@ interface EntityNoteEditorProps {
   title?: string
   initialBlocks?: Block[]
   onSave?: (blocks: Block[]) => void
+  minimal?: boolean
 }
 
 export default function EntityNoteEditor({
@@ -35,6 +36,7 @@ export default function EntityNoteEditor({
   title = 'یادداشت‌ها',
   initialBlocks,
   onSave,
+  minimal = false,
 }: EntityNoteEditorProps) {
   const [page, setPage] = useState<NotePage>(() => {
     if (initialBlocks && initialBlocks.length > 0) {
@@ -127,6 +129,54 @@ export default function EntityNoteEditor({
     setTimeout(() => setSavedAt(null), 2000)
   }, [onSave, page.blocks])
 
+  // Auto-save with debounce in minimal mode
+  const onSaveRef = useRef(onSave)
+  onSaveRef.current = onSave
+
+  useEffect(() => {
+    if (!minimal) return
+    const timer = setTimeout(() => {
+      onSaveRef.current?.(page.blocks)
+      setSavedAt(new Date().toLocaleTimeString('fa-IR'))
+      setTimeout(() => setSavedAt(null), 2000)
+    }, 2000)
+    return () => clearTimeout(timer)
+  }, [page.blocks, minimal])
+
+  // ── Minimal mode: borderless, headerless, auto-save ──
+  if (minimal) {
+    return (
+      <div className="py-2">
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="text-[10px] font-black text-[#8D7F72] dark:text-[#9D978B] tracking-wide">یادداشت</span>
+          <div className="flex items-center gap-2">
+            {savedAt && (
+              <span className="text-[9px] text-emerald-600 dark:text-emerald-400 font-bold">✓ ذخیره شد</span>
+            )}
+            <button
+              onClick={handleSave}
+              className="text-[9px] text-[#8D7F72] dark:text-[#9D978B] hover:text-[#7C8363] dark:hover:text-[#9ECE9A] cursor-pointer transition-colors font-bold"
+            >
+              ذخیره
+            </button>
+          </div>
+        </div>
+        <div className="min-h-[60px]">
+          <BlockEditor
+            page={page}
+            onUpdatePage={updatePage}
+            onUpdateBlock={updateBlock}
+            onAddBlock={addBlock}
+            onDeleteBlock={deleteBlock}
+            onMoveBlock={moveBlock}
+            onReorderBlocks={reorderBlocks}
+          />
+        </div>
+      </div>
+    )
+  }
+
+  // ── Default (card) mode ──
   return (
     <div className="bg-[#FDFBF7] dark:bg-[#1C1D17] rounded-3xl border border-[#E6DFD3] dark:border-[#3D4133]/50 p-5 space-y-4 shadow-xs">
       <div className="flex items-center justify-between pb-3 border-b border-[#E6DFD3]/40">

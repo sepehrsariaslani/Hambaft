@@ -578,217 +578,217 @@ export default function TaskDetailPage({
         )}
       </div>
 
-      {/* ═══ Two-column layout: Content + Metadata Panel ═══ */}
-      <div className="max-w-6xl mx-auto px-4 py-3">
-        <div className="flex flex-col lg:flex-row gap-6">
+      {/* ═══ Metadata Panel — Top (horizontal grid) ═══ */}
+      <div className="max-w-4xl mx-auto px-4 pt-1 pb-3">
+        <div className="bg-white dark:bg-[#1B1D16] rounded-xl border border-[#E6DFD3]/60 dark:border-[#3D4133]/60">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
 
-          {/* ── Left column: Notes + Tabs ── */}
-          <div className="flex-1 min-w-0">
-            {/* Notes — always visible */}
-            <EntityNoteEditor
-              entityId={task.id} entityType="task" title=""
-              initialBlocks={task.noteBlocks}
-              onSave={(blocks) => onUpdateTask({ ...task, noteBlocks: blocks })}
-            />
-
-            {/* Sub-tab bar */}
-            <div className="flex items-center gap-1 border-b border-[#E6DFD3]/60 dark:border-[#3D4133]/60 mt-4">
-              {[
-                { id: 'steps' as SubTab, label: 'مراحل', icon: <Layers className="w-3 h-3" />, count: subTotal },
-                { id: 'time' as SubTab, label: 'زمان‌سنج', icon: <Timer className="w-3 h-3" />, count: null },
-              ].map(tab => (
-                <button
-                  key={tab.id}
-                  onClick={() => setSubTab(tab.id)}
-                  className={`flex items-center gap-1.5 px-3 py-2 text-[11px] font-black whitespace-nowrap transition-all border-b-2 cursor-pointer ${
-                    subTab === tab.id
-                      ? 'border-[#7C8363] dark:border-[#9ECE9A] text-[#7C8363] dark:text-[#9ECE9A]'
-                      : 'border-transparent text-[#8D7F72] dark:text-[#9D978B] hover:text-[#2D3025] dark:hover:text-[#E8ECE0]'
-                  }`}
-                >
-                  {tab.icon}
-                  <span>{tab.label}</span>
-                  {tab.count != null && tab.count > 0 && (
-                    <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-full ${
-                      subTab === tab.id ? 'bg-[#7C8363]/15 dark:bg-[#9ECE9A]/15' : 'bg-[#E6DFD3]/40 dark:bg-[#3D4133]/40'
-                    }`}>{tab.count}</span>
-                  )}
-                </button>
-              ))}
-            </div>
-
-            {/* Sub-tab content */}
-            <div className="py-3">
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={subTab}
-                  initial={{ opacity: 0, y: 4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -4 }}
-                  transition={{ duration: 0.1 }}
-                >
-                  {subTab === 'steps' && (
-                    <StepsSection
-                      task={task} allTasks={allTasks}
-                      subtasks={subtasks} subDone={subDone} subTotal={subTotal} subPct={subPct}
-                      newSubtaskText={newSubtaskText} setNewSubtaskText={setNewSubtaskText}
-                      addSubtask={addSubtask} toggleSubtask={toggleSubtask}
-                      deleteSubtask={deleteSubtask} updateSubtaskTitle={updateSubtaskTitle}
-                      onUpdateTask={onUpdateTask}
-                    />
-                  )}
-                  {subTab === 'time' && (
-                    <TimeSection
-                      task={task} isActiveSession={isActiveSession}
-                      activeTimerSeconds={activeTimerSeconds} isTimerRunning={isTimerRunning}
-                      onStartTimer={onStartTimer} onPauseTimer={onPauseTimer}
-                      onStopTimer={onStopTimer} onResetTimer={onResetTimer}
-                      formatSeconds={formatSeconds}
-                    />
-                  )}
-                </motion.div>
+            {/* ── Status ── */}
+            <div ref={statusRef} className="relative">
+              <MetaRow icon={<Circle className="w-3.5 h-3.5" />} label="وضعیت"
+                onClick={() => setOpenPicker(openPicker === 'status' ? null : 'status')}
+                active={openPicker === 'status'}>
+                <Badge color={currentStatus?.dot || '#9D978B'}>{currentStatus?.label || '—'}</Badge>
+              </MetaRow>
+              <AnimatePresence>
+                {openPicker === 'status' && (
+                  <StatusPicker value={task.status || 'inbox'} completed={task.completed}
+                    onChange={id => { onUpdateTask({ ...task, status: id as any, completed: id === 'done' }); setOpenPicker(null) }}
+                    anchorRef={statusRef} />
+                )}
               </AnimatePresence>
             </div>
-          </div>
 
-          {/* ── Right column: Metadata Panel ── */}
-          <div className="w-full lg:w-72 shrink-0">
-            <div className="bg-white dark:bg-[#1B1D16] rounded-xl border border-[#E6DFD3]/60 dark:border-[#3D4133]/60 overflow-hidden">
-
-              {/* ── Status ── */}
-              <div ref={statusRef} className="relative">
-                <MetaRow icon={<Circle className="w-3.5 h-3.5" />} label="وضعیت"
-                  onClick={() => setOpenPicker(openPicker === 'status' ? null : 'status')}
-                  active={openPicker === 'status'}>
-                  <Badge color={currentStatus?.dot || '#9D978B'}>{currentStatus?.label || '—'}</Badge>
-                </MetaRow>
-                <AnimatePresence>
-                  {openPicker === 'status' && (
-                    <StatusPicker value={task.status || 'inbox'} completed={task.completed}
-                      onChange={id => { onUpdateTask({ ...task, status: id as any, completed: id === 'done' }); setOpenPicker(null) }}
-                      anchorRef={statusRef} />
-                  )}
-                </AnimatePresence>
-              </div>
-
-              {/* ── Priority ── */}
-              <div ref={priorityRef} className="relative">
-                <MetaRow icon={<Flag className="w-3.5 h-3.5" />} label="اولویت"
-                  onClick={() => setOpenPicker(openPicker === 'priority' ? null : 'priority')}
-                  active={openPicker === 'priority'}>
-                  <Badge color={currentPriority?.dot || '#9D978B'}>{currentPriority?.label || '—'}</Badge>
-                </MetaRow>
-                <AnimatePresence>
-                  {openPicker === 'priority' && (
-                    <PriorityPicker value={task.priority || 'medium'}
-                      onChange={id => { onUpdateTask({ ...task, priority: id as any }); setOpenPicker(null) }} />
-                  )}
-                </AnimatePresence>
-              </div>
-
-              {/* ── Importance ── */}
-              <div ref={importanceRef} className="relative">
-                <MetaRow icon={<Zap className="w-3.5 h-3.5" />} label="اهمیت"
-                  onClick={() => setOpenPicker(openPicker === 'importance' ? null : 'importance')}
-                  active={openPicker === 'importance'}>
-                  <Badge color={task.importance === 'key' ? '#D4A017' : task.importance === 'milestone' ? '#8B5CF6' : '#9D978B'}>
-                    {currentImportance?.label || 'عادی'}
-                  </Badge>
-                </MetaRow>
-                <AnimatePresence>
-                  {openPicker === 'importance' && (
-                    <ImportancePicker value={task.importance || 'normal'}
-                      onChange={imp => { onUpdateTask({ ...task, importance: imp }); setOpenPicker(null) }} />
-                  )}
-                </AnimatePresence>
-              </div>
-
-              <MetaDivider />
-
-              {/* ── Scheduled Date ── */}
-              <MetaDateRow icon={<Calendar className="w-3.5 h-3.5" />} label="برنامه"
-                value={task.scheduledDate || ''} onChange={v => onUpdateTask({ ...task, scheduledDate: v || undefined })} />
-
-              {/* ── Due Date ── */}
-              <MetaDateRow icon={<AlarmClock className="w-3.5 h-3.5" />} label="سررسید"
-                value={task.dueDate || ''} onChange={v => onUpdateTask({ ...task, dueDate: v || undefined })} />
-
-              {/* ── Estimate ── */}
-              <MetaRow icon={<Clock className="w-3.5 h-3.5" />} label="تخمین">
-                <span className="flex items-center gap-1 text-[11px] font-bold text-[#2D3025] dark:text-[#E8ECE0]">
-                  <input type="number" min={0}
-                    value={task.estimatedMinutes || ''}
-                    onChange={e => onUpdateTask({ ...task, estimatedMinutes: e.target.value ? Number(e.target.value) : undefined })}
-                    className="w-8 px-0.5 py-0 text-[11px] bg-transparent text-center font-bold focus:outline-none border-b border-transparent focus:border-[#7C8363] dark:focus:border-[#9ECE9A]"
-                    placeholder="—" />
-                  <span className="text-[#8D7F72] dark:text-[#9D978B] text-[9px]">دقیقه</span>
-                </span>
+            {/* ── Priority ── */}
+            <div ref={priorityRef} className="relative">
+              <MetaRow icon={<Flag className="w-3.5 h-3.5" />} label="اولویت"
+                onClick={() => setOpenPicker(openPicker === 'priority' ? null : 'priority')}
+                active={openPicker === 'priority'}>
+                <Badge color={currentPriority?.dot || '#9D978B'}>{currentPriority?.label || '—'}</Badge>
               </MetaRow>
-
-              <MetaDivider />
-
-              {/* ── Area ── */}
-              <MetaRow icon={<Home className="w-3.5 h-3.5" />} label="حوزه">
-                {linkedArea ? (
-                  <span className="text-[11px] font-bold text-[#2D3025] dark:text-[#E8ECE0]">{linkedArea.title}</span>
-                ) : (
-                  <MetaSelect value={task.areaId || ''} onChange={v => onUpdateTask({ ...task, areaId: v || undefined })}
-                    options={areas.map(a => ({ id: a.id, label: a.title }))} />
+              <AnimatePresence>
+                {openPicker === 'priority' && (
+                  <PriorityPicker value={task.priority || 'medium'}
+                    onChange={id => { onUpdateTask({ ...task, priority: id as any }); setOpenPicker(null) }} />
                 )}
-              </MetaRow>
-
-              {/* ── Project ── */}
-              <MetaRow icon={<FolderKanban className="w-3.5 h-3.5" />} label="پروژه">
-                {linkedProject ? (
-                  <span className="flex items-center gap-1">
-                    <span className="text-[11px] font-bold text-[#2D3025] dark:text-[#E8ECE0]">{linkedProject.title}</span>
-                    {onNavigate && <button onClick={() => onNavigate('projects', linkedProject.id)} className="text-[#7C8363] dark:text-[#9ECE9A] hover:text-[#5A5A40] dark:hover:text-[#E8ECE0] cursor-pointer"><ArrowUpRight className="w-3 h-3" /></button>}
-                  </span>
-                ) : (
-                  <MetaSelect value={task.projectId || ''} onChange={v => {
-                    const proj = v ? projects.find(p => p.id === v) : null
-                    onUpdateTask({ ...task, projectId: v || undefined, goalId: proj?.linkedGoalId || task.goalId })
-                  }} options={projects.map(p => ({ id: p.id, label: p.title }))} />
-                )}
-              </MetaRow>
-
-              {/* ── Goal ── */}
-              <MetaRow icon={<Target className="w-3.5 h-3.5" />} label="هدف">
-                {linkedGoal ? (
-                  <span className="flex items-center gap-1">
-                    <span className="text-[11px] font-bold text-[#2D3025] dark:text-[#E8ECE0]">{linkedGoal.title}</span>
-                    {onNavigate && <button onClick={() => onNavigate('goals', linkedGoal.id)} className="text-[#7C8363] dark:text-[#9ECE9A] hover:text-[#5A5A40] dark:hover:text-[#E8ECE0] cursor-pointer"><ArrowUpRight className="w-3 h-3" /></button>}
-                  </span>
-                ) : (
-                  <MetaSelect value={task.goalId || ''} onChange={v => onUpdateTask({ ...task, goalId: v || undefined })}
-                    options={goals.map(g => ({ id: g.id, label: g.title }))} />
-                )}
-              </MetaRow>
-
-              {/* ── Blocked ── */}
-              {(task.blockedBy || []).length > 0 && !task.completed && (
-                <>
-                  <MetaDivider />
-                  <div className="flex items-center justify-between px-4 py-2.5">
-                    <span className="flex items-center gap-2 text-[11px] text-[#8D7F72] dark:text-[#9D978B]">
-                      <AlertCircle className="w-3.5 h-3.5 text-orange-400" /> مسدود
-                    </span>
-                    <Badge color="#F97316">{(task.blockedBy || []).length} مسدودکننده</Badge>
-                  </div>
-                </>
-              )}
-
-              {/* ── Highlight ── */}
-              {task.isDailyHighlight && (
-                <div className="flex items-center justify-between px-4 py-2.5">
-                  <span className="flex items-center gap-2 text-[11px] text-[#8D7F72] dark:text-[#9D978B]">
-                    <Pin className="w-3.5 h-3.5 text-[#D4A017]" /> برجسته
-                  </span>
-                  <Badge color="#D4A017">بله</Badge>
-                </div>
-              )}
+              </AnimatePresence>
             </div>
+
+            {/* ── Importance ── */}
+            <div ref={importanceRef} className="relative">
+              <MetaRow icon={<Zap className="w-3.5 h-3.5" />} label="اهمیت"
+                onClick={() => setOpenPicker(openPicker === 'importance' ? null : 'importance')}
+                active={openPicker === 'importance'}>
+                <Badge color={task.importance === 'key' ? '#D4A017' : task.importance === 'milestone' ? '#8B5CF6' : '#9D978B'}>
+                  {currentImportance?.label || 'عادی'}
+                </Badge>
+              </MetaRow>
+              <AnimatePresence>
+                {openPicker === 'importance' && (
+                  <ImportancePicker value={task.importance || 'normal'}
+                    onChange={imp => { onUpdateTask({ ...task, importance: imp }); setOpenPicker(null) }} />
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* ── Divider ── */}
+            <div className="col-span-1 sm:col-span-2 lg:col-span-3 border-t border-[#E6DFD3]/50 dark:border-[#3D4133]/50" />
+
+            {/* ── Scheduled Date ── */}
+            <MetaDateRow icon={<Calendar className="w-3.5 h-3.5" />} label="برنامه"
+              value={task.scheduledDate || ''} onChange={v => onUpdateTask({ ...task, scheduledDate: v || undefined })} />
+
+            {/* ── Due Date ── */}
+            <MetaDateRow icon={<AlarmClock className="w-3.5 h-3.5" />} label="سررسید"
+              value={task.dueDate || ''} onChange={v => onUpdateTask({ ...task, dueDate: v || undefined })} />
+
+            {/* ── Estimate ── */}
+            <MetaRow icon={<Clock className="w-3.5 h-3.5" />} label="تخمین">
+              <span className="flex items-center gap-1 text-[11px] font-bold text-[#2D3025] dark:text-[#E8ECE0]">
+                <input type="number" min={0}
+                  value={task.estimatedMinutes || ''}
+                  onChange={e => onUpdateTask({ ...task, estimatedMinutes: e.target.value ? Number(e.target.value) : undefined })}
+                  className="w-8 px-0.5 py-0 text-[11px] bg-transparent text-center font-bold focus:outline-none border-b border-transparent focus:border-[#7C8363] dark:focus:border-[#9ECE9A]"
+                  placeholder="—" />
+                <span className="text-[#8D7F72] dark:text-[#9D978B] text-[9px]">دقیقه</span>
+              </span>
+            </MetaRow>
+
+            {/* ── Divider ── */}
+            <div className="col-span-1 sm:col-span-2 lg:col-span-3 border-t border-[#E6DFD3]/50 dark:border-[#3D4133]/50" />
+
+            {/* ── Area ── */}
+            <MetaRow icon={<Home className="w-3.5 h-3.5" />} label="حوزه">
+              {linkedArea ? (
+                <span className="text-[11px] font-bold text-[#2D3025] dark:text-[#E8ECE0]">{linkedArea.title}</span>
+              ) : (
+                <MetaSelect value={task.areaId || ''} onChange={v => onUpdateTask({ ...task, areaId: v || undefined })}
+                  options={areas.map(a => ({ id: a.id, label: a.title }))} />
+              )}
+            </MetaRow>
+
+            {/* ── Project ── */}
+            <MetaRow icon={<FolderKanban className="w-3.5 h-3.5" />} label="پروژه">
+              {linkedProject ? (
+                <span className="flex items-center gap-1">
+                  <span className="text-[11px] font-bold text-[#2D3025] dark:text-[#E8ECE0]">{linkedProject.title}</span>
+                  {onNavigate && <button onClick={() => onNavigate('projects', linkedProject.id)} className="text-[#7C8363] dark:text-[#9ECE9A] hover:text-[#5A5A40] dark:hover:text-[#E8ECE0] cursor-pointer"><ArrowUpRight className="w-3 h-3" /></button>}
+                </span>
+              ) : (
+                <MetaSelect value={task.projectId || ''} onChange={v => {
+                  const proj = v ? projects.find(p => p.id === v) : null
+                  onUpdateTask({ ...task, projectId: v || undefined, goalId: proj?.linkedGoalId || task.goalId })
+                }} options={projects.map(p => ({ id: p.id, label: p.title }))} />
+              )}
+            </MetaRow>
+
+            {/* ── Goal ── */}
+            <MetaRow icon={<Target className="w-3.5 h-3.5" />} label="هدف">
+              {linkedGoal ? (
+                <span className="flex items-center gap-1">
+                  <span className="text-[11px] font-bold text-[#2D3025] dark:text-[#E8ECE0]">{linkedGoal.title}</span>
+                  {onNavigate && <button onClick={() => onNavigate('goals', linkedGoal.id)} className="text-[#7C8363] dark:text-[#9ECE9A] hover:text-[#5A5A40] dark:hover:text-[#E8ECE0] cursor-pointer"><ArrowUpRight className="w-3 h-3" /></button>}
+                </span>
+              ) : (
+                <MetaSelect value={task.goalId || ''} onChange={v => onUpdateTask({ ...task, goalId: v || undefined })}
+                  options={goals.map(g => ({ id: g.id, label: g.title }))} />
+              )}
+            </MetaRow>
+
+            {/* ── Blocked ── */}
+            {(task.blockedBy || []).length > 0 && !task.completed && (
+              <>
+                <div className="col-span-1 sm:col-span-2 lg:col-span-3 border-t border-[#E6DFD3]/50 dark:border-[#3D4133]/50" />
+                <div className="col-span-1 sm:col-span-2 lg:col-span-3 flex items-center justify-between px-4 py-2.5">
+                  <span className="flex items-center gap-2 text-[11px] text-[#8D7F72] dark:text-[#9D978B]">
+                    <AlertCircle className="w-3.5 h-3.5 text-orange-400" /> مسدود
+                  </span>
+                  <Badge color="#F97316">{(task.blockedBy || []).length} مسدودکننده</Badge>
+                </div>
+              </>
+            )}
+
+            {/* ── Highlight ── */}
+            {task.isDailyHighlight && (
+              <div className="col-span-1 sm:col-span-2 lg:col-span-3 flex items-center justify-between px-4 py-2.5">
+                <span className="flex items-center gap-2 text-[11px] text-[#8D7F72] dark:text-[#9D978B]">
+                  <Pin className="w-3.5 h-3.5 text-[#D4A017]" /> برجسته
+                </span>
+                <Badge color="#D4A017">بله</Badge>
+              </div>
+            )}
           </div>
+        </div>
+      </div>
+
+      {/* ═══ Content: Notes + Tabs ═══ */}
+      <div className="max-w-4xl mx-auto px-4 pb-6 space-y-4">
+
+        {/* Notes — minimal, borderless */}
+        <EntityNoteEditor
+          entityId={task.id} entityType="task" title=""
+          initialBlocks={task.noteBlocks}
+          onSave={(blocks) => onUpdateTask({ ...task, noteBlocks: blocks })}
+          minimal
+        />
+
+        {/* Sub-tab bar */}
+        <div className="flex items-center gap-1 border-b border-[#E6DFD3]/60 dark:border-[#3D4133]/60">
+          {[
+            { id: 'steps' as SubTab, label: 'مراحل', icon: <Layers className="w-3 h-3" />, count: subTotal },
+            { id: 'time' as SubTab, label: 'زمان‌سنج', icon: <Timer className="w-3 h-3" />, count: null },
+          ].map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setSubTab(tab.id)}
+              className={`flex items-center gap-1.5 px-3 py-2 text-[11px] font-black whitespace-nowrap transition-all border-b-2 cursor-pointer ${
+                subTab === tab.id
+                  ? 'border-[#7C8363] dark:border-[#9ECE9A] text-[#7C8363] dark:text-[#9ECE9A]'
+                  : 'border-transparent text-[#8D7F72] dark:text-[#9D978B] hover:text-[#2D3025] dark:hover:text-[#E8ECE0]'
+              }`}
+            >
+              {tab.icon}
+              <span>{tab.label}</span>
+              {tab.count != null && tab.count > 0 && (
+                <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-full ${
+                  subTab === tab.id ? 'bg-[#7C8363]/15 dark:bg-[#9ECE9A]/15' : 'bg-[#E6DFD3]/40 dark:bg-[#3D4133]/40'
+                }`}>{tab.count}</span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* Sub-tab content */}
+        <div className="py-3">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={subTab}
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.1 }}
+            >
+              {subTab === 'steps' && (
+                <StepsSection
+                  task={task} allTasks={allTasks}
+                  subtasks={subtasks} subDone={subDone} subTotal={subTotal} subPct={subPct}
+                  newSubtaskText={newSubtaskText} setNewSubtaskText={setNewSubtaskText}
+                  addSubtask={addSubtask} toggleSubtask={toggleSubtask}
+                  deleteSubtask={deleteSubtask} updateSubtaskTitle={updateSubtaskTitle}
+                  onUpdateTask={onUpdateTask}
+                />
+              )}
+              {subTab === 'time' && (
+                <TimeSection
+                  task={task} isActiveSession={isActiveSession}
+                  activeTimerSeconds={activeTimerSeconds} isTimerRunning={isTimerRunning}
+                  onStartTimer={onStartTimer} onPauseTimer={onPauseTimer}
+                  onStopTimer={onStopTimer} onResetTimer={onResetTimer}
+                  formatSeconds={formatSeconds}
+                />
+              )}
+            </motion.div>
+          </AnimatePresence>
         </div>
       </div>
     </div>
