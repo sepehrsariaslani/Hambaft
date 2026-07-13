@@ -320,10 +320,23 @@ export default function App({
   useEffect(() => { console.log('[hambaft] version 2025-07-13-v12 — Notion-style task detail redesign'); }, []);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  // Serialized sync queue — prevents concurrent updates that cause 417 errors
+  const syncQueueRef = useRef<Promise<void>>(Promise.resolve());
   const runSync = (label: string, job: () => Promise<void>) => {
-    void job().catch((error) => {
-      console.error(`[hambaft] ${label} failed`, error);
-    });
+    syncQueueRef.current = syncQueueRef.current
+      .then(() => job())
+      .catch((error) => {
+        // If 417 (document modified), retry once after a short delay
+        if (String(error).includes('417') || String(error).includes('modified after')) {
+          console.warn(`[hambaft] ${label} conflict, retrying...`);
+          return new Promise<void>(resolve => {
+            setTimeout(() => {
+              job().catch(e => console.error(`[hambaft] ${label} retry failed`, e)).finally(resolve);
+            }, 500);
+          });
+        }
+        console.error(`[hambaft] ${label} failed`, error);
+      });
   };
 
   const [settingsState, setSettingsState] = useState<Record<string, any>>(() => seedSettings || {});
@@ -682,9 +695,16 @@ export default function App({
   };
 
   const handlePauseTimer = async () => {
-    if (!activeSessionId) return;
     try {
-      await stopTaskSession(activeSessionId);
+      let sessionId = activeSessionId;
+      if (!sessionId) {
+        try {
+          const activeResp: any = await getActiveTaskSession();
+          sessionId = activeResp?.data?.session?.name;
+        } catch {}
+      }
+      if (!sessionId) return;
+      await stopTaskSession(sessionId);
       setIsTimerRunning(false);
       // Keep the task as active but paused
     } catch (e) {
@@ -693,20 +713,52 @@ export default function App({
   };
 
   const handleResumeTimer = async () => {
-    if (!activeSessionId) return;
     try {
-      await resumeTaskSession(activeSessionId);
+      let sessionId = activeSessionId;
+      if (!sessionId) {
+        try {
+          const activeResp: any = await getActiveTaskSession();
+          sessionId = activeResp?.data?.session?.name;
+        } catch {}
+      }
+      if (!sessionId) return;
+      await resumeTaskSession(sessionId);
       setIsTimerRunning(true);
-      setActiveTimerSeconds(0);
+      // Recalculate elapsed from the new started_at
+      try {
+        const activeResp: any = await getActiveTaskSession();
+        const sess = activeResp?.data?.session;
+        if (sess?.started_at) {
+          const start = new Date(sess.started_at);
+          const now = new Date();
+          const elapsed = Math.max(0, Math.floor((now.getTime() - start.getTime()) / 1000));
+          setActiveTimerSeconds(elapsed);
+        }
+      } catch {}
     } catch (e) {
       console.error('resumeTaskSession error:', e);
     }
   };
 
   const handleStopTimer = async () => {
-    if (!activeSessionId) return;
     try {
-      const resp: any = await finishTaskSession(activeSessionId);
+      // If we don't have the session ID, try to fetch it from backend
+      let sessionId = activeSessionId;
+      if (!sessionId) {
+        try {
+          const activeResp: any = await getActiveTaskSession();
+          sessionId = activeResp?.data?.session?.name;
+        } catch {}
+      }
+      if (!sessionId) {
+        // No active session at all — just reset UI
+        setActiveSessionId(null);
+        setActiveTimerTaskId(null);
+        setActiveTimerSeconds(0);
+        setIsTimerRunning(false);
+        return;
+      }
+      const resp: any = await finishTaskSession(sessionId);
       // Update task's actualMinutes from the session result
       const sess = resp?.data?.session;
       if (sess?.task) {
@@ -730,23 +782,33 @@ export default function App({
       setIsTimerRunning(false);
     } catch (e) {
       console.error('stopTaskSession error:', e);
+      // Still reset UI even on error — the session might have been finished already
+      setActiveSessionId(null);
+      setActiveTimerTaskId(null);
+      setActiveTimerSeconds(0);
+      setIsTimerRunning(false);
     }
   };
 
   const handleResetTimerForTask = async (taskId: string) => {
-    if (activeSessionId && activeTimerTaskId === taskId) {
-      try {
-        await stopTaskSession(activeSessionId);
-      } catch (e) {
-        console.error('resetTimer stop error:', e);
+    try {
+      let sessionId = activeSessionId;
+      if (!sessionId && activeTimerTaskId === taskId) {
+        try {
+          const activeResp: any = await getActiveTaskSession();
+          sessionId = activeResp?.data?.session?.name;
+        } catch {}
       }
-      setActiveSessionId(null);
-      setActiveTimerSeconds(0);
-      setIsTimerRunning(false);
-      setActiveTimerTaskId(null);
-    }
-    // Note: We don't reset actualMinutes from backend — that would need a separate API
-    // The session duration is already recorded. Reset only clears the UI state.
+      if (sessionId && activeTimerTaskId === taskId) {
+        try { await stopTaskSession(sessionId); } catch (e) {
+          console.error('resetTimer stop error:', e);
+        }
+      }
+    } catch {}
+    setActiveSessionId(null);
+    setActiveTimerSeconds(0);
+    setIsTimerRunning(false);
+    setActiveTimerTaskId(null);
   };
 
   // Auto-process subscription renewals on mount

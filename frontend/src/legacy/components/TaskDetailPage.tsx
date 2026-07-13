@@ -116,7 +116,7 @@ function MetaSelect({ value, onChange, options }: {
   )
 }
 
-// Date row with inline Jalali picker
+// Date row with inline Jalali picker — opens directly on click
 function MetaDateRow({ icon, label, value, onChange }: {
   icon: React.ReactNode; label: string; value: string; onChange: (v: string) => void
 }) {
@@ -151,7 +151,7 @@ function MetaDateRow({ icon, label, value, onChange }: {
           <motion.div initial={{ opacity: 0, scale: 0.95, y: -4 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: -4 }}
             transition={{ duration: 0.1 }}
             className="absolute top-full mt-1 right-2 left-2 z-50 bg-white dark:bg-[#1B1D16] rounded-xl shadow-xl border border-[#E6DFD3]/80 dark:border-[#3D4133] p-3">
-            <PersianDatePicker value={value} onChange={v => { onChange(v); if (!v) setOpen(false) }} placeholder={`${label}...`} />
+            <PersianDatePicker value={value} onChange={v => { onChange(v); if (!v) setOpen(false) }} placeholder={`${label}...`} autoOpen />
           </motion.div>
         )}
       </AnimatePresence>
