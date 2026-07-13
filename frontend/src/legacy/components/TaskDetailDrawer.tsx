@@ -361,9 +361,9 @@ export default function TaskDetailDrawer({
           )}
         </div>
 
-        {/* ── Properties Strip ── */}
-        <div className="px-3 py-1.5 flex items-center gap-0.5 flex-wrap border-b border-[#E6DFD3]/40 dark:border-[#3D4133]/40">
-          <div ref={statusRef} className="relative">
+        {/* ── Properties — Vertical rows ── */}
+        <div className="px-3 py-1 space-y-0 border-b border-[#E6DFD3]/40 dark:border-[#3D4133]/40">
+          <div ref={statusRef} className="relative flex items-center">
             <InlinePropertyPill label="وضعیت" dotColor={currentStatus?.dot}
               onClick={() => setOpenPicker(openPicker === 'status' ? null : 'status')} active={openPicker === 'status'}>
               {currentStatus?.label || '—'}
@@ -372,7 +372,7 @@ export default function TaskDetailDrawer({
               {openPicker === 'status' && <FloatingStatusPicker value={task.status || 'inbox'} completed={task.completed} onChange={id => { onUpdateTask({ ...task, status: id as any, completed: id === 'done' }); setOpenPicker(null) }} />}
             </AnimatePresence>
           </div>
-          <div ref={priorityRef} className="relative">
+          <div ref={priorityRef} className="relative flex items-center">
             <InlinePropertyPill label="اولویت" dotColor={currentPriority?.dot}
               onClick={() => setOpenPicker(openPicker === 'priority' ? null : 'priority')} active={openPicker === 'priority'}>
               {currentPriority?.label || '—'}
@@ -381,7 +381,7 @@ export default function TaskDetailDrawer({
               {openPicker === 'priority' && <FloatingPriorityPicker value={task.priority || 'medium'} onChange={id => { onUpdateTask({ ...task, priority: id as any }); setOpenPicker(null) }} />}
             </AnimatePresence>
           </div>
-          <div ref={importanceRef} className="relative">
+          <div ref={importanceRef} className="relative flex items-center">
             <InlinePropertyPill label="اهمیت"
               onClick={() => setOpenPicker(openPicker === 'importance' ? null : 'importance')} active={openPicker === 'importance'}>
               {currentImportance?.label || 'عادی'}
@@ -390,16 +390,16 @@ export default function TaskDetailDrawer({
               {openPicker === 'importance' && <FloatingImportancePicker value={task.importance || 'normal'} onChange={imp => { onUpdateTask({ ...task, importance: imp }); setOpenPicker(null) }} />}
             </AnimatePresence>
           </div>
-          <span className="w-px h-3 bg-[#E6DFD3] dark:bg-[#3D4133] mx-0.5" />
-          <InlineDatePill label="برنامه" icon={<Calendar className="w-2.5 h-2.5" />} value={task.scheduledDate || ''} onChange={v => onUpdateTask({ ...task, scheduledDate: v || undefined })} />
-          <InlineDatePill label="سررسید" icon={<AlarmClock className="w-2.5 h-2.5" />} value={task.dueDate || ''} onChange={v => onUpdateTask({ ...task, dueDate: v || undefined })} />
+          <div className="flex items-center">
+            <InlineDatePill label="برنامه" icon={<Calendar className="w-2.5 h-2.5" />} value={task.scheduledDate || ''} onChange={v => onUpdateTask({ ...task, scheduledDate: v || undefined })} />
+          </div>
+          <div className="flex items-center">
+            <InlineDatePill label="سررسید" icon={<AlarmClock className="w-2.5 h-2.5" />} value={task.dueDate || ''} onChange={v => onUpdateTask({ ...task, dueDate: v || undefined })} />
+          </div>
           {(task.blockedBy || []).length > 0 && !task.completed && (
-            <>
-              <span className="w-px h-3 bg-[#E6DFD3] dark:bg-[#3D4133] mx-0.5" />
-              <span className="flex items-center gap-1 text-[9px] font-bold text-orange-600 dark:text-orange-400 px-1.5 py-0.5 rounded-lg bg-orange-50/60 dark:bg-orange-900/20">
-                ⊘ {(task.blockedBy || []).length}
-              </span>
-            </>
+            <div className="flex items-center gap-1.5 px-2 py-1 text-[9px] font-bold text-orange-600 dark:text-orange-400 rounded-lg bg-orange-50/60 dark:bg-orange-900/20">
+              ⊘ {(task.blockedBy || []).length} مسدودکننده
+            </div>
           )}
         </div>
 
@@ -454,13 +454,15 @@ export default function TaskDetailDrawer({
           ))}
         </div>
 
-        {/* ── Content ── */}
+        {/* ── Notes — always visible (outside tab switching) ── */}
+        <div className="px-4 pt-3">
+          <EntityNoteEditor entityId={task.id} entityType="task" title="" initialBlocks={task.noteBlocks} onSave={(blocks) => onUpdateTask({ ...task, noteBlocks: blocks })} />
+        </div>
+
+        {/* ── Content (without notes) ── */}
         <div className="flex-1 overflow-y-auto px-4 py-3">
           <AnimatePresence mode="wait">
-            <motion.div key={subTab} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.1 }} className="space-y-3">
-              {/* Notes — always visible */}
-              <EntityNoteEditor entityId={task.id} entityType="task" title="" initialBlocks={task.noteBlocks} onSave={(blocks) => onUpdateTask({ ...task, noteBlocks: blocks })} />
-
+            <motion.div key={subTab} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.1 }}>
               {subTab === 'steps' && (
                 <StepsSection task={task} allTasks={allTasks} subtasks={subtasks} subDone={subDone} subTotal={subTotal} subPct={subPct}
                   newSubtaskText={newSubtaskText} setNewSubtaskText={setNewSubtaskText} addSubtask={addSubtask} toggleSubtask={toggleSubtask}

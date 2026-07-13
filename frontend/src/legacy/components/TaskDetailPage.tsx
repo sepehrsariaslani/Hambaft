@@ -473,10 +473,10 @@ export default function TaskDetailPage({
         )}
       </div>
 
-      {/* ═══ Properties Strip ═══ */}
-      <div className="max-w-4xl mx-auto px-4 py-2 flex items-center gap-1 flex-wrap">
-        {/* Status pill */}
-        <div ref={statusRef} className="relative">
+      {/* ═══ Properties — Vertical rows ═══ */}
+      <div className="max-w-4xl mx-auto px-4 py-1 space-y-0">
+        {/* Status row */}
+        <div ref={statusRef} className="relative flex items-center">
           <InlinePropertyPill
             label="وضعیت"
             dotColor={currentStatus?.dot}
@@ -497,8 +497,8 @@ export default function TaskDetailPage({
           </AnimatePresence>
         </div>
 
-        {/* Priority pill */}
-        <div ref={priorityRef} className="relative">
+        {/* Priority row */}
+        <div ref={priorityRef} className="relative flex items-center">
           <InlinePropertyPill
             label="اولویت"
             dotColor={currentPriority?.dot}
@@ -517,8 +517,8 @@ export default function TaskDetailPage({
           </AnimatePresence>
         </div>
 
-        {/* Importance pill */}
-        <div ref={importanceRef} className="relative">
+        {/* Importance row */}
+        <div ref={importanceRef} className="relative flex items-center">
           <InlinePropertyPill
             label="اهمیت"
             onClick={() => setOpenPicker(openPicker === 'importance' ? null : 'importance')}
@@ -536,53 +536,46 @@ export default function TaskDetailPage({
           </AnimatePresence>
         </div>
 
-        {/* Separator */}
-        <span className="w-px h-4 bg-[#E6DFD3] dark:bg-[#3D4133] mx-1" />
-
-        {/* Date pills */}
-        <div className="flex items-center gap-1">
+        {/* Date rows */}
+        <div className="flex items-center">
           <InlineDatePill
             label="برنامه" icon={<Calendar className="w-3 h-3" />}
             value={task.scheduledDate || ''} onChange={v => onUpdateTask({ ...task, scheduledDate: v || undefined })}
           />
+        </div>
+        <div className="flex items-center">
           <InlineDatePill
             label="سررسید" icon={<AlarmClock className="w-3 h-3" />}
             value={task.dueDate || ''} onChange={v => onUpdateTask({ ...task, dueDate: v || undefined })}
           />
         </div>
 
-        {/* Time estimates */}
-        <span className="w-px h-4 bg-[#E6DFD3] dark:bg-[#3D4133] mx-1" />
-        <div className="flex items-center gap-2 text-[10px] font-bold text-[#8D7F72] dark:text-[#9D978B]">
-          <div className="flex items-center gap-1">
-            <Clock className="w-3 h-3" />
-            <input
-              type="number" min={0}
-              value={task.estimatedMinutes || ''}
-              onChange={e => onUpdateTask({ ...task, estimatedMinutes: e.target.value ? Number(e.target.value) : undefined })}
-              className="w-10 px-1 py-0.5 text-[10px] bg-transparent text-[#2D3025] dark:text-[#E8ECE0] focus:outline-none focus:bg-[#7C8363]/5 dark:focus:bg-[#9ECE9A]/5 rounded text-center font-bold"
-              placeholder="—"
-            />
-            <span>دقیقه تخمین</span>
-          </div>
+        {/* Time estimate row */}
+        <div className="flex items-center gap-1.5 px-2.5 py-1.5 text-[10px] font-bold text-[#8D7F72] dark:text-[#9D978B]">
+          <Clock className="w-3 h-3" />
+          <span>تخمین:</span>
+          <input
+            type="number" min={0}
+            value={task.estimatedMinutes || ''}
+            onChange={e => onUpdateTask({ ...task, estimatedMinutes: e.target.value ? Number(e.target.value) : undefined })}
+            className="w-10 px-1 py-0.5 text-[10px] bg-transparent text-[#2D3025] dark:text-[#E8ECE0] focus:outline-none focus:bg-[#7C8363]/5 dark:focus:bg-[#9ECE9A]/5 rounded text-center font-bold"
+            placeholder="—"
+          />
+          <span>دقیقه</span>
         </div>
 
         {/* Blocked warning */}
         {(task.blockedBy || []).length > 0 && !task.completed && (
-          <>
-            <span className="w-px h-4 bg-[#E6DFD3] dark:bg-[#3D4133] mx-1" />
-            <span className="flex items-center gap-1 text-[10px] font-bold text-orange-600 dark:text-orange-400 px-2 py-1 rounded-lg bg-orange-50/60 dark:bg-orange-900/20">
-              ⊘ {(task.blockedBy || []).length} مسدودکننده
-            </span>
-          </>
+          <div className="flex items-center gap-1.5 px-2.5 py-1.5 text-[10px] font-bold text-orange-600 dark:text-orange-400 rounded-lg bg-orange-50/60 dark:bg-orange-900/20">
+            ⊘ {(task.blockedBy || []).length} مسدودکننده
+          </div>
         )}
 
         {/* Daily highlight */}
         {task.isDailyHighlight && (
-          <>
-            <span className="w-px h-4 bg-[#E6DFD3] dark:bg-[#3D4133] mx-1" />
-            <span className="text-[10px] font-bold text-[#b8860b] dark:text-[#d4a017] px-2 py-1 rounded-lg bg-[#d4a017]/10">⭐ برجسته</span>
-          </>
+          <div className="flex items-center px-2.5 py-1.5 text-[10px] font-bold text-[#b8860b] dark:text-[#d4a017] rounded-lg bg-[#d4a017]/10">
+            ⭐ برجسته
+          </div>
         )}
       </div>
 
@@ -652,7 +645,16 @@ export default function TaskDetailPage({
         </div>
       </div>
 
-      {/* ═══ Notes + Sub-tab content ═══ */}
+      {/* ═══ Notes — always visible (outside tab switching) ═══ */}
+      <div className="max-w-4xl mx-auto px-4 pt-3">
+        <EntityNoteEditor
+          entityId={task.id} entityType="task" title=""
+          initialBlocks={task.noteBlocks}
+          onSave={(blocks) => onUpdateTask({ ...task, noteBlocks: blocks })}
+        />
+      </div>
+
+      {/* ═══ Sub-tab content (without notes) ═══ */}
       <div className="max-w-4xl mx-auto px-4 py-3">
         <AnimatePresence mode="wait">
           <motion.div
@@ -661,18 +663,7 @@ export default function TaskDetailPage({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -4 }}
             transition={{ duration: 0.1 }}
-            className="space-y-4"
           >
-            {/* Notes — always visible, Notion-style */}
-            <div>
-              <EntityNoteEditor
-                entityId={task.id} entityType="task" title=""
-                initialBlocks={task.noteBlocks}
-                onSave={(blocks) => onUpdateTask({ ...task, noteBlocks: blocks })}
-              />
-            </div>
-
-            {/* Sub-tab content */}
             {subTab === 'steps' && (
               <StepsSection
                 task={task} allTasks={allTasks}
