@@ -1250,7 +1250,7 @@ export default function ProjectDetailView({
           task={selectedTaskForDetails}
           allTasks={tasksList}
           goals={[{ id: project.goalId, title: project.goalTitle, projects: [{ id: project.id, title: project.title }] }]}
-          projects={[{ id: project.id, title: project.title }]}
+          projects={[{ id: project.id, title: project.title, linkedGoalId: project.linkedGoalId, areaId: project.areaId }]}
           onUpdateTask={handleUpdateSingleTask}
           onDeleteTask={(taskId) => handleDeleteSingleTask(taskId)}
           onClose={() => setSelectedTaskForDetails(null)}

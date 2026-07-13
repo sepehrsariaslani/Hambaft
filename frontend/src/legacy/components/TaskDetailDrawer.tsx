@@ -182,7 +182,7 @@ interface TaskDetailDrawerProps {
   task: Task
   allTasks?: Task[]
   goals?: any[]
-  projects?: Array<{ id: string; title: string }>
+  projects?: Array<{ id: string; title: string; linkedGoalId?: string; areaId?: string }>
   areas?: Array<{ id: string; title: string }>
   onUpdateTask: (task: Task) => void
   onDeleteTask: (id: string) => void
@@ -361,80 +361,86 @@ export default function TaskDetailDrawer({
           )}
         </div>
 
-        {/* ── Properties — Vertical rows ── */}
-        <div className="px-3 py-1 space-y-0 border-b border-[#E6DFD3]/40 dark:border-[#3D4133]/40">
-          <div ref={statusRef} className="relative flex items-center">
-            <InlinePropertyPill label="وضعیت" dotColor={currentStatus?.dot}
-              onClick={() => setOpenPicker(openPicker === 'status' ? null : 'status')} active={openPicker === 'status'}>
-              {currentStatus?.label || '—'}
-            </InlinePropertyPill>
-            <AnimatePresence>
-              {openPicker === 'status' && <FloatingStatusPicker value={task.status || 'inbox'} completed={task.completed} onChange={id => { onUpdateTask({ ...task, status: id as any, completed: id === 'done' }); setOpenPicker(null) }} />}
-            </AnimatePresence>
-          </div>
-          <div ref={priorityRef} className="relative flex items-center">
-            <InlinePropertyPill label="اولویت" dotColor={currentPriority?.dot}
-              onClick={() => setOpenPicker(openPicker === 'priority' ? null : 'priority')} active={openPicker === 'priority'}>
-              {currentPriority?.label || '—'}
-            </InlinePropertyPill>
-            <AnimatePresence>
-              {openPicker === 'priority' && <FloatingPriorityPicker value={task.priority || 'medium'} onChange={id => { onUpdateTask({ ...task, priority: id as any }); setOpenPicker(null) }} />}
-            </AnimatePresence>
-          </div>
-          <div ref={importanceRef} className="relative flex items-center">
-            <InlinePropertyPill label="اهمیت"
-              onClick={() => setOpenPicker(openPicker === 'importance' ? null : 'importance')} active={openPicker === 'importance'}>
-              {currentImportance?.label || 'عادی'}
-            </InlinePropertyPill>
-            <AnimatePresence>
-              {openPicker === 'importance' && <FloatingImportancePicker value={task.importance || 'normal'} onChange={imp => { onUpdateTask({ ...task, importance: imp }); setOpenPicker(null) }} />}
-            </AnimatePresence>
-          </div>
-          <div className="flex items-center">
-            <InlineDatePill label="برنامه" icon={<Calendar className="w-2.5 h-2.5" />} value={task.scheduledDate || ''} onChange={v => onUpdateTask({ ...task, scheduledDate: v || undefined })} />
-          </div>
-          <div className="flex items-center">
-            <InlineDatePill label="سررسید" icon={<AlarmClock className="w-2.5 h-2.5" />} value={task.dueDate || ''} onChange={v => onUpdateTask({ ...task, dueDate: v || undefined })} />
-          </div>
-          {(task.blockedBy || []).length > 0 && !task.completed && (
-            <div className="flex items-center gap-1.5 px-2 py-1 text-[9px] font-bold text-orange-600 dark:text-orange-400 rounded-lg bg-orange-50/60 dark:bg-orange-900/20">
-              ⊘ {(task.blockedBy || []).length} مسدودکننده
+        {/* ── Properties — Responsive grid ── */}
+        <div className="px-3 py-1 border-b border-[#E6DFD3]/40 dark:border-[#3D4133]/40">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-0 gap-x-4">
+            <div ref={statusRef} className="relative flex items-center">
+              <InlinePropertyPill label="وضعیت" dotColor={currentStatus?.dot}
+                onClick={() => setOpenPicker(openPicker === 'status' ? null : 'status')} active={openPicker === 'status'}>
+                {currentStatus?.label || '—'}
+              </InlinePropertyPill>
+              <AnimatePresence>
+                {openPicker === 'status' && <FloatingStatusPicker value={task.status || 'inbox'} completed={task.completed} onChange={id => { onUpdateTask({ ...task, status: id as any, completed: id === 'done' }); setOpenPicker(null) }} />}
+              </AnimatePresence>
             </div>
-          )}
-        </div>
-
-        {/* ── Context Selectors (if not linked) ── */}
-        {(!linkedArea || !linkedProject || !linkedGoal) && (
-          <div className="px-3 py-1.5 flex items-center gap-2 flex-wrap">
-            {!linkedArea && (
-              <div className="flex items-center gap-1">
-                <Home className="w-2.5 h-2.5 text-[#8D7F72] dark:text-[#9D978B]" />
+            <div ref={priorityRef} className="relative flex items-center">
+              <InlinePropertyPill label="اولویت" dotColor={currentPriority?.dot}
+                onClick={() => setOpenPicker(openPicker === 'priority' ? null : 'priority')} active={openPicker === 'priority'}>
+                {currentPriority?.label || '—'}
+              </InlinePropertyPill>
+              <AnimatePresence>
+                {openPicker === 'priority' && <FloatingPriorityPicker value={task.priority || 'medium'} onChange={id => { onUpdateTask({ ...task, priority: id as any }); setOpenPicker(null) }} />}
+              </AnimatePresence>
+            </div>
+            <div ref={importanceRef} className="relative flex items-center">
+              <InlinePropertyPill label="اهمیت"
+                onClick={() => setOpenPicker(openPicker === 'importance' ? null : 'importance')} active={openPicker === 'importance'}>
+                {currentImportance?.label || 'عادی'}
+              </InlinePropertyPill>
+              <AnimatePresence>
+                {openPicker === 'importance' && <FloatingImportancePicker value={task.importance || 'normal'} onChange={imp => { onUpdateTask({ ...task, importance: imp }); setOpenPicker(null) }} />}
+              </AnimatePresence>
+            </div>
+            <div className="flex items-center">
+              <InlineDatePill label="برنامه" icon={<Calendar className="w-2.5 h-2.5" />} value={task.scheduledDate || ''} onChange={v => onUpdateTask({ ...task, scheduledDate: v || undefined })} />
+            </div>
+            <div className="flex items-center">
+              <InlineDatePill label="سررسید" icon={<AlarmClock className="w-2.5 h-2.5" />} value={task.dueDate || ''} onChange={v => onUpdateTask({ ...task, dueDate: v || undefined })} />
+            </div>
+            {/* Area */}
+            <div className="flex items-center gap-1.5 px-2 py-1 text-[9px] font-bold">
+              <Home className="w-2.5 h-2.5 text-[#8D7F72] dark:text-[#9D978B]" />
+              <span className="text-[#8D7F72] dark:text-[#9D978B]">حوزه:</span>
+              {linkedArea ? <span className="text-[#2D3025] dark:text-[#E8ECE0]">{linkedArea.title}</span> : (
                 <select value={task.areaId || ''} onChange={e => onUpdateTask({ ...task, areaId: e.target.value || undefined })}
-                  className="text-[9px] font-bold bg-transparent text-[#8D7F72] dark:text-[#9D978B] focus:outline-none cursor-pointer">
-                  <option value="">حوزه —</option>{areas.map(a => <option key={a.id} value={a.id}>{a.title}</option>)}
+                  className="bg-transparent text-[#2D3025] dark:text-[#E8ECE0] focus:outline-none cursor-pointer font-bold">
+                  <option value="">—</option>{areas.map(a => <option key={a.id} value={a.id}>{a.title}</option>)}
                 </select>
-              </div>
-            )}
-            {!linkedProject && (
-              <div className="flex items-center gap-1">
-                <FolderKanban className="w-2.5 h-2.5 text-[#8D7F72] dark:text-[#9D978B]" />
-                <select value={task.projectId || ''} onChange={e => onUpdateTask({ ...task, projectId: e.target.value || undefined })}
-                  className="text-[9px] font-bold bg-transparent text-[#8D7F72] dark:text-[#9D978B] focus:outline-none cursor-pointer">
-                  <option value="">پروژه —</option>{projects.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
+              )}
+            </div>
+            {/* Project */}
+            <div className="flex items-center gap-1.5 px-2 py-1 text-[9px] font-bold">
+              <FolderKanban className="w-2.5 h-2.5 text-[#8D7F72] dark:text-[#9D978B]" />
+              <span className="text-[#8D7F72] dark:text-[#9D978B]">پروژه:</span>
+              {linkedProject ? <span className="text-[#2D3025] dark:text-[#E8ECE0]">{linkedProject.title}</span> : (
+                <select value={task.projectId || ''} onChange={e => {
+                  const projId = e.target.value || undefined
+                  const proj = projId ? projects.find(p => p.id === projId) : null
+                  onUpdateTask({ ...task, projectId: projId, goalId: proj?.linkedGoalId || task.goalId })
+                }}
+                  className="bg-transparent text-[#2D3025] dark:text-[#E8ECE0] focus:outline-none cursor-pointer font-bold">
+                  <option value="">—</option>{projects.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
                 </select>
-              </div>
-            )}
-            {!linkedGoal && (
-              <div className="flex items-center gap-1">
-                <Target className="w-2.5 h-2.5 text-[#8D7F72] dark:text-[#9D978B]" />
+              )}
+            </div>
+            {/* Goal */}
+            <div className="flex items-center gap-1.5 px-2 py-1 text-[9px] font-bold">
+              <Target className="w-2.5 h-2.5 text-[#8D7F72] dark:text-[#9D978B]" />
+              <span className="text-[#8D7F72] dark:text-[#9D978B]">هدف:</span>
+              {linkedGoal ? <span className="text-[#2D3025] dark:text-[#E8ECE0]">{linkedGoal.title}</span> : (
                 <select value={task.goalId || ''} onChange={e => onUpdateTask({ ...task, goalId: e.target.value || undefined })}
-                  className="text-[9px] font-bold bg-transparent text-[#8D7F72] dark:text-[#9D978B] focus:outline-none cursor-pointer">
-                  <option value="">هدف —</option>{goals.map(g => <option key={g.id} value={g.id}>{g.title}</option>)}
+                  className="bg-transparent text-[#2D3025] dark:text-[#E8ECE0] focus:outline-none cursor-pointer font-bold">
+                  <option value="">—</option>{goals.map(g => <option key={g.id} value={g.id}>{g.title}</option>)}
                 </select>
+              )}
+            </div>
+            {(task.blockedBy || []).length > 0 && !task.completed && (
+              <div className="flex items-center gap-1.5 px-2 py-1 text-[9px] font-bold text-orange-600 dark:text-orange-400 rounded-lg bg-orange-50/60 dark:bg-orange-900/20 sm:col-span-2">
+                ⊘ {(task.blockedBy || []).length} مسدودکننده
               </div>
             )}
           </div>
-        )}
+        </div>
 
         {/* ── Sub-tab bar ── */}
         <div className="px-3 flex items-center gap-0.5 border-b border-[#E6DFD3]/40 dark:border-[#3D4133]/40 shrink-0">

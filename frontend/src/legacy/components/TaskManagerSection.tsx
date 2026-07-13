@@ -568,7 +568,7 @@ export default function TaskManagerSection({
           task={drawerTask}
           allTasks={allTasks}
           goals={goals}
-          projects={goals.flatMap(g => (g.projects || []).map(p => ({ id: p.id, title: p.title })))}
+          projects={goals.flatMap(g => (g.projects || []).map(p => ({ id: p.id, title: p.title, linkedGoalId: p.linkedGoalId, areaId: p.areaId })))}
           areas={areas}
           onUpdateTask={onUpdateTask}
           onDeleteTask={(id) => { onDeleteTask(id); setDrawerTaskId(null) }}

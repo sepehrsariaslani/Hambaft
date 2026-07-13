@@ -3325,7 +3325,7 @@ export default function App({
               task={matchedTask}
               allTasks={lifeData.tasks}
               goals={lifeData.goals}
-              projects={lifeData.goals.flatMap(g => (g.projects || []).map(p => ({ id: p.id, title: p.title })))}
+              projects={lifeData.goals.flatMap(g => (g.projects || []).map(p => ({ id: p.id, title: p.title, linkedGoalId: p.linkedGoalId, areaId: p.areaId })))}
               areas={lifeData.areas || []}
               onUpdateTask={handleUpdateTask}
               onDeleteTask={(id) => { handleDeleteTask(id); goToTab('tasks'); }}

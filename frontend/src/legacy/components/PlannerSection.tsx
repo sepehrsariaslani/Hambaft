@@ -982,6 +982,8 @@ export default function PlannerSection({ initialView, onNavigate }: PlannerSecti
             setDrawerTaskId(null)
             if (onNavigate) onNavigate('task-detail', taskId)
           }}
+          projects={goals.flatMap(g => (g.projects || []).map(p => ({ id: p.id, title: p.title, linkedGoalId: p.linkedGoalId, areaId: p.areaId })))}
+          goals={goals}
         />
       )}
     </div>

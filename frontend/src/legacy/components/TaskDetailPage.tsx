@@ -245,7 +245,7 @@ interface TaskDetailPageProps {
   task: Task
   allTasks?: Task[]
   goals?: any[]
-  projects?: Array<{ id: string; title: string }>
+  projects?: Array<{ id: string; title: string; linkedGoalId?: string; areaId?: string }>
   areas?: Array<{ id: string; title: string }>
   onUpdateTask: (task: Task) => void
   onDeleteTask: (id: string) => void
@@ -473,149 +473,170 @@ export default function TaskDetailPage({
         )}
       </div>
 
-      {/* ═══ Properties — Vertical rows ═══ */}
-      <div className="max-w-4xl mx-auto px-4 py-1 space-y-0">
-        {/* Status row */}
-        <div ref={statusRef} className="relative flex items-center">
-          <InlinePropertyPill
-            label="وضعیت"
-            dotColor={currentStatus?.dot}
-            onClick={() => setOpenPicker(openPicker === 'status' ? null : 'status')}
-            active={openPicker === 'status'}
-          >
-            {currentStatus?.label || '—'}
-          </InlinePropertyPill>
-          <AnimatePresence>
-            {openPicker === 'status' && (
-              <StatusPicker
-                value={task.status || 'inbox'}
-                completed={task.completed}
-                onChange={id => { onUpdateTask({ ...task, status: id as any, completed: id === 'done' }); setOpenPicker(null) }}
-                anchorRef={statusRef}
-              />
-            )}
-          </AnimatePresence>
-        </div>
-
-        {/* Priority row */}
-        <div ref={priorityRef} className="relative flex items-center">
-          <InlinePropertyPill
-            label="اولویت"
-            dotColor={currentPriority?.dot}
-            onClick={() => setOpenPicker(openPicker === 'priority' ? null : 'priority')}
-            active={openPicker === 'priority'}
-          >
-            {currentPriority?.label || '—'}
-          </InlinePropertyPill>
-          <AnimatePresence>
-            {openPicker === 'priority' && (
-              <PriorityPicker
-                value={task.priority || 'medium'}
-                onChange={id => { onUpdateTask({ ...task, priority: id as any }); setOpenPicker(null) }}
-              />
-            )}
-          </AnimatePresence>
-        </div>
-
-        {/* Importance row */}
-        <div ref={importanceRef} className="relative flex items-center">
-          <InlinePropertyPill
-            label="اهمیت"
-            onClick={() => setOpenPicker(openPicker === 'importance' ? null : 'importance')}
-            active={openPicker === 'importance'}
-          >
-            {currentImportance?.label || 'عادی'}
-          </InlinePropertyPill>
-          <AnimatePresence>
-            {openPicker === 'importance' && (
-              <ImportancePicker
-                value={task.importance || 'normal'}
-                onChange={imp => { onUpdateTask({ ...task, importance: imp }); setOpenPicker(null) }}
-              />
-            )}
-          </AnimatePresence>
-        </div>
-
-        {/* Date rows */}
-        <div className="flex items-center">
-          <InlineDatePill
-            label="برنامه" icon={<Calendar className="w-3 h-3" />}
-            value={task.scheduledDate || ''} onChange={v => onUpdateTask({ ...task, scheduledDate: v || undefined })}
-          />
-        </div>
-        <div className="flex items-center">
-          <InlineDatePill
-            label="سررسید" icon={<AlarmClock className="w-3 h-3" />}
-            value={task.dueDate || ''} onChange={v => onUpdateTask({ ...task, dueDate: v || undefined })}
-          />
-        </div>
-
-        {/* Time estimate row */}
-        <div className="flex items-center gap-1.5 px-2.5 py-1.5 text-[10px] font-bold text-[#8D7F72] dark:text-[#9D978B]">
-          <Clock className="w-3 h-3" />
-          <span>تخمین:</span>
-          <input
-            type="number" min={0}
-            value={task.estimatedMinutes || ''}
-            onChange={e => onUpdateTask({ ...task, estimatedMinutes: e.target.value ? Number(e.target.value) : undefined })}
-            className="w-10 px-1 py-0.5 text-[10px] bg-transparent text-[#2D3025] dark:text-[#E8ECE0] focus:outline-none focus:bg-[#7C8363]/5 dark:focus:bg-[#9ECE9A]/5 rounded text-center font-bold"
-            placeholder="—"
-          />
-          <span>دقیقه</span>
-        </div>
-
-        {/* Blocked warning */}
-        {(task.blockedBy || []).length > 0 && !task.completed && (
-          <div className="flex items-center gap-1.5 px-2.5 py-1.5 text-[10px] font-bold text-orange-600 dark:text-orange-400 rounded-lg bg-orange-50/60 dark:bg-orange-900/20">
-            ⊘ {(task.blockedBy || []).length} مسدودکننده
+      {/* ═══ Properties — Responsive grid ═══ */}
+      <div className="max-w-4xl mx-auto px-4 py-1">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-0">
+          {/* Status row */}
+          <div ref={statusRef} className="relative flex items-center">
+            <InlinePropertyPill
+              label="وضعیت"
+              dotColor={currentStatus?.dot}
+              onClick={() => setOpenPicker(openPicker === 'status' ? null : 'status')}
+              active={openPicker === 'status'}
+            >
+              {currentStatus?.label || '—'}
+            </InlinePropertyPill>
+            <AnimatePresence>
+              {openPicker === 'status' && (
+                <StatusPicker
+                  value={task.status || 'inbox'}
+                  completed={task.completed}
+                  onChange={id => { onUpdateTask({ ...task, status: id as any, completed: id === 'done' }); setOpenPicker(null) }}
+                  anchorRef={statusRef}
+                />
+              )}
+            </AnimatePresence>
           </div>
-        )}
 
-        {/* Daily highlight */}
-        {task.isDailyHighlight && (
-          <div className="flex items-center px-2.5 py-1.5 text-[10px] font-bold text-[#b8860b] dark:text-[#d4a017] rounded-lg bg-[#d4a017]/10">
-            ⭐ برجسته
+          {/* Priority row */}
+          <div ref={priorityRef} className="relative flex items-center">
+            <InlinePropertyPill
+              label="اولویت"
+              dotColor={currentPriority?.dot}
+              onClick={() => setOpenPicker(openPicker === 'priority' ? null : 'priority')}
+              active={openPicker === 'priority'}
+            >
+              {currentPriority?.label || '—'}
+            </InlinePropertyPill>
+            <AnimatePresence>
+              {openPicker === 'priority' && (
+                <PriorityPicker
+                  value={task.priority || 'medium'}
+                  onChange={id => { onUpdateTask({ ...task, priority: id as any }); setOpenPicker(null) }}
+                />
+              )}
+            </AnimatePresence>
           </div>
-        )}
+
+          {/* Importance row */}
+          <div ref={importanceRef} className="relative flex items-center">
+            <InlinePropertyPill
+              label="اهمیت"
+              onClick={() => setOpenPicker(openPicker === 'importance' ? null : 'importance')}
+              active={openPicker === 'importance'}
+            >
+              {currentImportance?.label || 'عادی'}
+            </InlinePropertyPill>
+            <AnimatePresence>
+              {openPicker === 'importance' && (
+                <ImportancePicker
+                  value={task.importance || 'normal'}
+                  onChange={imp => { onUpdateTask({ ...task, importance: imp }); setOpenPicker(null) }}
+                />
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* Date rows */}
+          <div className="flex items-center">
+            <InlineDatePill
+              label="برنامه" icon={<Calendar className="w-3 h-3" />}
+              value={task.scheduledDate || ''} onChange={v => onUpdateTask({ ...task, scheduledDate: v || undefined })}
+            />
+          </div>
+          <div className="flex items-center">
+            <InlineDatePill
+              label="سررسید" icon={<AlarmClock className="w-3 h-3" />}
+              value={task.dueDate || ''} onChange={v => onUpdateTask({ ...task, dueDate: v || undefined })}
+            />
+          </div>
+
+          {/* Time estimate row */}
+          <div className="flex items-center gap-1.5 px-2.5 py-1.5 text-[10px] font-bold text-[#8D7F72] dark:text-[#9D978B]">
+            <Clock className="w-3 h-3" />
+            <span>تخمین:</span>
+            <input
+              type="number" min={0}
+              value={task.estimatedMinutes || ''}
+              onChange={e => onUpdateTask({ ...task, estimatedMinutes: e.target.value ? Number(e.target.value) : undefined })}
+              className="w-10 px-1 py-0.5 text-[10px] bg-transparent text-[#2D3025] dark:text-[#E8ECE0] focus:outline-none focus:bg-[#7C8363]/5 dark:focus:bg-[#9ECE9A]/5 rounded text-center font-bold"
+              placeholder="—"
+            />
+            <span>دقیقه</span>
+          </div>
+
+          {/* Area row */}
+          <div className="flex items-center gap-1.5 px-2.5 py-1.5 text-[10px] font-bold">
+            <Home className="w-3 h-3 text-[#8D7F72] dark:text-[#9D978B]" />
+            <span className="text-[#8D7F72] dark:text-[#9D978B]">حوزه:</span>
+            {linkedArea ? (
+              <span className="text-[#2D3025] dark:text-[#E8ECE0]">{linkedArea.title}</span>
+            ) : (
+              <select value={task.areaId || ''} onChange={e => onUpdateTask({ ...task, areaId: e.target.value || undefined })}
+                className="bg-transparent text-[#2D3025] dark:text-[#E8ECE0] focus:outline-none cursor-pointer font-bold">
+                <option value="">—</option>
+                {areas.map(a => <option key={a.id} value={a.id}>{a.title}</option>)}
+              </select>
+            )}
+          </div>
+
+          {/* Project row */}
+          <div className="flex items-center gap-1.5 px-2.5 py-1.5 text-[10px] font-bold">
+            <FolderKanban className="w-3 h-3 text-[#8D7F72] dark:text-[#9D978B]" />
+            <span className="text-[#8D7F72] dark:text-[#9D978B]">پروژه:</span>
+            {linkedProject ? (
+              <span className="flex items-center gap-1 text-[#2D3025] dark:text-[#E8ECE0]">
+                {linkedProject.title}
+                {onNavigate && <button onClick={() => onNavigate('projects', linkedProject.id)} className="text-[#7C8363] dark:text-[#9ECE9A] hover:text-[#5A5A40] dark:hover:text-[#E8ECE0] cursor-pointer"><ArrowUpRight className="w-3 h-3" /></button>}
+              </span>
+            ) : (
+              <select value={task.projectId || ''} onChange={e => {
+                const projId = e.target.value || undefined
+                // Auto-fill goal from project's linkedGoalId
+                const proj = projId ? projects.find(p => p.id === projId) : null
+                const autoGoalId = proj?.linkedGoalId
+                onUpdateTask({ ...task, projectId: projId, goalId: autoGoalId || task.goalId })
+              }}
+                className="bg-transparent text-[#2D3025] dark:text-[#E8ECE0] focus:outline-none cursor-pointer font-bold">
+                <option value="">—</option>
+                {projects.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
+              </select>
+            )}
+          </div>
+
+          {/* Goal row */}
+          <div className="flex items-center gap-1.5 px-2.5 py-1.5 text-[10px] font-bold">
+            <Target className="w-3 h-3 text-[#8D7F72] dark:text-[#9D978B]" />
+            <span className="text-[#8D7F72] dark:text-[#9D978B]">هدف:</span>
+            {linkedGoal ? (
+              <span className="flex items-center gap-1 text-[#2D3025] dark:text-[#E8ECE0]">
+                {linkedGoal.title}
+                {onNavigate && <button onClick={() => onNavigate('goals', linkedGoal.id)} className="text-[#7C8363] dark:text-[#9ECE9A] hover:text-[#5A5A40] dark:hover:text-[#E8ECE0] cursor-pointer"><ArrowUpRight className="w-3 h-3" /></button>}
+              </span>
+            ) : (
+              <select value={task.goalId || ''} onChange={e => onUpdateTask({ ...task, goalId: e.target.value || undefined })}
+                className="bg-transparent text-[#2D3025] dark:text-[#E8ECE0] focus:outline-none cursor-pointer font-bold">
+                <option value="">—</option>
+                {goals.map(g => <option key={g.id} value={g.id}>{g.title}</option>)}
+              </select>
+            )}
+          </div>
+
+          {/* Blocked warning */}
+          {(task.blockedBy || []).length > 0 && !task.completed && (
+            <div className="flex items-center gap-1.5 px-2.5 py-1.5 text-[10px] font-bold text-orange-600 dark:text-orange-400 rounded-lg bg-orange-50/60 dark:bg-orange-900/20 sm:col-span-2 lg:col-span-3">
+              ⊘ {(task.blockedBy || []).length} مسدودکننده
+            </div>
+          )}
+
+          {/* Daily highlight */}
+          {task.isDailyHighlight && (
+            <div className="flex items-center px-2.5 py-1.5 text-[10px] font-bold text-[#b8860b] dark:text-[#d4a017] rounded-lg bg-[#d4a017]/10">
+              ⭐ برجسته
+            </div>
+          )}
+        </div>
       </div>
-
-      {/* ═══ Context Selectors (if not linked) ═══ */}
-      {(!linkedArea || !linkedProject || !linkedGoal) && (
-        <div className="max-w-4xl mx-auto px-4 pb-2">
-          <div className="flex items-center gap-2 flex-wrap">
-            {!linkedArea && (
-              <div className="flex items-center gap-1.5">
-                <Home className="w-3 h-3 text-[#8D7F72] dark:text-[#9D978B]" />
-                <select value={task.areaId || ''} onChange={e => onUpdateTask({ ...task, areaId: e.target.value || undefined })}
-                  className="text-[10px] font-bold bg-transparent text-[#8D7F72] dark:text-[#9D978B] focus:outline-none cursor-pointer hover:text-[#2D3025] dark:hover:text-[#E8ECE0]">
-                  <option value="">حوزه —</option>
-                  {areas.map(a => <option key={a.id} value={a.id}>{a.title}</option>)}
-                </select>
-              </div>
-            )}
-            {!linkedProject && (
-              <div className="flex items-center gap-1.5">
-                <FolderKanban className="w-3 h-3 text-[#8D7F72] dark:text-[#9D978B]" />
-                <select value={task.projectId || ''} onChange={e => onUpdateTask({ ...task, projectId: e.target.value || undefined })}
-                  className="text-[10px] font-bold bg-transparent text-[#8D7F72] dark:text-[#9D978B] focus:outline-none cursor-pointer hover:text-[#2D3025] dark:hover:text-[#E8ECE0]">
-                  <option value="">پروژه —</option>
-                  {projects.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
-                </select>
-              </div>
-            )}
-            {!linkedGoal && (
-              <div className="flex items-center gap-1.5">
-                <Target className="w-3 h-3 text-[#8D7F72] dark:text-[#9D978B]" />
-                <select value={task.goalId || ''} onChange={e => onUpdateTask({ ...task, goalId: e.target.value || undefined })}
-                  className="text-[10px] font-bold bg-transparent text-[#8D7F72] dark:text-[#9D978B] focus:outline-none cursor-pointer hover:text-[#2D3025] dark:hover:text-[#E8ECE0]">
-                  <option value="">هدف —</option>
-                  {goals.map(g => <option key={g.id} value={g.id}>{g.title}</option>)}
-                </select>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* ═══ Sub-tab bar: مراحل | زمان‌سنج ═══ */}
       <div className="max-w-4xl mx-auto px-4">
