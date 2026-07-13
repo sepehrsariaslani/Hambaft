@@ -55,7 +55,112 @@ const IMPORTANCE_CONFIG: Record<string, { label: string; icon: React.ReactNode; 
 }
 
 // ══════════════════════════════════════════════════════════════
-// InlinePropertyPill — Click to expand dropdown
+// Metadata Panel Components — Linear/Notion style
+// ══════════════════════════════════════════════════════════════
+
+// Colored badge/chip for values
+function Badge({ children, color }: { children: React.ReactNode; color: string }) {
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-[11px] font-bold"
+      style={{
+        backgroundColor: color + '18',
+        color: color,
+        border: `1px solid ${color}25`,
+      }}
+    >
+      <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
+      {children}
+    </span>
+  )
+}
+
+// Divider line between groups
+function MetaDivider() {
+  return <div className="mx-4 border-t border-[#E6DFD3]/50 dark:border-[#3D4133]/50" />
+}
+
+// Metadata row: icon + label (left) — value (right)
+function MetaRow({ icon, label, children, onClick, active }: {
+  icon: React.ReactNode; label: string; children: React.ReactNode;
+  onClick?: () => void; active?: boolean
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`w-full flex items-center justify-between px-4 py-2.5 transition-colors cursor-pointer ${
+        active
+          ? 'bg-[#7C8363]/5 dark:bg-[#9ECE9A]/5'
+          : 'hover:bg-[#F9F6EE]/60 dark:hover:bg-[#3D4133]/30'
+      }`}
+    >
+      <span className="flex items-center gap-2 text-[11px] text-[#8D7F72] dark:text-[#9D978B]">
+        <span className="shrink-0">{icon}</span>
+        <span>{label}</span>
+      </span>
+      <span className="shrink-0">{children}</span>
+    </button>
+  )
+}
+
+// Inline select for metadata values
+function MetaSelect({ value, onChange, options }: {
+  value: string; onChange: (v: string) => void; options: Array<{ id: string; label: string }>
+}) {
+  return (
+    <select value={value} onChange={e => onChange(e.target.value)}
+      className="text-[11px] font-bold bg-transparent text-[#2D3025] dark:text-[#E8ECE0] focus:outline-none cursor-pointer text-left appearance-none pr-1">
+      <option value="">—</option>
+      {options.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+    </select>
+  )
+}
+
+// Date row with inline Jalali picker
+function MetaDateRow({ icon, label, value, onChange }: {
+  icon: React.ReactNode; label: string; value: string; onChange: (v: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const displayValue = useMemo(() => {
+    if (!value) return null
+    try { const d = new Date(value); return d.toLocaleDateString('fa-IR', { month: 'short', day: 'numeric' }) } catch { return value }
+  }, [value])
+
+  return (
+    <div ref={ref} className="relative">
+      <button onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between px-4 py-2.5 transition-colors cursor-pointer hover:bg-[#F9F6EE]/60 dark:hover:bg-[#3D4133]/30">
+        <span className="flex items-center gap-2 text-[11px] text-[#8D7F72] dark:text-[#9D978B]">
+          <span className="shrink-0">{icon}</span>
+          <span>{label}</span>
+        </span>
+        <span className={`text-[11px] font-bold ${value ? 'text-[#2D3025] dark:text-[#E8ECE0]' : 'text-[#D6CFC3] dark:text-[#3D4133]'}`}>
+          {displayValue || '—'}
+        </span>
+      </button>
+      <AnimatePresence>
+        {open && (
+          <motion.div initial={{ opacity: 0, scale: 0.95, y: -4 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: -4 }}
+            transition={{ duration: 0.1 }}
+            className="absolute top-full mt-1 right-2 left-2 z-50 bg-white dark:bg-[#1B1D16] rounded-xl shadow-xl border border-[#E6DFD3]/80 dark:border-[#3D4133] p-3">
+            <PersianDatePicker value={value} onChange={v => { onChange(v); if (!v) setOpen(false) }} placeholder={`${label}...`} />
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
+// ══════════════════════════════════════════════════════════════
+// InlinePropertyPill — (kept for Drawer)
 // ══════════════════════════════════════════════════════════════
 function InlinePropertyPill({ label, children, dotColor, onClick, active }: {
   label: string; children: React.ReactNode; dotColor?: string; onClick?: () => void; active?: boolean
@@ -473,239 +578,218 @@ export default function TaskDetailPage({
         )}
       </div>
 
-      {/* ═══ Properties — Responsive grid ═══ */}
-      <div className="max-w-4xl mx-auto px-4 py-1">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-0">
-          {/* Status row */}
-          <div ref={statusRef} className="relative flex items-center">
-            <InlinePropertyPill
-              label="وضعیت"
-              dotColor={currentStatus?.dot}
-              onClick={() => setOpenPicker(openPicker === 'status' ? null : 'status')}
-              active={openPicker === 'status'}
-            >
-              {currentStatus?.label || '—'}
-            </InlinePropertyPill>
-            <AnimatePresence>
-              {openPicker === 'status' && (
-                <StatusPicker
-                  value={task.status || 'inbox'}
-                  completed={task.completed}
-                  onChange={id => { onUpdateTask({ ...task, status: id as any, completed: id === 'done' }); setOpenPicker(null) }}
-                  anchorRef={statusRef}
-                />
-              )}
-            </AnimatePresence>
-          </div>
+      {/* ═══ Two-column layout: Content + Metadata Panel ═══ */}
+      <div className="max-w-6xl mx-auto px-4 py-3">
+        <div className="flex flex-col lg:flex-row gap-6">
 
-          {/* Priority row */}
-          <div ref={priorityRef} className="relative flex items-center">
-            <InlinePropertyPill
-              label="اولویت"
-              dotColor={currentPriority?.dot}
-              onClick={() => setOpenPicker(openPicker === 'priority' ? null : 'priority')}
-              active={openPicker === 'priority'}
-            >
-              {currentPriority?.label || '—'}
-            </InlinePropertyPill>
-            <AnimatePresence>
-              {openPicker === 'priority' && (
-                <PriorityPicker
-                  value={task.priority || 'medium'}
-                  onChange={id => { onUpdateTask({ ...task, priority: id as any }); setOpenPicker(null) }}
-                />
-              )}
-            </AnimatePresence>
-          </div>
-
-          {/* Importance row */}
-          <div ref={importanceRef} className="relative flex items-center">
-            <InlinePropertyPill
-              label="اهمیت"
-              onClick={() => setOpenPicker(openPicker === 'importance' ? null : 'importance')}
-              active={openPicker === 'importance'}
-            >
-              {currentImportance?.label || 'عادی'}
-            </InlinePropertyPill>
-            <AnimatePresence>
-              {openPicker === 'importance' && (
-                <ImportancePicker
-                  value={task.importance || 'normal'}
-                  onChange={imp => { onUpdateTask({ ...task, importance: imp }); setOpenPicker(null) }}
-                />
-              )}
-            </AnimatePresence>
-          </div>
-
-          {/* Date rows */}
-          <div className="flex items-center">
-            <InlineDatePill
-              label="برنامه" icon={<Calendar className="w-3 h-3" />}
-              value={task.scheduledDate || ''} onChange={v => onUpdateTask({ ...task, scheduledDate: v || undefined })}
+          {/* ── Left column: Notes + Tabs ── */}
+          <div className="flex-1 min-w-0">
+            {/* Notes — always visible */}
+            <EntityNoteEditor
+              entityId={task.id} entityType="task" title=""
+              initialBlocks={task.noteBlocks}
+              onSave={(blocks) => onUpdateTask({ ...task, noteBlocks: blocks })}
             />
-          </div>
-          <div className="flex items-center">
-            <InlineDatePill
-              label="سررسید" icon={<AlarmClock className="w-3 h-3" />}
-              value={task.dueDate || ''} onChange={v => onUpdateTask({ ...task, dueDate: v || undefined })}
-            />
-          </div>
 
-          {/* Time estimate row */}
-          <div className="flex items-center gap-1.5 px-2.5 py-1.5 text-[10px] font-bold text-[#8D7F72] dark:text-[#9D978B]">
-            <Clock className="w-3 h-3" />
-            <span>تخمین:</span>
-            <input
-              type="number" min={0}
-              value={task.estimatedMinutes || ''}
-              onChange={e => onUpdateTask({ ...task, estimatedMinutes: e.target.value ? Number(e.target.value) : undefined })}
-              className="w-10 px-1 py-0.5 text-[10px] bg-transparent text-[#2D3025] dark:text-[#E8ECE0] focus:outline-none focus:bg-[#7C8363]/5 dark:focus:bg-[#9ECE9A]/5 rounded text-center font-bold"
-              placeholder="—"
-            />
-            <span>دقیقه</span>
-          </div>
-
-          {/* Area row */}
-          <div className="flex items-center gap-1.5 px-2.5 py-1.5 text-[10px] font-bold">
-            <Home className="w-3 h-3 text-[#8D7F72] dark:text-[#9D978B]" />
-            <span className="text-[#8D7F72] dark:text-[#9D978B]">حوزه:</span>
-            {linkedArea ? (
-              <span className="text-[#2D3025] dark:text-[#E8ECE0]">{linkedArea.title}</span>
-            ) : (
-              <select value={task.areaId || ''} onChange={e => onUpdateTask({ ...task, areaId: e.target.value || undefined })}
-                className="bg-transparent text-[#2D3025] dark:text-[#E8ECE0] focus:outline-none cursor-pointer font-bold">
-                <option value="">—</option>
-                {areas.map(a => <option key={a.id} value={a.id}>{a.title}</option>)}
-              </select>
-            )}
-          </div>
-
-          {/* Project row */}
-          <div className="flex items-center gap-1.5 px-2.5 py-1.5 text-[10px] font-bold">
-            <FolderKanban className="w-3 h-3 text-[#8D7F72] dark:text-[#9D978B]" />
-            <span className="text-[#8D7F72] dark:text-[#9D978B]">پروژه:</span>
-            {linkedProject ? (
-              <span className="flex items-center gap-1 text-[#2D3025] dark:text-[#E8ECE0]">
-                {linkedProject.title}
-                {onNavigate && <button onClick={() => onNavigate('projects', linkedProject.id)} className="text-[#7C8363] dark:text-[#9ECE9A] hover:text-[#5A5A40] dark:hover:text-[#E8ECE0] cursor-pointer"><ArrowUpRight className="w-3 h-3" /></button>}
-              </span>
-            ) : (
-              <select value={task.projectId || ''} onChange={e => {
-                const projId = e.target.value || undefined
-                // Auto-fill goal from project's linkedGoalId
-                const proj = projId ? projects.find(p => p.id === projId) : null
-                const autoGoalId = proj?.linkedGoalId
-                onUpdateTask({ ...task, projectId: projId, goalId: autoGoalId || task.goalId })
-              }}
-                className="bg-transparent text-[#2D3025] dark:text-[#E8ECE0] focus:outline-none cursor-pointer font-bold">
-                <option value="">—</option>
-                {projects.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
-              </select>
-            )}
-          </div>
-
-          {/* Goal row */}
-          <div className="flex items-center gap-1.5 px-2.5 py-1.5 text-[10px] font-bold">
-            <Target className="w-3 h-3 text-[#8D7F72] dark:text-[#9D978B]" />
-            <span className="text-[#8D7F72] dark:text-[#9D978B]">هدف:</span>
-            {linkedGoal ? (
-              <span className="flex items-center gap-1 text-[#2D3025] dark:text-[#E8ECE0]">
-                {linkedGoal.title}
-                {onNavigate && <button onClick={() => onNavigate('goals', linkedGoal.id)} className="text-[#7C8363] dark:text-[#9ECE9A] hover:text-[#5A5A40] dark:hover:text-[#E8ECE0] cursor-pointer"><ArrowUpRight className="w-3 h-3" /></button>}
-              </span>
-            ) : (
-              <select value={task.goalId || ''} onChange={e => onUpdateTask({ ...task, goalId: e.target.value || undefined })}
-                className="bg-transparent text-[#2D3025] dark:text-[#E8ECE0] focus:outline-none cursor-pointer font-bold">
-                <option value="">—</option>
-                {goals.map(g => <option key={g.id} value={g.id}>{g.title}</option>)}
-              </select>
-            )}
-          </div>
-
-          {/* Blocked warning */}
-          {(task.blockedBy || []).length > 0 && !task.completed && (
-            <div className="flex items-center gap-1.5 px-2.5 py-1.5 text-[10px] font-bold text-orange-600 dark:text-orange-400 rounded-lg bg-orange-50/60 dark:bg-orange-900/20 sm:col-span-2 lg:col-span-3">
-              ⊘ {(task.blockedBy || []).length} مسدودکننده
+            {/* Sub-tab bar */}
+            <div className="flex items-center gap-1 border-b border-[#E6DFD3]/60 dark:border-[#3D4133]/60 mt-4">
+              {[
+                { id: 'steps' as SubTab, label: 'مراحل', icon: <Layers className="w-3 h-3" />, count: subTotal },
+                { id: 'time' as SubTab, label: 'زمان‌سنج', icon: <Timer className="w-3 h-3" />, count: null },
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setSubTab(tab.id)}
+                  className={`flex items-center gap-1.5 px-3 py-2 text-[11px] font-black whitespace-nowrap transition-all border-b-2 cursor-pointer ${
+                    subTab === tab.id
+                      ? 'border-[#7C8363] dark:border-[#9ECE9A] text-[#7C8363] dark:text-[#9ECE9A]'
+                      : 'border-transparent text-[#8D7F72] dark:text-[#9D978B] hover:text-[#2D3025] dark:hover:text-[#E8ECE0]'
+                  }`}
+                >
+                  {tab.icon}
+                  <span>{tab.label}</span>
+                  {tab.count != null && tab.count > 0 && (
+                    <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-full ${
+                      subTab === tab.id ? 'bg-[#7C8363]/15 dark:bg-[#9ECE9A]/15' : 'bg-[#E6DFD3]/40 dark:bg-[#3D4133]/40'
+                    }`}>{tab.count}</span>
+                  )}
+                </button>
+              ))}
             </div>
-          )}
 
-          {/* Daily highlight */}
-          {task.isDailyHighlight && (
-            <div className="flex items-center px-2.5 py-1.5 text-[10px] font-bold text-[#b8860b] dark:text-[#d4a017] rounded-lg bg-[#d4a017]/10">
-              ⭐ برجسته
+            {/* Sub-tab content */}
+            <div className="py-3">
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={subTab}
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.1 }}
+                >
+                  {subTab === 'steps' && (
+                    <StepsSection
+                      task={task} allTasks={allTasks}
+                      subtasks={subtasks} subDone={subDone} subTotal={subTotal} subPct={subPct}
+                      newSubtaskText={newSubtaskText} setNewSubtaskText={setNewSubtaskText}
+                      addSubtask={addSubtask} toggleSubtask={toggleSubtask}
+                      deleteSubtask={deleteSubtask} updateSubtaskTitle={updateSubtaskTitle}
+                      onUpdateTask={onUpdateTask}
+                    />
+                  )}
+                  {subTab === 'time' && (
+                    <TimeSection
+                      task={task} isActiveSession={isActiveSession}
+                      activeTimerSeconds={activeTimerSeconds} isTimerRunning={isTimerRunning}
+                      onStartTimer={onStartTimer} onPauseTimer={onPauseTimer}
+                      onStopTimer={onStopTimer} onResetTimer={onResetTimer}
+                      formatSeconds={formatSeconds}
+                    />
+                  )}
+                </motion.div>
+              </AnimatePresence>
             </div>
-          )}
-        </div>
-      </div>
+          </div>
 
-      {/* ═══ Sub-tab bar: مراحل | زمان‌سنج ═══ */}
-      <div className="max-w-4xl mx-auto px-4">
-        <div className="flex items-center gap-1 border-b border-[#E6DFD3]/60 dark:border-[#3D4133]/60">
-          {[
-            { id: 'steps' as SubTab, label: 'مراحل', icon: <Layers className="w-3 h-3" />, count: subTotal },
-            { id: 'time' as SubTab, label: 'زمان‌سنج', icon: <Timer className="w-3 h-3" />, count: null },
-          ].map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setSubTab(tab.id)}
-              className={`flex items-center gap-1.5 px-3 py-2 text-[11px] font-black whitespace-nowrap transition-all border-b-2 cursor-pointer ${
-                subTab === tab.id
-                  ? 'border-[#7C8363] dark:border-[#9ECE9A] text-[#7C8363] dark:text-[#9ECE9A]'
-                  : 'border-transparent text-[#8D7F72] dark:text-[#9D978B] hover:text-[#2D3025] dark:hover:text-[#E8ECE0]'
-              }`}
-            >
-              {tab.icon}
-              <span>{tab.label}</span>
-              {tab.count != null && tab.count > 0 && (
-                <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-full ${
-                  subTab === tab.id ? 'bg-[#7C8363]/15 dark:bg-[#9ECE9A]/15' : 'bg-[#E6DFD3]/40 dark:bg-[#3D4133]/40'
-                }`}>{tab.count}</span>
+          {/* ── Right column: Metadata Panel ── */}
+          <div className="w-full lg:w-72 shrink-0">
+            <div className="bg-white dark:bg-[#1B1D16] rounded-xl border border-[#E6DFD3]/60 dark:border-[#3D4133]/60 overflow-hidden">
+
+              {/* ── Status ── */}
+              <div ref={statusRef} className="relative">
+                <MetaRow icon={<Circle className="w-3.5 h-3.5" />} label="وضعیت"
+                  onClick={() => setOpenPicker(openPicker === 'status' ? null : 'status')}
+                  active={openPicker === 'status'}>
+                  <Badge color={currentStatus?.dot || '#9D978B'}>{currentStatus?.label || '—'}</Badge>
+                </MetaRow>
+                <AnimatePresence>
+                  {openPicker === 'status' && (
+                    <StatusPicker value={task.status || 'inbox'} completed={task.completed}
+                      onChange={id => { onUpdateTask({ ...task, status: id as any, completed: id === 'done' }); setOpenPicker(null) }}
+                      anchorRef={statusRef} />
+                  )}
+                </AnimatePresence>
+              </div>
+
+              {/* ── Priority ── */}
+              <div ref={priorityRef} className="relative">
+                <MetaRow icon={<Flag className="w-3.5 h-3.5" />} label="اولویت"
+                  onClick={() => setOpenPicker(openPicker === 'priority' ? null : 'priority')}
+                  active={openPicker === 'priority'}>
+                  <Badge color={currentPriority?.dot || '#9D978B'}>{currentPriority?.label || '—'}</Badge>
+                </MetaRow>
+                <AnimatePresence>
+                  {openPicker === 'priority' && (
+                    <PriorityPicker value={task.priority || 'medium'}
+                      onChange={id => { onUpdateTask({ ...task, priority: id as any }); setOpenPicker(null) }} />
+                  )}
+                </AnimatePresence>
+              </div>
+
+              {/* ── Importance ── */}
+              <div ref={importanceRef} className="relative">
+                <MetaRow icon={<Zap className="w-3.5 h-3.5" />} label="اهمیت"
+                  onClick={() => setOpenPicker(openPicker === 'importance' ? null : 'importance')}
+                  active={openPicker === 'importance'}>
+                  <Badge color={task.importance === 'key' ? '#D4A017' : task.importance === 'milestone' ? '#8B5CF6' : '#9D978B'}>
+                    {currentImportance?.label || 'عادی'}
+                  </Badge>
+                </MetaRow>
+                <AnimatePresence>
+                  {openPicker === 'importance' && (
+                    <ImportancePicker value={task.importance || 'normal'}
+                      onChange={imp => { onUpdateTask({ ...task, importance: imp }); setOpenPicker(null) }} />
+                  )}
+                </AnimatePresence>
+              </div>
+
+              <MetaDivider />
+
+              {/* ── Scheduled Date ── */}
+              <MetaDateRow icon={<Calendar className="w-3.5 h-3.5" />} label="برنامه"
+                value={task.scheduledDate || ''} onChange={v => onUpdateTask({ ...task, scheduledDate: v || undefined })} />
+
+              {/* ── Due Date ── */}
+              <MetaDateRow icon={<AlarmClock className="w-3.5 h-3.5" />} label="سررسید"
+                value={task.dueDate || ''} onChange={v => onUpdateTask({ ...task, dueDate: v || undefined })} />
+
+              {/* ── Estimate ── */}
+              <MetaRow icon={<Clock className="w-3.5 h-3.5" />} label="تخمین">
+                <span className="flex items-center gap-1 text-[11px] font-bold text-[#2D3025] dark:text-[#E8ECE0]">
+                  <input type="number" min={0}
+                    value={task.estimatedMinutes || ''}
+                    onChange={e => onUpdateTask({ ...task, estimatedMinutes: e.target.value ? Number(e.target.value) : undefined })}
+                    className="w-8 px-0.5 py-0 text-[11px] bg-transparent text-center font-bold focus:outline-none border-b border-transparent focus:border-[#7C8363] dark:focus:border-[#9ECE9A]"
+                    placeholder="—" />
+                  <span className="text-[#8D7F72] dark:text-[#9D978B] text-[9px]">دقیقه</span>
+                </span>
+              </MetaRow>
+
+              <MetaDivider />
+
+              {/* ── Area ── */}
+              <MetaRow icon={<Home className="w-3.5 h-3.5" />} label="حوزه">
+                {linkedArea ? (
+                  <span className="text-[11px] font-bold text-[#2D3025] dark:text-[#E8ECE0]">{linkedArea.title}</span>
+                ) : (
+                  <MetaSelect value={task.areaId || ''} onChange={v => onUpdateTask({ ...task, areaId: v || undefined })}
+                    options={areas.map(a => ({ id: a.id, label: a.title }))} />
+                )}
+              </MetaRow>
+
+              {/* ── Project ── */}
+              <MetaRow icon={<FolderKanban className="w-3.5 h-3.5" />} label="پروژه">
+                {linkedProject ? (
+                  <span className="flex items-center gap-1">
+                    <span className="text-[11px] font-bold text-[#2D3025] dark:text-[#E8ECE0]">{linkedProject.title}</span>
+                    {onNavigate && <button onClick={() => onNavigate('projects', linkedProject.id)} className="text-[#7C8363] dark:text-[#9ECE9A] hover:text-[#5A5A40] dark:hover:text-[#E8ECE0] cursor-pointer"><ArrowUpRight className="w-3 h-3" /></button>}
+                  </span>
+                ) : (
+                  <MetaSelect value={task.projectId || ''} onChange={v => {
+                    const proj = v ? projects.find(p => p.id === v) : null
+                    onUpdateTask({ ...task, projectId: v || undefined, goalId: proj?.linkedGoalId || task.goalId })
+                  }} options={projects.map(p => ({ id: p.id, label: p.title }))} />
+                )}
+              </MetaRow>
+
+              {/* ── Goal ── */}
+              <MetaRow icon={<Target className="w-3.5 h-3.5" />} label="هدف">
+                {linkedGoal ? (
+                  <span className="flex items-center gap-1">
+                    <span className="text-[11px] font-bold text-[#2D3025] dark:text-[#E8ECE0]">{linkedGoal.title}</span>
+                    {onNavigate && <button onClick={() => onNavigate('goals', linkedGoal.id)} className="text-[#7C8363] dark:text-[#9ECE9A] hover:text-[#5A5A40] dark:hover:text-[#E8ECE0] cursor-pointer"><ArrowUpRight className="w-3 h-3" /></button>}
+                  </span>
+                ) : (
+                  <MetaSelect value={task.goalId || ''} onChange={v => onUpdateTask({ ...task, goalId: v || undefined })}
+                    options={goals.map(g => ({ id: g.id, label: g.title }))} />
+                )}
+              </MetaRow>
+
+              {/* ── Blocked ── */}
+              {(task.blockedBy || []).length > 0 && !task.completed && (
+                <>
+                  <MetaDivider />
+                  <div className="flex items-center justify-between px-4 py-2.5">
+                    <span className="flex items-center gap-2 text-[11px] text-[#8D7F72] dark:text-[#9D978B]">
+                      <AlertCircle className="w-3.5 h-3.5 text-orange-400" /> مسدود
+                    </span>
+                    <Badge color="#F97316">{(task.blockedBy || []).length} مسدودکننده</Badge>
+                  </div>
+                </>
               )}
-            </button>
-          ))}
+
+              {/* ── Highlight ── */}
+              {task.isDailyHighlight && (
+                <div className="flex items-center justify-between px-4 py-2.5">
+                  <span className="flex items-center gap-2 text-[11px] text-[#8D7F72] dark:text-[#9D978B]">
+                    <Pin className="w-3.5 h-3.5 text-[#D4A017]" /> برجسته
+                  </span>
+                  <Badge color="#D4A017">بله</Badge>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
-      </div>
-
-      {/* ═══ Notes — always visible (outside tab switching) ═══ */}
-      <div className="max-w-4xl mx-auto px-4 pt-3">
-        <EntityNoteEditor
-          entityId={task.id} entityType="task" title=""
-          initialBlocks={task.noteBlocks}
-          onSave={(blocks) => onUpdateTask({ ...task, noteBlocks: blocks })}
-        />
-      </div>
-
-      {/* ═══ Sub-tab content (without notes) ═══ */}
-      <div className="max-w-4xl mx-auto px-4 py-3">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={subTab}
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.1 }}
-          >
-            {subTab === 'steps' && (
-              <StepsSection
-                task={task} allTasks={allTasks}
-                subtasks={subtasks} subDone={subDone} subTotal={subTotal} subPct={subPct}
-                newSubtaskText={newSubtaskText} setNewSubtaskText={setNewSubtaskText}
-                addSubtask={addSubtask} toggleSubtask={toggleSubtask}
-                deleteSubtask={deleteSubtask} updateSubtaskTitle={updateSubtaskTitle}
-                onUpdateTask={onUpdateTask}
-              />
-            )}
-            {subTab === 'time' && (
-              <TimeSection
-                task={task} isActiveSession={isActiveSession}
-                activeTimerSeconds={activeTimerSeconds} isTimerRunning={isTimerRunning}
-                onStartTimer={onStartTimer} onPauseTimer={onPauseTimer}
-                onStopTimer={onStopTimer} onResetTimer={onResetTimer}
-                formatSeconds={formatSeconds}
-              />
-            )}
-          </motion.div>
-        </AnimatePresence>
       </div>
     </div>
   )
