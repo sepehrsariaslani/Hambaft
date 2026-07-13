@@ -316,7 +316,7 @@ export default function App({
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(initialProjectId);
 
   // Version marker — remove after deploy verification
-  useEffect(() => { console.log('[hambaft] version 2025-07-13-v9 — TaskDetailPage active'); }, []);
+  useEffect(() => { console.log('[hambaft] version 2025-07-13-v12 — Notion-style task detail redesign'); }, []);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const runSync = (label: string, job: () => Promise<void>) => {
