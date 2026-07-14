@@ -95,6 +95,7 @@ function mapTasks(items: any[]): Task[] {
     effortType: item.effort_type === 'fixed' || item.effort_type === 'ثابت' ? 'fixed' : 'variable',
     noteBlocks: parseNoteBlocks(item.note_blocks_json),
     goalId: item.goal || undefined,
+    subTasks: (() => { try { return item.sub_tasks_json ? JSON.parse(item.sub_tasks_json) : [] } catch { return [] } })(),
     // Impact awareness fields (enriched by backend when available)
     impactGoalTitle: item.impact_goal_title || undefined,
     impactGoalHealth: item.impact_goal_health || undefined,

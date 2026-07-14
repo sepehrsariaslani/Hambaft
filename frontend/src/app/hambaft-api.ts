@@ -252,6 +252,7 @@ export function mapBackendTaskRecord(item: any): Task {
     effortType: item.effort_type === 'fixed' || item.effort_type === 'ثابت' ? 'fixed' : 'variable',
     noteBlocks: item.noteBlocks || item.note_blocks_json || [],
     goalId: item.goal || undefined,
+    subTasks: item.sub_tasks_json ? JSON.parse(item.sub_tasks_json) : (item.subTasks || []),
     impactGoalTitle: item.impact_goal_title || undefined,
     impactGoalHealth: item.impact_goal_health || undefined,
     impactGoalProgress: item.impact_goal_progress || undefined,
@@ -289,6 +290,7 @@ export function toTaskPayload(task: Task): Record<string, unknown> {
     area: task.areaId || null,
     goal: task.goalId || null,
     noteBlocks: task.noteBlocks || [],
+    sub_tasks_json: JSON.stringify(task.subTasks || []),
   }
 }
 
