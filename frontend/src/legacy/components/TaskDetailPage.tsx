@@ -393,7 +393,6 @@ export default function TaskDetailPage({
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [tempTitle, setTempTitle] = useState(task.title)
   const [newSubtaskText, setNewSubtaskText] = useState('')
-  const [attachmentCount, setAttachmentCount] = useState(0)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
   // Floating pickers
@@ -500,22 +499,39 @@ export default function TaskDetailPage({
     getTaskTrackedMinutes(task.id)
       .then(resp => {
         const d = resp?.data
-        setTrackedTime({
-          own: d?.tracked_minutes || 0,
-          subtask: d?.subtask_tracked_minutes || 0,
-          total: d?.total_tracked_minutes || 0,
-        })
+        const total = d?.total_tracked_minutes || 0
+        // If API returns 0, fall back to computing from sessions
+        if (total > 0) {
+          setTrackedTime({
+            own: d?.tracked_minutes || 0,
+            subtask: d?.subtask_tracked_minutes || 0,
+            total,
+          })
+        } else {
+          // Fallback: compute from sessions directly
+          getTaskSessions(task.id, 100)
+            .then(sResp => {
+              const sessions = sResp?.data?.sessions || []
+              const ownMins = sessions.reduce((sum: number, s: any) => sum + (s.duration_minutes || 0), 0)
+              setTrackedTime({ own: ownMins, subtask: 0, total: ownMins })
+            })
+            .catch(() => setTrackedTime({ own: 0, subtask: 0, total: 0 }))
+        }
       })
-      .catch(() => setTrackedTime({ own: 0, subtask: 0, total: 0 }))
+      .catch(() => {
+        // API failed — fall back to sessions
+        getTaskSessions(task.id, 100)
+          .then(sResp => {
+            const sessions = sResp?.data?.sessions || []
+            const ownMins = sessions.reduce((sum: number, s: any) => sum + (s.duration_minutes || 0), 0)
+            setTrackedTime({ own: ownMins, subtask: 0, total: ownMins })
+          })
+          .catch(() => setTrackedTime({ own: 0, subtask: 0, total: 0 }))
+      })
   }, [task.id])
 
-  // Fetch attachment count for tab badge
-  useEffect(() => {
-    if (!task.id) return
-    getTaskAttachments(task.id)
-      .then(resp => setAttachmentCount(resp?.data?.attachments?.length || 0))
-      .catch(() => setAttachmentCount(0))
-  }, [task.id])
+  // Attachment count — fetched lazily when files tab is opened
+  const [attachmentCount, setAttachmentCount] = useState<number | null>(null)
 
   const subtasks = childTasks
   const subDone = subtasks.filter(st => st.completed).length
@@ -1314,16 +1330,30 @@ function FilesSection({ task, onAttachmentChange }: {
   const [attachments, setAttachments] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [apiError, setApiError] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const fetchAttachments = useCallback(async () => {
     if (!task.id) return
     setLoading(true)
+    setApiError(false)
     try {
       const resp = await getTaskAttachments(task.id)
       setAttachments(resp?.data?.attachments || [])
     } catch {
-      setAttachments([])
+      // API might not be deployed yet — try Frappe's native file list
+      try {
+        const { getList } = await import('../../app/frappe')
+        const files = await getList('File', {
+          filters: { attached_to_doctype: 'Task', attached_to_name: task.id },
+          fields: ['name', 'file_name', 'file_type', 'file_url', 'file_size', 'is_private', 'creation'],
+          limit: 50,
+        })
+        setAttachments(Array.isArray(files) ? files : [])
+      } catch {
+        setAttachments([])
+        setApiError(true)
+      }
     } finally {
       setLoading(false)
     }
@@ -1365,8 +1395,16 @@ function FilesSection({ task, onAttachmentChange }: {
       await deleteTaskAttachment(fileName)
       await fetchAttachments()
       onAttachmentChange?.()
-    } catch (err) {
-      console.error('[hambaft] file delete failed', err)
+    } catch {
+      // Fallback: use Frappe's native delete_doc
+      try {
+        const { call: frappeCall } = await import('../../app/frappe')
+        await frappeCall('frappe.client.delete', { doctype: 'File', name: fileName })
+        await fetchAttachments()
+        onAttachmentChange?.()
+      } catch (err2) {
+        console.error('[hambaft] file delete failed', err2)
+      }
     }
   }
 
