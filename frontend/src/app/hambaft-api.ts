@@ -1246,6 +1246,7 @@ export interface GalleryBoard {
 export interface GalleryData {
   boards: GalleryBoard[]
   orphan_pins: GalleryPin[]
+  gallery_not_ready?: boolean
 }
 
 export interface TaskAttachment {
@@ -1259,6 +1260,10 @@ export interface TaskAttachment {
   pin_name?: string
   sort_order: number
   caption?: string
+  board_id?: string
+  section_id?: string
+  board_title?: string
+  section_title?: string
 }
 
 export async function getGalleryBoards() {

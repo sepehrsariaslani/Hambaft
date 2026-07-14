@@ -29,11 +29,12 @@ import type { ImportanceLevel } from './TaskV2Shared'
 import {
   getTaskSessions, getTaskChildren, quickAddTask, getTaskTrackedMinutes,
   mapBackendTaskRecord, getTaskAttachments, deleteTaskAttachment,
-  createGalleryPin, reorderTaskAttachments, reorderGalleryPins,
+  createGalleryPin, reorderTaskAttachments,
   type TaskAttachment,
 } from '../../app/hambaft-api'
 import EntityNoteEditor from '../../notes/components/EntityNoteEditor'
 import PersianDatePicker from './PersianDatePicker'
+import { getAttachmentColumnCount, isAttachmentImage, mergeAttachmentsWithReorderedImages } from './task-attachments'
 
 // ─── Status config with dot colors ───────────────────────────
 const STATUS_CONFIG = [
@@ -911,7 +912,7 @@ export default function TaskDetailPage({
                       getTaskAttachments(task.id)
                         .then(resp => setAttachmentCount(resp?.data?.attachments?.length || 0))
                         .catch(() => {})
-                    }} />
+                    }} onNavigate={onNavigate} />
                   )}
                 </motion.div>
               </AnimatePresence>
@@ -1329,8 +1330,10 @@ function TimeSection({ task, isActiveSession, activeTimerSeconds, isTimerRunning
 // ══════════════════════════════════════════════════════════════
 // Files Section — Pinterest-like attachments with gallery context
 // ══════════════════════════════════════════════════════════════
-function FilesSection({ task, onAttachmentChange }: {
-  task: Task; onAttachmentChange?: () => void
+const GALLERY_FOCUS_KEY = 'hambaft-gallery-focus'
+
+function FilesSection({ task, onAttachmentChange, onNavigate }: {
+  task: Task; onAttachmentChange?: () => void; onNavigate?: (tab: string, id?: string) => void
 }) {
   const [attachments, setAttachments] = useState<TaskAttachment[]>([])
   const [loading, setLoading] = useState(false)
@@ -1346,11 +1349,7 @@ function FilesSection({ task, onAttachmentChange }: {
   // Responsive column count
   useEffect(() => {
     const update = () => {
-      const w = window.innerWidth
-      if (w >= 1280) setImgCols(5)
-      else if (w >= 1024) setImgCols(4)
-      else if (w >= 640) setImgCols(3)
-      else setImgCols(2)
+      setImgCols(getAttachmentColumnCount(window.innerWidth))
     }
     update()
     window.addEventListener('resize', update)
@@ -1406,7 +1405,7 @@ function FilesSection({ task, onAttachmentChange }: {
       // Try to create gallery pin for this new image
       try {
         const result = await resp.json()
-        const fileName = result?.message?.file_url ? result.message.name : null
+        const fileName = result?.message?.name || result?.message?.file_name || null
         if (fileName) {
           await createGalleryPin(fileName, 'Task', task.id)
         }
@@ -1446,8 +1445,25 @@ function FilesSection({ task, onAttachmentChange }: {
     } catch { /* silent */ }
   }
 
+  const syncMissingPins = async () => {
+    const missing = attachments.filter((att) => isAttachmentImage(att) && !att.pin_name)
+    if (missing.length === 0) return
+    try {
+      await Promise.allSettled(missing.map((att) => createGalleryPin(att.name, 'Task', task.id)))
+      await fetchAttachments()
+      onAttachmentChange?.()
+    } catch {
+      // best effort
+    }
+  }
+
   const handleDragStart = (fileName: string) => { dragItem.current = fileName }
-  const handleDragOver = (e: React.DragEvent, targetName: string, items: TaskAttachment[], setter: (a: TaskAttachment[]) => void) => {
+  const handleDragOver = (
+    e: React.DragEvent,
+    targetName: string,
+    items: TaskAttachment[],
+    setter: React.Dispatch<React.SetStateAction<TaskAttachment[]>>,
+  ) => {
     e.preventDefault()
     if (!dragItem.current || dragItem.current === targetName) return
     const fromIdx = items.findIndex(a => a.name === dragItem.current)
@@ -1456,7 +1472,7 @@ function FilesSection({ task, onAttachmentChange }: {
     const newItems = [...items]
     const [moved] = newItems.splice(fromIdx, 1)
     newItems.splice(toIdx, 0, moved)
-    setter(newItems)
+    setter((prev) => mergeAttachmentsWithReorderedImages(prev, newItems))
   }
   const handleDragEnd = (items: TaskAttachment[]) => {
     dragItem.current = null
@@ -1475,10 +1491,25 @@ function FilesSection({ task, onAttachmentChange }: {
     try { return new Date(iso).toLocaleDateString('fa-IR', { month: 'short', day: 'numeric' }) } catch { return iso }
   }
 
-  const isImage = (type: string) => type?.startsWith('image/')
+  const openGalleryContext = (attachment: TaskAttachment) => {
+    if (!attachment.board_id) return
+    try {
+      window.sessionStorage.setItem(
+        GALLERY_FOCUS_KEY,
+        JSON.stringify({
+          boardId: attachment.board_id,
+          sectionId: attachment.section_id || '',
+        }),
+      )
+    } catch {
+      // ignore storage failures
+    }
+    onNavigate?.('gallery')
+  }
 
-  const imageAttachments = attachments.filter(a => isImage(a.file_type))
-  const otherAttachments = attachments.filter(a => !isImage(a.file_type))
+  const imageAttachments = attachments.filter((attachment) => isAttachmentImage(attachment))
+  const otherAttachments = attachments.filter((attachment) => !isAttachmentImage(attachment))
+  const missingGalleryPins = imageAttachments.filter((att) => !att.pin_name)
 
   // Masonry columns
   const imageColumns = useMemo(() => {
@@ -1526,11 +1557,31 @@ function FilesSection({ task, onAttachmentChange }: {
         <>
           {/* Image masonry grid — Pinterest-style */}
           {imageAttachments.length > 0 && (
-            <div>
-              <div className="flex items-center gap-2 mb-2">
-                <BookOpen className="w-3 h-3 text-emerald-500" />
-                <span className="text-[10px] font-black text-[#8D7F72] dark:text-[#9D978B]">تصاویر</span>
-                <span className="text-[8px] font-bold text-[#9D978B]">({imageAttachments.length})</span>
+            <div className="space-y-3 rounded-[28px] border border-[#E6DFD3]/70 bg-white/80 p-3 shadow-[0_14px_48px_rgba(176,134,92,0.08)] dark:border-[#3D4133]/60 dark:bg-[#1B1D16]/85 md:p-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-2xl bg-[#7C8363]/10 text-[#7C8363] dark:bg-[#9ECE9A]/10 dark:text-[#9ECE9A]">
+                  <BookOpen className="h-3.5 w-3.5" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-black text-[#2D3025] dark:text-[#E8ECE0]">گالری تصویری این تسک</span>
+                    <span className="rounded-full bg-[#121411] px-2 py-0.5 text-[8px] font-black text-white dark:bg-[#9ECE9A] dark:text-[#121411]">
+                      {imageAttachments.length.toLocaleString('fa-IR')}
+                    </span>
+                  </div>
+                  <p className="text-[9px] text-[#8D7F72] dark:text-[#9D978B]">
+                    تصویرها به سبک masonry نمایش داده می‌شوند و اگر داخل گالری ساختاربندی شده باشند، بورد و پروژه‌شان هم دیده می‌شود.
+                  </p>
+                </div>
+                {missingGalleryPins.length > 0 && (
+                  <button
+                    onClick={syncMissingPins}
+                    className="mr-auto inline-flex items-center gap-1 rounded-full bg-[#7C8363]/10 px-2.5 py-1 text-[9px] font-bold text-[#7C8363] transition-colors hover:bg-[#7C8363]/15 dark:bg-[#9ECE9A]/10 dark:text-[#9ECE9A] dark:hover:bg-[#9ECE9A]/15"
+                  >
+                    <Pin className="h-3 w-3" />
+                    افزودن به گالری
+                  </button>
+                )}
               </div>
               <div className="flex gap-2">
                 {imageColumns.map((col, ci) => (
@@ -1550,12 +1601,29 @@ function FilesSection({ task, onAttachmentChange }: {
                         {(att.caption || att.file_name) && (
                           <div className="absolute bottom-0 left-0 right-0 px-2 py-1.5 bg-gradient-to-t from-black/50 to-transparent rounded-b-xl">
                             <span className="text-[8px] text-white/80 truncate block">{att.caption || att.file_name}</span>
+                            {(att.board_title || att.section_title) && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  openGalleryContext(att)
+                                }}
+                                className="mt-1 inline-flex max-w-full items-center gap-1 rounded-full bg-white/12 px-1.5 py-0.5 text-[7px] font-bold text-white/75 hover:bg-white/18"
+                              >
+                                {att.board_title && <span className="truncate">{att.board_title}</span>}
+                                {att.board_title && att.section_title && <span>/</span>}
+                                {att.section_title && <span className="truncate">{att.section_title}</span>}
+                                <ArrowUpRight className="h-2.5 w-2.5 shrink-0" />
+                              </button>
+                            )}
                           </div>
                         )}
                         {/* Gallery pin badge */}
                         {att.pin_name && (
                           <div className="absolute top-1.5 right-1.5">
-                            <span className="text-[7px] font-bold px-1 py-0.5 rounded bg-[#7C8363]/60 dark:bg-[#9ECE9A]/60 text-white">📌 گالری</span>
+                            <span className="inline-flex items-center gap-1 rounded-full bg-[#7C8363]/70 px-1.5 py-0.5 text-[7px] font-bold text-white dark:bg-[#9ECE9A]/70 dark:text-[#121411]">
+                              <Pin className="h-2.5 w-2.5" />
+                              گالری
+                            </span>
                           </div>
                         )}
                         {/* Action buttons */}
@@ -1664,9 +1732,18 @@ function FilesSection({ task, onAttachmentChange }: {
                   <div>
                     <span className="text-[11px] font-bold text-white block">{lightboxAtt.caption || lightboxAtt.file_name}</span>
                     {lightboxAtt.pin_name && (
-                      <span className="text-[8px] text-white/50 block mt-0.5">📌 در گالری</span>
-                    )}
-                  </div>
+                        <button
+                          onClick={() => openGalleryContext(lightboxAtt)}
+                          className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-white/10 px-2 py-1 text-[8px] text-white/70 hover:bg-white/15"
+                        >
+                          <Pin className="h-3 w-3" />
+                          {lightboxAtt.section_title
+                            ? `در ${lightboxAtt.board_title || 'گالری'} / ${lightboxAtt.section_title}`
+                            : `در ${lightboxAtt.board_title || 'گالری'}`}
+                          <ArrowUpRight className="h-3 w-3" />
+                        </button>
+                      )}
+                    </div>
                   <div className="flex items-center gap-2">
                     <a href={lightboxAtt.file_url} download target="_blank" rel="noopener noreferrer"
                       className="p-1.5 rounded-lg bg-white/10 text-white hover:bg-white/20 cursor-pointer"><Download className="w-3.5 h-3.5" /></a>

@@ -8,6 +8,7 @@ import frappe
 from frappe import _
 from frappe.utils import now_datetime, getdate, today, cint, flt
 from .settings_contract import SETTINGS_FIELDS, get_supported_settings_fields, normalize_settings_update
+from .gallery_mapping import is_gallery_image_file, plan_gallery_scope
 from .dashboard_home import (
     build_finance_snapshot,
     build_summary_metrics,
@@ -4295,42 +4296,45 @@ def _get_or_create_section(project_name, board_name, user):
 def _resolve_pin_scope(source_doctype, source_name, user):
     """Given a source entity, resolve which board and section a pin should go to.
     Returns (board_name, section_name, is_orphan)."""
-    board_name = None
-    section_name = None
-    is_orphan = False
+    board_goal = None
+    section_project = None
+    is_orphan = True
 
     if source_doctype == "Task" and source_name:
-        task = frappe.db.get_value("Task", source_name, ["project", "goal", "title"], as_dict=True)
+        task = frappe.db.get_value("Task", source_name, ["project", "goal"], as_dict=True)
         if not task:
-            is_orphan = True
             return (None, None, True)
-        goal_name = task.goal
-        project_name = task.project
-        # If task has no goal but project does, inherit from project
-        if not goal_name and project_name:
-            goal_name = frappe.db.get_value("Hambaft Project", project_name, "goal")
-        if goal_name:
-            board_name = _get_or_create_board(goal_name, user)
-            if project_name:
-                section_name = _get_or_create_section(project_name, board_name, user)
-        else:
-            is_orphan = True
-
+        project_goal = None
+        if task.project:
+            project_goal = frappe.db.get_value("Hambaft Project", task.project, "goal")
+        board_goal, section_project, is_orphan = plan_gallery_scope(
+            source_doctype,
+            source_name=source_name,
+            task_goal=task.goal,
+            task_project=task.project,
+            project_goal=project_goal,
+        )
     elif source_doctype == "Hambaft Project" and source_name:
-        proj = frappe.db.get_value("Hambaft Project", source_name, ["goal", "title"], as_dict=True)
-        if proj and proj.goal:
-            board_name = _get_or_create_board(proj.goal, user)
-            # Project images are board-level, NOT in section
-        elif proj:
-            is_orphan = True
-
+        project_goal = frappe.db.get_value("Hambaft Project", source_name, "goal")
+        board_goal, section_project, is_orphan = plan_gallery_scope(
+            source_doctype,
+            source_name=source_name,
+            project_goal=project_goal,
+        )
     elif source_doctype == "Goal" and source_name:
-        board_name = _get_or_create_board(source_name, user)
+        board_goal, section_project, is_orphan = plan_gallery_scope(
+            source_doctype,
+            source_name=source_name,
+        )
 
-    else:
-        is_orphan = True
+    if is_orphan or not board_goal:
+        return (None, None, True)
 
-    return (board_name, section_name, is_orphan)
+    board_name = _get_or_create_board(board_goal, user)
+    section_name = None
+    if section_project:
+        section_name = _get_or_create_section(section_project, board_name, user)
+    return (board_name, section_name, False)
 
 
 def _sync_pin_counts():
@@ -4361,7 +4365,11 @@ def on_file_after_insert(doc, method=None):
     Hooked via doc_events in hooks.py.
     Silently skips if gallery tables don't exist yet.
     """
-    if not doc or not doc.file_type or doc.file_type not in IMAGE_TYPES:
+    if not doc or not is_gallery_image_file(
+        getattr(doc, "file_type", None),
+        getattr(doc, "file_name", None),
+        getattr(doc, "file_url", None),
+    ):
         return
     if not doc.attached_to_doctype or not doc.attached_to_name:
         return
@@ -4383,7 +4391,7 @@ def on_file_after_insert(doc, method=None):
     except Exception:
         return
 
-    if not user or user != frappe.session.user:
+    if not user:
         return
 
     # Skip if pin already exists for this file
@@ -4391,12 +4399,35 @@ def on_file_after_insert(doc, method=None):
         return
 
     try:
+        previous_user = frappe.session.user
+        if previous_user != user:
+            frappe.set_user(user)
         create_gallery_pin(doc.name, source_doctype=doc.attached_to_doctype, source_name=doc.attached_to_name)
     except Exception as e:
         frappe.log_error(
             f"Gallery auto-pin failed for File {doc.name} attached to {doc.attached_to_doctype}/{doc.attached_to_name}: {e}",
             "Gallery Auto-Pin"
         )
+    finally:
+        if frappe.session.user != previous_user:
+            frappe.set_user(previous_user)
+
+
+def on_file_on_trash(doc, method=None):
+    """Keep gallery pins in sync when a File is deleted outside gallery/task APIs."""
+    if not doc or not getattr(doc, "name", None):
+        return
+    if not _gallery_tables_exist():
+        return
+    try:
+        pin_names = frappe.get_all("Hambaft Gallery Pin", filters={"file": doc.name}, pluck="name")
+        for pin_name in pin_names:
+            frappe.delete_doc("Hambaft Gallery Pin", pin_name, force=True)
+        if pin_names:
+            _sync_pin_counts()
+            frappe.db.commit()
+    except Exception as e:
+        frappe.log_error(f"Gallery file trash cleanup failed for File {doc.name}: {e}", "Gallery File Cleanup")
 
 
 @frappe.whitelist()
@@ -4796,23 +4827,39 @@ def get_task_attachments(task_name):
             try:
                 pin = frappe.db.get_value("Hambaft Gallery Pin",
                     {"file": f.name, "user": user},
-                    ["name", "sort_order", "caption"], as_dict=True)
+                    ["name", "sort_order", "caption", "board", "section"], as_dict=True)
                 if pin:
                     f["pin_name"] = pin.name
                     f["sort_order"] = pin.sort_order
                     f["caption"] = pin.caption
+                    f["board_id"] = pin.board or ""
+                    f["section_id"] = pin.section or ""
+                    f["board_title"] = frappe.db.get_value("Hambaft Gallery Board", pin.board, "title") if pin.board else ""
+                    f["section_title"] = frappe.db.get_value("Hambaft Gallery Section", pin.section, "title") if pin.section else ""
                 else:
                     f["pin_name"] = None
                     f["sort_order"] = 0
                     f["caption"] = ""
+                    f["board_id"] = ""
+                    f["section_id"] = ""
+                    f["board_title"] = ""
+                    f["section_title"] = ""
             except Exception:
                 f["pin_name"] = None
                 f["sort_order"] = 0
                 f["caption"] = ""
+                f["board_id"] = ""
+                f["section_id"] = ""
+                f["board_title"] = ""
+                f["section_title"] = ""
         else:
             f["pin_name"] = None
             f["sort_order"] = 0
             f["caption"] = ""
+            f["board_id"] = ""
+            f["section_id"] = ""
+            f["board_title"] = ""
+            f["section_title"] = ""
 
     # Sort by sort_order then creation
     files.sort(key=lambda x: (x.get("sort_order", 0), x.get("creation", "")))
@@ -4897,21 +4944,23 @@ def sync_gallery_from_existing_files():
         return _api_response({"synced": 0, "skipped": 0, "errors": [], "total_files": 0, "gallery_not_ready": True,
                               "message": "Gallery tables don't exist yet. Run bench migrate first."})
     user = frappe.session.user
-    img_ph = ",".join(["%s"] * len(IMAGE_TYPES))
     count = 0
     errors = []
     skipped = 0
 
     # 1. Task images
     task_files = frappe.db.sql("""
-        SELECT f.name, t.name as task_name, t.title as task_title,
+        SELECT f.name, f.file_type, f.file_name, f.file_url,
+               t.name as task_name, t.title as task_title,
                t.project, t.goal
         FROM `tabFile` f
         JOIN `tabTask` t ON f.attached_to_name = t.name AND f.attached_to_doctype = 'Task'
-        WHERE t.user = %s AND f.file_type IN ({ph})
-    """.format(ph=img_ph), (user, *IMAGE_TYPES), as_dict=True)
+        WHERE t.user = %s
+    """, user, as_dict=True)
 
     for row in task_files:
+        if not is_gallery_image_file(row.file_type, row.file_name, row.file_url):
+            continue
         if frappe.db.exists("Hambaft Gallery Pin", {"file": row.name, "user": user}):
             skipped += 1
             continue
@@ -4923,13 +4972,16 @@ def sync_gallery_from_existing_files():
 
     # 2. Project images
     proj_files = frappe.db.sql("""
-        SELECT f.name, p.name as proj_name, p.title as proj_title, p.goal
+        SELECT f.name, f.file_type, f.file_name, f.file_url,
+               p.name as proj_name, p.title as proj_title, p.goal
         FROM `tabFile` f
         JOIN `tabHambaft Project` p ON f.attached_to_name = p.name AND f.attached_to_doctype = 'Hambaft Project'
-        WHERE p.user = %s AND f.file_type IN ({ph})
-    """.format(ph=img_ph), (user, *IMAGE_TYPES), as_dict=True)
+        WHERE p.user = %s
+    """, user, as_dict=True)
 
     for row in proj_files:
+        if not is_gallery_image_file(row.file_type, row.file_name, row.file_url):
+            continue
         if frappe.db.exists("Hambaft Gallery Pin", {"file": row.name, "user": user}):
             skipped += 1
             continue
@@ -4941,16 +4993,18 @@ def sync_gallery_from_existing_files():
 
     # 3. Goal images
     goal_files = frappe.db.sql("""
-        SELECT f.name, g.name as goal_name, g.title as goal_title
+        SELECT f.name, f.file_type, f.file_name, f.file_url,
+               g.name as goal_name, g.title as goal_title
         FROM `tabFile` f
         JOIN `tabGoal` g ON f.attached_to_name = g.name AND f.attached_to_doctype = 'Goal'
-        WHERE g.user = %s AND f.file_type IN ({ph})
-    """.format(ph=img_ph), (user, *IMAGE_TYPES), as_dict=True)
+        WHERE g.user = %s
+    """, user, as_dict=True)
 
     for row in goal_files:
+        if not is_gallery_image_file(row.file_type, row.file_name, row.file_url):
+            continue
         if frappe.db.exists("Hambaft Gallery Pin", {"file": row.name, "user": user}):
             skipped += 1
-            continue
             continue
         try:
             create_gallery_pin(row.name, source_doctype="Goal", source_name=row.goal_name)

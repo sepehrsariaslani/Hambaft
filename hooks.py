@@ -28,6 +28,7 @@ website_route_rules = [
 doc_events = {
     "File": {
         "after_insert": "hambaft.hambaft.api.on_file_after_insert",
+        "on_trash": "hambaft.hambaft.api.on_file_on_trash",
     },
 }
 
