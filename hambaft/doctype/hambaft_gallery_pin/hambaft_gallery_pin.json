@@ -1,0 +1,50 @@
+{
+  "actions": [],
+  "autoname": "format:GP-{#####}",
+  "creation": "2025-01-01 00:00:00",
+  "doctype": "DocType",
+  "engine": "InnoDB",
+  "field_order": [
+    "user", "file", "image_url", "image_name", "image_width", "image_height",
+    "board", "section", "sort_order",
+    "column_break_1",
+    "source_type", "source_doctype", "source_name", "source_title",
+    "caption", "note", "is_orphan"
+  ],
+  "fields": [
+    {"fieldname": "user", "fieldtype": "Link", "options": "User", "required": 1, "in_list_view": 1, "in_standard_filter": 1},
+    {"fieldname": "file", "fieldtype": "Link", "options": "File", "in_list_view": 1, "description": "Reference to the File (asset source)"},
+    {"fieldname": "image_url", "fieldtype": "Data", "in_list_view": 1, "description": "Cached URL from the File record"},
+    {"fieldname": "image_name", "fieldtype": "Data", "description": "Original file name"},
+    {"fieldname": "image_width", "fieldtype": "Int", "description": "Image width in pixels (for masonry layout)"},
+    {"fieldname": "image_height", "fieldtype": "Int", "description": "Image height in pixels (for masonry layout)"},
+    {"fieldname": "board", "fieldtype": "Link", "options": "Hambaft Gallery Board", "in_list_view": 1, "in_standard_filter": 1, "description": "Board this pin belongs to (required unless is_orphan)"},
+    {"fieldname": "section", "fieldtype": "Link", "options": "Hambaft Gallery Section", "in_standard_filter": 1, "description": "Section (project) — null means board-level pin"},
+    {"fieldname": "sort_order", "fieldtype": "Int", "default": "0", "in_list_view": 1},
+    {"fieldname": "column_break_1", "fieldtype": "Column Break"},
+    {"fieldname": "source_type", "fieldtype": "Select", "options": "Task\nHambaft Project\nHambaft Goal\ndirect", "in_list_view": 1, "description": "What entity originally owned this image"},
+    {"fieldname": "source_doctype", "fieldtype": "Data", "description": "Doctype of the source entity"},
+    {"fieldname": "source_name", "fieldtype": "Data", "description": "Name/ID of the source entity", "in_standard_filter": 1},
+    {"fieldname": "source_title", "fieldtype": "Data", "in_list_view": 1, "description": "Title of the source entity for display"},
+    {"fieldname": "caption", "fieldtype": "Small Text", "description": "User-editable caption for the pin"},
+    {"fieldname": "note", "fieldtype": "Small Text", "description": "Internal note"},
+    {"fieldname": "is_orphan", "fieldtype": "Check", "default": "0", "description": "Pin has no board/section (uncategorized)"}
+  ],
+  "index_web_pages_for_search": 0,
+  "is_submittable": 0,
+  "issingle": 0,
+  "istable": 0,
+  "links": [],
+  "modified": "2025-01-01 00:00:00",
+  "module": "Hambaft",
+  "name": "Hambaft Gallery Pin",
+  "naming_rule": "Expression (old style)",
+  "owner": "Administrator",
+  "permissions": [
+    {"create": 1, "delete": 1, "email": 0, "export": 0, "print": 0, "read": 1, "report": 0, "role": "All", "share": 0, "write": 1}
+  ],
+  "sort_field": "sort_order",
+  "sort_order": "ASC",
+  "states": [],
+  "title_field": "image_name"
+}

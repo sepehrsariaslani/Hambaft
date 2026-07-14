@@ -4218,272 +4218,307 @@ def delete_task_attachment(file_name):
     return _api_response({"ok": True})
 
 
-# ─── Gallery Domain ──────────────────────────────────────────
+# ─── Gallery Domain (Hambaft Gallery Board / Section / Pin) ────
 
 IMAGE_TYPES = ("image/jpeg", "image/png", "image/gif", "image/webp", "image/svg+xml", "image/bmp")
 
 
+def _get_or_create_board(goal_name, user):
+    """Get existing board for a goal, or create one. Returns board name."""
+    if not goal_name:
+        return None
+    existing = frappe.db.get_value("Hambaft Gallery Board", {"goal": goal_name, "user": user}, "name")
+    if existing:
+        return existing
+    goal_title = frappe.db.get_value("Hambaft Goal", goal_name, "title") or goal_name
+    board = frappe.get_doc({
+        "doctype": "Hambaft Gallery Board",
+        "user": user,
+        "goal": goal_name,
+        "title": goal_title,
+        "is_auto_created": 1,
+        "sort_order": 0,
+    })
+    board.insert(ignore_permissions=True)
+    frappe.db.commit()
+    return board.name
+
+
+def _get_or_create_section(project_name, board_name, user):
+    """Get existing section for a project, or create one. Returns section name."""
+    if not project_name or not board_name:
+        return None
+    existing = frappe.db.get_value("Hambaft Gallery Section", {"project": project_name, "user": user}, "name")
+    if existing:
+        # Make sure it's in the right board (project may have moved goals)
+        frappe.db.set_value("Hambaft Gallery Section", existing, "board", board_name)
+        return existing
+    proj_title = frappe.db.get_value("Hambaft Project", project_name, "title") or project_name
+    # Get max sort order
+    max_sort = frappe.db.sql(
+        "SELECT COALESCE(MAX(sort_order),-1) FROM `tabHambaft Gallery Section` WHERE board=%s", board_name
+    )[0][0] or -1
+    section = frappe.get_doc({
+        "doctype": "Hambaft Gallery Section",
+        "user": user,
+        "board": board_name,
+        "project": project_name,
+        "title": proj_title,
+        "sort_order": max_sort + 1,
+        "is_auto_created": 1,
+    })
+    section.insert(ignore_permissions=True)
+    frappe.db.commit()
+    return section.name
+
+
+def _resolve_pin_scope(source_doctype, source_name, user):
+    """Given a source entity, resolve which board and section a pin should go to.
+    Returns (board_name, section_name, is_orphan)."""
+    board_name = None
+    section_name = None
+    is_orphan = False
+
+    if source_doctype == "Task" and source_name:
+        task = frappe.db.get_value("Task", source_name, ["project", "goal", "title"], as_dict=True)
+        if not task:
+            is_orphan = True
+            return (None, None, True)
+        goal_name = task.goal
+        project_name = task.project
+        # If task has no goal but project does, inherit from project
+        if not goal_name and project_name:
+            goal_name = frappe.db.get_value("Hambaft Project", project_name, "goal")
+        if goal_name:
+            board_name = _get_or_create_board(goal_name, user)
+            if project_name:
+                section_name = _get_or_create_section(project_name, board_name, user)
+        else:
+            is_orphan = True
+
+    elif source_doctype == "Hambaft Project" and source_name:
+        proj = frappe.db.get_value("Hambaft Project", source_name, ["goal", "title"], as_dict=True)
+        if proj and proj.goal:
+            board_name = _get_or_create_board(proj.goal, user)
+            # Project images are board-level, NOT in section
+        elif proj:
+            is_orphan = True
+
+    elif source_doctype == "Hambaft Goal" and source_name:
+        board_name = _get_or_create_board(source_name, user)
+
+    else:
+        is_orphan = True
+
+    return (board_name, section_name, is_orphan)
+
+
+def _sync_pin_counts():
+    """Update cached pin counts on boards and sections."""
+    for board in frappe.get_all("Hambaft Gallery Board", fields=["name"]):
+        count = frappe.db.sql(
+            "SELECT COUNT(*) FROM `tabHambaft Gallery Pin` WHERE board=%s AND is_orphan=0",
+            board.name
+        )[0][0]
+        sec_count = frappe.db.sql(
+            "SELECT COUNT(*) FROM `tabHambaft Gallery Section` WHERE board=%s",
+            board.name
+        )[0][0]
+        frappe.db.set_value("Hambaft Gallery Board", board.name, {
+            "pin_count": count,
+            "section_count": sec_count,
+        })
+    for section in frappe.get_all("Hambaft Gallery Section", fields=["name"]):
+        count = frappe.db.sql(
+            "SELECT COUNT(*) FROM `tabHambaft Gallery Pin` WHERE section=%s",
+            section.name
+        )[0][0]
+        frappe.db.set_value("Hambaft Gallery Section", section.name, "pin_count", count)
+
+
 @frappe.whitelist()
 def get_gallery_boards():
-    """Get all gallery boards (one per Goal) with sections and pins.
-    
-    Returns:
-      boards: [{ board_id, board_title, cover_url, pin_count, sections: [{ section_id, section_title, pins: [pin] }], board_pins: [pin] }]
-      orphan_pins: [pin] — images with no goal/project
-    """
+    """Get all gallery boards with sections and pins for the current user."""
     _check_auth()
     user = frappe.session.user
-    img_placeholders = ",".join(["%s"] * len(IMAGE_TYPES))
-    
-    # ── 1. Task image pins ──
-    task_pins = frappe.db.sql("""
-        SELECT f.name as file_name, f.file_url, f.file_size, f.file_type, f.file_name as image_name,
-               t.name as source_id, t.title as source_title,
-               t.project as section_id, t.goal as board_id,
-               p.title as section_title, g.title as board_title
-        FROM `tabFile` f
-        JOIN `tabTask` t ON f.attached_to_name = t.name AND f.attached_to_doctype = 'Task'
-        LEFT JOIN `tabHambaft Project` p ON t.project = p.name
-        LEFT JOIN `tabGoal` g ON t.goal = g.name OR (p.goal = g.name AND t.goal IS NULL)
-        WHERE t.user = %s AND f.file_type IN ({img_ph})
-    """.format(img_ph=img_placeholders), (user, *IMAGE_TYPES), as_dict=True)
 
-    # ── 2. Project image pins (board-level) ──
-    proj_pins = frappe.db.sql("""
-        SELECT f.name as file_name, f.file_url, f.file_size, f.file_type, f.file_name as image_name,
-               p.name as source_id, p.title as source_title,
-               p.goal as board_id, g.title as board_title,
-               'project' as pin_scope
-        FROM `tabFile` f
-        JOIN `tabHambaft Project` p ON f.attached_to_name = p.name AND f.attached_to_doctype = 'Hambaft Project'
-        LEFT JOIN `tabGoal` g ON p.goal = g.name
-        WHERE p.user = %s AND f.file_type IN ({img_ph})
-    """.format(img_ph=img_placeholders), (user, *IMAGE_TYPES), as_dict=True)
-
-    # ── 3. Goal image pins (board-level) ──
-    goal_pins = frappe.db.sql("""
-        SELECT f.name as file_name, f.file_url, f.file_size, f.file_type, f.file_name as image_name,
-               g.name as source_id, g.title as source_title,
-               g.name as board_id, g.title as board_title,
-               'goal' as pin_scope
-        FROM `tabFile` f
-        JOIN `tabGoal` g ON f.attached_to_name = g.name AND f.attached_to_doctype = 'Goal'
-        WHERE g.user = %s AND f.file_type IN ({img_ph})
-    """.format(img_ph=img_placeholders), (user, *IMAGE_TYPES), as_dict=True)
-
-    # ── 4. Pin sort orders (persistent) ──
-    sort_orders = frappe.get_all(
-        "Hambaft Gallery Pin Order",
+    boards = frappe.get_all(
+        "Hambaft Gallery Board",
         filters={"user": user},
-        fields=["file_name", "scope_type", "scope_id", "sort_order"],
+        fields=["name", "title", "goal", "cover_file", "sort_order", "pin_count", "section_count"],
+        order_by="sort_order asc, title asc",
     )
-    sort_map = {}  # file_name -> {scope_type, scope_id, sort_order}
-    for s in sort_orders:
-        sort_map[s.file_name] = s
 
-    # ── 5. Assemble boards ──
-    boards_map = {}  # board_id -> board dict
-    orphan_pins = []
+    result_boards = []
+    for board in boards:
+        # Sections
+        sections = frappe.get_all(
+            "Hambaft Gallery Section",
+            filters={"board": board.name},
+            fields=["name", "title", "project", "sort_order", "pin_count"],
+            order_by="sort_order asc, title asc",
+        )
+        section_list = []
+        for sec in sections:
+            pins = frappe.get_all(
+                "Hambaft Gallery Pin",
+                filters={"section": sec.name},
+                fields=["name", "file", "image_url", "image_name", "image_width", "image_height",
+                         "source_type", "source_doctype", "source_name", "source_title",
+                         "caption", "sort_order"],
+                order_by="sort_order asc, creation asc",
+            )
+            sec["pins"] = pins
+            section_list.append(sec)
 
-    def _make_pin(row, source_type, scope="section"):
-        pin = {
-            "file_name": row.file_name,
-            "file_url": row.file_url,
-            "file_size": row.file_size or 0,
-            "file_type": row.file_type,
-            "image_name": row.image_name,
-            "source_type": source_type,
-            "source_id": row.source_id,
-            "source_title": row.source_title,
-        }
-        # Apply persistent sort order
-        if row.file_name in sort_map:
-            pin["sort_order"] = sort_map[row.file_name]["sort_order"]
-        else:
-            pin["sort_order"] = 0
-        return pin
+        # Board-level pins (no section)
+        board_pins = frappe.get_all(
+            "Hambaft Gallery Pin",
+            filters={"board": board.name, "section": ["is", "not set"], "is_orphan": 0},
+            fields=["name", "file", "image_url", "image_name", "image_width", "image_height",
+                     "source_type", "source_doctype", "source_name", "source_title",
+                     "caption", "sort_order"],
+            order_by="sort_order asc, creation asc",
+        )
 
-    # Process task pins
-    for row in task_pins:
-        pin = _make_pin(row, "task")
-        board_id = row.board_id
-        section_id = row.section_id
+        # Cover image
+        cover_url = None
+        if board.cover_file:
+            cover_url = frappe.db.get_value("File", board.cover_file, "file_url")
+        if not cover_url and (board_pins or any(s["pins"] for s in section_list)):
+            first_pin = board_pins[0] if board_pins else next((s["pins"][0] for s in section_list if s["pins"]), None)
+            if first_pin:
+                cover_url = first_pin.get("image_url")
 
-        if board_id:
-            if board_id not in boards_map:
-                boards_map[board_id] = {
-                    "board_id": board_id,
-                    "board_title": row.board_title or "بدون عنوان",
-                    "sections": {},
-                    "board_pins": [],
-                }
-            if section_id:
-                board = boards_map[board_id]
-                if section_id not in board["sections"]:
-                    board["sections"][section_id] = {
-                        "section_id": section_id,
-                        "section_title": row.section_title or "بدون پروژه",
-                        "pins": [],
-                    }
-                board["sections"][section_id]["pins"].append(pin)
-            else:
-                boards_map[board_id]["board_pins"].append(pin)
-        else:
-            orphan_pins.append(pin)
+        result_boards.append({
+            "board_id": board.name,
+            "board_title": board.title,
+            "goal_id": board.goal,
+            "cover_url": cover_url,
+            "pin_count": board.pin_count or 0,
+            "sections": section_list,
+            "board_pins": board_pins,
+        })
 
-    # Process project pins (board-level)
-    for row in proj_pins:
-        pin = _make_pin(row, "project")
-        board_id = row.board_id
-        if board_id:
-            if board_id not in boards_map:
-                boards_map[board_id] = {
-                    "board_id": board_id,
-                    "board_title": row.board_title or "بدون عنوان",
-                    "sections": {},
-                    "board_pins": [],
-                }
-            boards_map[board_id]["board_pins"].append(pin)
-        else:
-            orphan_pins.append(pin)
+    # Orphan pins
+    orphan_pins = frappe.get_all(
+        "Hambaft Gallery Pin",
+        filters={"user": user, "is_orphan": 1},
+        fields=["name", "file", "image_url", "image_name", "image_width", "image_height",
+                 "source_type", "source_doctype", "source_name", "source_title",
+                 "caption", "sort_order"],
+        order_by="sort_order asc, creation asc",
+    )
 
-    # Process goal pins (board-level)
-    for row in goal_pins:
-        pin = _make_pin(row, "goal")
-        board_id = row.board_id
-        if board_id:
-            if board_id not in boards_map:
-                boards_map[board_id] = {
-                    "board_id": board_id,
-                    "board_title": row.board_title or "بدون عنوان",
-                    "sections": {},
-                    "board_pins": [],
-                }
-            boards_map[board_id]["board_pins"].append(pin)
-        else:
-            orphan_pins.append(pin)
-
-    # Sort pins within each scope by sort_order (0 = no order = append)
-    def _sort_pins(pins):
-        return sorted(pins, key=lambda p: p.get("sort_order", 0) or 0)
-
-    boards = []
-    for board_id, board in boards_map.items():
-        sections = []
-        for section_id, section in board["sections"].items():
-            section["pins"] = _sort_pins(section["pins"])
-            sections.append(section)
-        board_result = {
-            "board_id": board["board_id"],
-            "board_title": board["board_title"],
-            "cover_url": (board["board_pins"] + [s["pins"][0] for s in sections if s["pins"]])[0]["file_url"] if (board["board_pins"] or any(s["pins"] for s in sections)) else None,
-            "pin_count": len(board["board_pins"]) + sum(len(s["pins"]) for s in sections),
-            "board_pins": _sort_pins(board["board_pins"]),
-            "sections": sections,
-        }
-        boards.append(board_result)
-
-    # Sort boards by title
-    boards.sort(key=lambda b: b["board_title"])
-    orphan_pins = _sort_pins(orphan_pins)
-
-    return _api_response({"boards": boards, "orphan_pins": orphan_pins})
+    return _api_response({"boards": result_boards, "orphan_pins": orphan_pins})
 
 
 @frappe.whitelist()
-def reorder_gallery_pins(items):
-    """Reorder pins within a scope. items = [{ file_name, sort_order }]
-    scope_type and scope_id are looked up from existing pin orders or the File record.
-    """
+def get_gallery_board_detail(board_name):
+    """Get a single board with full details."""
     _check_auth()
     user = frappe.session.user
-    if isinstance(items, str):
-        items = json.loads(items)
-    
-    for item in items:
-        file_name = item.get("file_name")
-        sort_order = cint(item.get("sort_order", 0))
-        scope_type = item.get("scope_type", "board")
-        scope_id = item.get("scope_id", "")
-        
-        if not file_name:
-            continue
-        
-        existing = frappe.db.get_value("Hambaft Gallery Pin Order", 
-            {"file_name": file_name, "user": user}, "name")
-        
-        if existing:
-            frappe.db.set_value("Hambaft Gallery Pin Order", existing, {
-                "sort_order": sort_order,
-                "scope_type": scope_type,
-                "scope_id": scope_id,
-            })
-        else:
-            # Get file_url for the pin order record
-            file_url = frappe.db.get_value("File", file_name, "file_url") or ""
-            doc = frappe.get_doc({
-                "doctype": "Hambaft Gallery Pin Order",
-                "user": user,
-                "file_name": file_name,
-                "file_url": file_url,
-                "scope_type": scope_type,
-                "scope_id": scope_id,
-                "sort_order": sort_order,
-            })
-            doc.insert(ignore_permissions=True)
-    
+    board = frappe.get_doc("Hambaft Gallery Board", board_name)
+    if board.user != user:
+        frappe.throw(_("Permission denied"), frappe.PermissionError)
+    # Reuse get_gallery_boards logic for consistency
+    data = get_gallery_boards()
+    for b in (data.get("data", {}).get("boards") or []):
+        if b["board_id"] == board_name:
+            return _api_response({"board": b})
+    return _api_response({"board": None})
+
+
+@frappe.whitelist()
+def create_gallery_pin(file_name, source_doctype=None, source_name=None, board=None, section=None, caption=None):
+    """Create a gallery pin for an existing File record."""
+    _check_auth()
+    user = frappe.session.user
+
+    # Verify file exists and belongs to user
+    file_doc = frappe.get_doc("File", file_name)
+    if not file_doc:
+        frappe.throw(_("File not found"))
+
+    # Prevent duplicate pins for same file+user
+    existing = frappe.db.get_value("Hambaft Gallery Pin", {"file": file_name, "user": user}, "name")
+    if existing:
+        return _api_response({"pin_name": existing, "created": False})
+
+    # Get image metadata
+    image_url = file_doc.file_url or ""
+    image_name = file_doc.file_name or ""
+
+    # Resolve scope from source entity
+    is_orphan = False
+    if source_doctype and source_name:
+        board_name, section_name, is_orphan = _resolve_pin_scope(source_doctype, source_name, user)
+        source_title = frappe.db.get_value(source_doctype, source_name, "title") if frappe.db.exists(source_doctype, source_name) else ""
+    else:
+        board_name = board
+        section_name = section
+        source_title = ""
+        is_orphan = not board_name
+
+    # Get max sort order in scope
+    if section_name:
+        max_sort = frappe.db.sql(
+            "SELECT COALESCE(MAX(sort_order),-1) FROM `tabHambaft Gallery Pin` WHERE section=%s AND user=%s",
+            (section_name, user)
+        )[0][0] or -1
+    elif board_name:
+        max_sort = frappe.db.sql(
+            "SELECT COALESCE(MAX(sort_order),-1) FROM `tabHambaft Gallery Pin` WHERE board=%s AND section IS NULL AND user=%s",
+            (board_name, user)
+        )[0][0] or -1
+    else:
+        max_sort = frappe.db.sql(
+            "SELECT COALESCE(MAX(sort_order),-1) FROM `tabHambaft Gallery Pin` WHERE is_orphan=1 AND user=%s",
+            user
+        )[0][0] or -1
+
+    pin = frappe.get_doc({
+        "doctype": "Hambaft Gallery Pin",
+        "user": user,
+        "file": file_name,
+        "image_url": image_url,
+        "image_name": image_name,
+        "board": board_name or None,
+        "section": section_name or None,
+        "sort_order": max_sort + 1,
+        "source_type": source_doctype or "direct",
+        "source_doctype": source_doctype or None,
+        "source_name": source_name or None,
+        "source_title": source_title or "",
+        "caption": caption or "",
+        "is_orphan": 1 if is_orphan else 0,
+    })
+    pin.insert(ignore_permissions=True)
     frappe.db.commit()
-    return _api_response({"ok": True})
+
+    # Update board cover if no cover
+    if board_name and not frappe.db.get_value("Hambaft Gallery Board", board_name, "cover_file"):
+        frappe.db.set_value("Hambaft Gallery Board", board_name, "cover_file", file_name)
+
+    _sync_pin_counts()
+    return _api_response({"pin_name": pin.name, "created": True})
 
 
 @frappe.whitelist()
-def reorder_gallery_sections(board_id, section_order):
-    """Reorder sections within a board. section_order = [section_id, ...]"""
+def upload_gallery_image(filedata, filename, doctype=None, docname=None, board=None, section=None, caption=None):
+    """Upload an image and create a gallery pin."""
     _check_auth()
     user = frappe.session.user
-    if isinstance(section_order, str):
-        section_order = json.loads(section_order)
-    # For section ordering, we use a convention: scope_type="section_order", scope_id=board_id
-    # and store section_id in source_id, sort_order is the position
-    for idx, section_id in enumerate(section_order):
-        existing = frappe.db.get_value("Hambaft Gallery Pin Order",
-            {"scope_type": "section_order", "scope_id": board_id, "source_id": section_id, "user": user}, "name")
-        if existing:
-            frappe.db.set_value("Hambaft Gallery Pin Order", existing, "sort_order", idx)
-        else:
-            doc = frappe.get_doc({
-                "doctype": "Hambaft Gallery Pin Order",
-                "user": user,
-                "file_name": "section_order_placeholder",
-                "scope_type": "section_order",
-                "scope_id": board_id,
-                "source_id": section_id,
-                "source_title": section_id,
-                "sort_order": idx,
-            })
-            doc.insert(ignore_permissions=True)
-    frappe.db.commit()
-    return _api_response({"ok": True})
-
-
-@frappe.whitelist()
-def upload_gallery_image(filedata, filename, doctype=None, docname=None):
-    """Upload an image and attach it to a Task/Project/Goal. Auto-creates gallery pin order."""
-    _check_auth()
-    user = frappe.session.user
-    
     import base64
-    
-    # Decode base64 file data
+
     if "," in filedata:
         filedata = filedata.split(",")[1]
-    
     decoded = base64.b64decode(filedata)
-    
+
     # Determine attachment target
-    attach_doctype = doctype or "Task"
+    attach_doctype = doctype or ""
     attach_docname = docname or ""
-    
+
     if doctype == "Goal" and docname:
         if not frappe.db.exists("Hambaft Goal", {"name": docname, "user": user}):
             frappe.throw(_("Permission denied"), frappe.PermissionError)
@@ -4494,221 +4529,377 @@ def upload_gallery_image(filedata, filename, doctype=None, docname=None):
     elif doctype == "Task" and docname:
         if not frappe.db.exists("Task", {"name": docname, "user": user}):
             frappe.throw(_("Permission denied"), frappe.PermissionError)
-    elif not docname:
-        # Direct gallery upload with no target — create a minimal task as container
-        # This is the "orphan" upload case
-        task = frappe.get_doc({
-            "doctype": "Task",
-            "title": filename,
-            "user": user,
-            "status": "inbox",
-        })
-        task.insert(ignore_permissions=True)
-        attach_doctype = "Task"
-        attach_docname = task.name
-    
+
+    # Create the File record
     file_doc = frappe.get_doc({
         "doctype": "File",
         "file_name": filename,
         "content": decoded,
         "is_private": 1,
-        "attached_to_doctype": attach_doctype,
-        "attached_to_name": attach_docname,
     })
+    if attach_doctype and attach_docname:
+        file_doc.attached_to_doctype = attach_doctype
+        file_doc.attached_to_name = attach_docname
+
     file_doc.insert(ignore_permissions=True)
-    
-    # Create gallery pin order entry for persistent sorting
-    scope_type = "orphan"
-    scope_id = "orphan"
-    source_type = attach_doctype
-    source_id = attach_docname
-    source_title = ""
-    
-    if attach_doctype == "Task" and attach_docname:
-        task = frappe.db.get_value("Task", attach_docname, ["project", "goal", "title"], as_dict=True)
-        if task:
-            source_title = task.title
-            if task.project:
-                scope_type = "section"
-                scope_id = task.project
-            elif task.goal:
-                scope_type = "board"
-                scope_id = task.goal
-    elif attach_doctype == "Hambaft Project" and attach_docname:
-        proj = frappe.db.get_value("Hambaft Project", attach_docname, ["goal", "title"], as_dict=True)
-        if proj:
-            source_title = proj.title
-            scope_type = "board"
-            scope_id = proj.goal or "orphan"
-    elif attach_doctype == "Hambaft Goal" and attach_docname:
-        goal = frappe.db.get_value("Hambaft Goal", attach_docname, ["title"], as_dict=True)
-        if goal:
-            source_title = goal.title
-            scope_type = "board"
-            scope_id = attach_docname
-    
-    # Get max sort_order in this scope
-    max_order = frappe.db.sql(
-        "SELECT COALESCE(MAX(sort_order), -1) FROM `tabHambaft Gallery Pin Order` WHERE user=%s AND scope_type=%s AND scope_id=%s",
-        (user, scope_type, scope_id)
-    )[0][0] or -1
-    
-    pin_order = frappe.get_doc({
-        "doctype": "Hambaft Gallery Pin Order",
-        "user": user,
-        "file_name": file_doc.name,
-        "file_url": file_doc.file_url,
-        "scope_type": scope_type,
-        "scope_id": scope_id,
-        "source_type": source_type,
-        "source_id": source_id,
-        "source_title": source_title,
-        "sort_order": max_order + 1,
-        "image_name": filename,
-    })
-    pin_order.insert(ignore_permissions=True)
-    
     frappe.db.commit()
-    
+
+    # Create the Pin
+    source_doctype = attach_doctype if attach_doctype else None
+    source_name = attach_docname if attach_docname else None
+
+    # Override board/section if explicitly provided (for direct gallery upload)
+    pin_board = board
+    pin_section = section
+    if not pin_board and source_doctype and source_name:
+        pin_board, pin_section, _ = _resolve_pin_scope(source_doctype, source_name, user)
+
+    pin_result = create_gallery_pin(
+        file_name=file_doc.name,
+        source_doctype=source_doctype,
+        source_name=source_name,
+        board=pin_board,
+        section=pin_section,
+        caption=caption,
+    )
+
     return _api_response({
         "file_name": file_doc.name,
         "file_url": file_doc.file_url,
         "file_size": file_doc.file_size,
-        "pin_order": pin_order.name,
+        "pin_name": pin_result.get("data", {}).get("pin_name") if isinstance(pin_result, dict) else None,
     })
 
 
 @frappe.whitelist()
-def delete_gallery_pin(file_name):
-    """Delete a gallery pin (file) and its pin order record."""
+def move_gallery_pin(pin_name, board=None, section=None):
+    """Move a pin to a different board/section."""
     _check_auth()
     user = frappe.session.user
-    
-    # Remove pin order
-    frappe.db.delete("Hambaft Gallery Pin Order", {"file_name": file_name, "user": user})
-    
-    # Delete the file
-    if frappe.db.exists("File", file_name):
-        frappe.delete_doc("File", file_name)
-    
+    pin = frappe.get_doc("Hambaft Gallery Pin", pin_name)
+    if pin.user != user:
+        frappe.throw(_("Permission denied"), frappe.PermissionError)
+
+    updates = {}
+    if board is not None:
+        updates["board"] = board or None
+        updates["is_orphan"] = 0 if board else 1
+    if section is not None:
+        updates["section"] = section or None
+
+    if updates:
+        frappe.db.set_value("Hambaft Gallery Pin", pin_name, updates)
+        # Reset sort order to end
+        if section:
+            max_sort = frappe.db.sql(
+                "SELECT COALESCE(MAX(sort_order),-1) FROM `tabHambaft Gallery Pin` WHERE section=%s AND user=%s AND name!=%s",
+                (section, user, pin_name)
+            )[0][0] or -1
+            frappe.db.set_value("Hambaft Gallery Pin", pin_name, "sort_order", max_sort + 1)
+
+    frappe.db.commit()
+    _sync_pin_counts()
+    return _api_response({"ok": True})
+
+
+@frappe.whitelist()
+def reorder_gallery_pins(items):
+    """Reorder pins. items = [{ pin_name, sort_order }]"""
+    _check_auth()
+    user = frappe.session.user
+    if isinstance(items, str):
+        items = json.loads(items)
+    for item in items:
+        pin_name = item.get("pin_name") or item.get("file_name")
+        sort_order = cint(item.get("sort_order", 0))
+        if not pin_name:
+            continue
+        # Verify ownership
+        pin_user = frappe.db.get_value("Hambaft Gallery Pin", pin_name, "user")
+        if pin_user != user:
+            continue
+        frappe.db.set_value("Hambaft Gallery Pin", pin_name, "sort_order", sort_order)
     frappe.db.commit()
     return _api_response({"ok": True})
 
 
 @frappe.whitelist()
-def backfill_gallery_pins():
-    """One-time migration: create pin order records for all existing image attachments.
-    Idempotent — skips files that already have pin order records.
+def reorder_gallery_sections(board_name, section_order):
+    """Reorder sections within a board. section_order = [section_name, ...]"""
+    _check_auth()
+    user = frappe.session.user
+    if isinstance(section_order, str):
+        section_order = json.loads(section_order)
+    for idx, section_name in enumerate(section_order):
+        sec_user = frappe.db.get_value("Hambaft Gallery Section", section_name, "user")
+        if sec_user != user:
+            continue
+        frappe.db.set_value("Hambaft Gallery Section", section_name, "sort_order", idx)
+    frappe.db.commit()
+    return _api_response({"ok": True})
+
+
+@frappe.whitelist()
+def update_gallery_pin_meta(pin_name, caption=None, note=None):
+    """Update pin metadata (caption, note)."""
+    _check_auth()
+    user = frappe.session.user
+    pin_user = frappe.db.get_value("Hambaft Gallery Pin", pin_name, "user")
+    if pin_user != user:
+        frappe.throw(_("Permission denied"), frappe.PermissionError)
+    updates = {}
+    if caption is not None:
+        updates["caption"] = caption
+    if note is not None:
+        updates["note"] = note
+    if updates:
+        frappe.db.set_value("Hambaft Gallery Pin", pin_name, updates)
+    frappe.db.commit()
+    return _api_response({"ok": True})
+
+
+@frappe.whitelist()
+def delete_gallery_pin(pin_name):
+    """Delete a gallery pin (and optionally the File)."""
+    _check_auth()
+    user = frappe.session.user
+    pin = frappe.get_doc("Hambaft Gallery Pin", pin_name)
+    if pin.user != user:
+        frappe.throw(_("Permission denied"), frappe.PermissionError)
+
+    file_name = pin.file
+    board_name = pin.board
+
+    frappe.delete_doc("Hambaft Gallery Pin", pin_name, force=True)
+
+    # Also delete the File
+    if file_name and frappe.db.exists("File", file_name):
+        try:
+            frappe.delete_doc("File", file_name, force=True)
+        except Exception:
+            pass  # File may be referenced elsewhere
+
+    frappe.db.commit()
+    _sync_pin_counts()
+    return _api_response({"ok": True})
+
+
+@frappe.whitelist()
+def get_task_attachments(task_name):
+    """Get all files attached to a task, with gallery pin info."""
+    _check_auth()
+    user = frappe.session.user
+    # Soft owner check
+    if not frappe.db.exists("Task", {"name": task_name, "user": user}):
+        if not frappe.db.exists("Task", task_name):
+            frappe.throw(_("Task {0} not found").format(task_name))
+
+    files = frappe.get_all(
+        "File",
+        filters={"attached_to_doctype": "Task", "attached_to_name": task_name},
+        fields=["name", "file_name", "file_type", "file_url", "file_size", "is_private", "creation"],
+        order_by="creation desc",
+    )
+
+    # Enrich with sort order from gallery pins
+    for f in files:
+        pin = frappe.db.get_value("Hambaft Gallery Pin",
+            {"file": f.name, "user": user},
+            ["name", "sort_order", "caption"], as_dict=True)
+        if pin:
+            f["pin_name"] = pin.name
+            f["sort_order"] = pin.sort_order
+            f["caption"] = pin.caption
+        else:
+            f["pin_name"] = None
+            f["sort_order"] = 0
+            f["caption"] = ""
+
+    # Sort by sort_order then creation
+    files.sort(key=lambda x: (x.get("sort_order", 0), x.get("creation", "")))
+    return _api_response({"attachments": files})
+
+
+@frappe.whitelist()
+def reorder_task_attachments(task_name, items):
+    """Reorder task attachment pins. items = [{ file_name, sort_order }]"""
+    _check_auth()
+    user = frappe.session.user
+    if isinstance(items, str):
+        items = json.loads(items)
+
+    for item in items:
+        file_name = item.get("file_name")
+        sort_order = cint(item.get("sort_order", 0))
+        if not file_name:
+            continue
+        # Ensure pin exists, create if not
+        pin = frappe.db.get_value("Hambaft Gallery Pin",
+            {"file": file_name, "user": user}, "name")
+        if pin:
+            frappe.db.set_value("Hambaft Gallery Pin", pin, "sort_order", sort_order)
+        else:
+            # Auto-create pin for this task file
+            create_gallery_pin(file_name, source_doctype="Task", source_name=task_name)
+
+    frappe.db.commit()
+    return _api_response({"ok": True})
+
+
+@frappe.whitelist()
+def delete_task_attachment(file_name):
+    """Delete an attached file and its gallery pin."""
+    _check_auth()
+    user = frappe.session.user
+    if not frappe.db.exists("File", file_name):
+        frappe.throw(_("File not found"))
+
+    doc = frappe.get_doc("File", file_name)
+    # Soft owner check
+    if doc.attached_to_doctype == "Task":
+        if not frappe.db.exists("Task", {"name": doc.attached_to_name, "user": user}):
+            if not frappe.db.exists("Task", doc.attached_to_name):
+                frappe.throw(_("Task not found"))
+
+    # Remove gallery pin
+    frappe.db.delete("Hambaft Gallery Pin", {"file": file_name, "user": user})
+    # Remove old Pin Order records too (migration compat)
+    frappe.db.delete("Hambaft Gallery Pin Order", {"file_name": file_name, "user": user})
+    frappe.delete_doc("File", file_name, force=True)
+    frappe.db.commit()
+    _sync_pin_counts()
+    return _api_response({"ok": True})
+
+
+@frappe.whitelist()
+def sync_gallery_from_existing_files():
+    """Idempotent migration: sync all existing image attachments into gallery domain.
+    Creates boards, sections, and pins for every image File attached to user's entities.
     """
     _check_auth()
     user = frappe.session.user
-    img_placeholders = ",".join(["%s"] * len(IMAGE_TYPES))
-    
-    # Find all image Files attached to user's entities that don't have pin order records
-    existing_pins = frappe.get_all("Hambaft Gallery Pin Order", filters={"user": user}, pluck="file_name")
-    existing_set = set(existing_pins)
-    
-    # Task images
+    img_ph = ",".join(["%s"] * len(IMAGE_TYPES))
+    count = 0
+
+    # 1. Task images
     task_files = frappe.db.sql("""
-        SELECT f.name, f.file_url, f.file_name as image_name,
-               t.name as source_id, t.title as source_title, t.project, t.goal
+        SELECT f.name, t.name as task_name, t.title as task_title,
+               t.project, t.goal
         FROM `tabFile` f
         JOIN `tabTask` t ON f.attached_to_name = t.name AND f.attached_to_doctype = 'Task'
         WHERE t.user = %s AND f.file_type IN ({ph})
-    """.format(ph=img_placeholders), (user, *IMAGE_TYPES), as_dict=True)
-    
-    count = 0
+    """.format(ph=img_ph), (user, *IMAGE_TYPES), as_dict=True)
+
     for row in task_files:
-        if row.name in existing_set:
+        # Skip if pin already exists
+        if frappe.db.exists("Hambaft Gallery Pin", {"file": row.name, "user": user}):
             continue
-        scope_type = "orphan"
-        scope_id = "orphan"
-        if row.project:
-            scope_type = "section"
-            scope_id = row.project
-        elif row.goal:
-            scope_type = "board"
-            scope_id = row.goal
-        
-        doc = frappe.get_doc({
-            "doctype": "Hambaft Gallery Pin Order",
-            "user": user,
-            "file_name": row.name,
-            "file_url": row.file_url,
-            "scope_type": scope_type,
-            "scope_id": scope_id,
-            "source_type": "Task",
-            "source_id": row.source_id,
-            "source_title": row.source_title,
-            "sort_order": count,
-            "image_name": row.image_name,
-        })
-        doc.insert(ignore_permissions=True)
-        count += 1
-    
-    # Project images
+        try:
+            create_gallery_pin(row.name, source_doctype="Task", source_name=row.task_name)
+            count += 1
+        except Exception:
+            pass
+
+    # 2. Project images
     proj_files = frappe.db.sql("""
-        SELECT f.name, f.file_url, f.file_name as image_name,
-               p.name as source_id, p.title as source_title, p.goal
+        SELECT f.name, p.name as proj_name, p.title as proj_title, p.goal
         FROM `tabFile` f
         JOIN `tabHambaft Project` p ON f.attached_to_name = p.name AND f.attached_to_doctype = 'Hambaft Project'
         WHERE p.user = %s AND f.file_type IN ({ph})
-    """.format(ph=img_placeholders), (user, *IMAGE_TYPES), as_dict=True)
-    
+    """.format(ph=img_ph), (user, *IMAGE_TYPES), as_dict=True)
+
     for row in proj_files:
-        if row.name in existing_set:
+        if frappe.db.exists("Hambaft Gallery Pin", {"file": row.name, "user": user}):
             continue
-        scope_type = "board" if row.goal else "orphan"
-        scope_id = row.goal or "orphan"
-        
-        doc = frappe.get_doc({
-            "doctype": "Hambaft Gallery Pin Order",
-            "user": user,
-            "file_name": row.name,
-            "file_url": row.file_url,
-            "scope_type": scope_type,
-            "scope_id": scope_id,
-            "source_type": "Hambaft Project",
-            "source_id": row.source_id,
-            "source_title": row.source_title,
-            "sort_order": count,
-            "image_name": row.image_name,
-        })
-        doc.insert(ignore_permissions=True)
-        count += 1
-    
-    # Goal images
+        try:
+            create_gallery_pin(row.name, source_doctype="Hambaft Project", source_name=row.proj_name)
+            count += 1
+        except Exception:
+            pass
+
+    # 3. Goal images
     goal_files = frappe.db.sql("""
-        SELECT f.name, f.file_url, f.file_name as image_name,
-               g.name as source_id, g.title as source_title
+        SELECT f.name, g.name as goal_name, g.title as goal_title
         FROM `tabFile` f
         JOIN `tabGoal` g ON f.attached_to_name = g.name AND f.attached_to_doctype = 'Goal'
         WHERE g.user = %s AND f.file_type IN ({ph})
-    """.format(ph=img_placeholders), (user, *IMAGE_TYPES), as_dict=True)
-    
-    for row in goal_files:
-        if row.name in existing_set:
-            continue
-        
-        doc = frappe.get_doc({
-            "doctype": "Hambaft Gallery Pin Order",
-            "user": user,
-            "file_name": row.name,
-            "file_url": row.file_url,
-            "scope_type": "board",
-            "scope_id": row.source_id,
-            "source_type": "Hambaft Goal",
-            "source_id": row.source_id,
-            "source_title": row.source_title,
-            "sort_order": count,
-            "image_name": row.image_name,
-        })
-        doc.insert(ignore_permissions=True)
-        count += 1
-    
-    frappe.db.commit()
-    return _api_response({"created": count, "total_existing": len(existing_set)})
+    """.format(ph=img_ph), (user, *IMAGE_TYPES), as_dict=True)
 
+    for row in goal_files:
+        if frappe.db.exists("Hambaft Gallery Pin", {"file": row.name, "user": user}):
+            continue
+        try:
+            create_gallery_pin(row.name, source_doctype="Hambaft Goal", source_name=row.goal_name)
+            count += 1
+        except Exception:
+            pass
+
+    _sync_pin_counts()
+    frappe.db.commit()
+    return _api_response({"synced": count})
+
+
+@frappe.whitelist()
+def migrate_pin_order_to_domain():
+    """One-time migration: convert old Hambaft Gallery Pin Order records to new domain model.
+    Idempotent — skips if pin already exists for the same file+user.
+    """
+    _check_auth()
+    user = frappe.session.user
+
+    old_records = frappe.get_all("Hambaft Gallery Pin Order",
+        filters={"user": user},
+        fields=["name", "file_name", "file_url", "scope_type", "scope_id",
+                "source_type", "source_id", "source_title", "sort_order", "image_name"])
+
+    count = 0
+    for old in old_records:
+        if not old.file_name or old.file_name == "section_order_placeholder":
+            continue
+        # Skip if pin already exists
+        if frappe.db.exists("Hambaft Gallery Pin", {"file": old.file_name, "user": user}):
+            continue
+
+        # Determine board/section from scope
+        board_name = None
+        section_name = None
+        is_orphan = old.scope_type == "orphan"
+
+        if old.scope_type == "board" and old.scope_id:
+            board_name = _get_or_create_board(old.scope_id, user)
+        elif old.scope_type == "section" and old.scope_id:
+            # scope_id is project name, find its board
+            goal = frappe.db.get_value("Hambaft Project", old.scope_id, "goal")
+            if goal:
+                board_name = _get_or_create_board(goal, user)
+                section_name = _get_or_create_section(old.scope_id, board_name, user)
+            else:
+                is_orphan = True
+
+        try:
+            pin = frappe.get_doc({
+                "doctype": "Hambaft Gallery Pin",
+                "user": user,
+                "file": old.file_name,
+                "image_url": old.file_url or "",
+                "image_name": old.image_name or "",
+                "board": board_name,
+                "section": section_name,
+                "sort_order": old.sort_order or 0,
+                "source_type": old.source_type or "direct",
+                "source_doctype": old.source_type if old.source_type in ("Task", "Hambaft Project", "Hambaft Goal") else None,
+                "source_name": old.source_id or None,
+                "source_title": old.source_title or "",
+                "is_orphan": 1 if is_orphan else 0,
+            })
+            pin.insert(ignore_permissions=True)
+            count += 1
+        except Exception:
+            pass
+
+    _sync_pin_counts()
+    frappe.db.commit()
+    return _api_response({"migrated": count, "total_old": len(old_records)})
 
 # ─── Planner Board Views ───────────────────────────────────────
 

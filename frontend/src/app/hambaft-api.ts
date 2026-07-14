@@ -1207,41 +1207,40 @@ export async function getAreaTrackedMinutes(areaName: string) {
 
 // ─── Task Attachments ───────────────────────────────────────
 
-export async function getTaskAttachments(taskName: string) {
-  return callGet<{ data?: { attachments?: any[] } }>(`hambaft.hambaft.api.get_task_attachments?task_name=${encodeURIComponent(taskName)}`)
-}
-
-export async function deleteTaskAttachment(fileName: string) {
-  return call('hambaft.hambaft.api.delete_task_attachment', { file_name: fileName })
-}
-
 // ─── Gallery Domain ─────────────────────────────────────────
 
 export interface GalleryPin {
-  file_name: string
-  file_url: string
-  file_size: number
-  file_type?: string
-  image_name?: string
-  source_type: 'task' | 'project' | 'goal' | 'direct'
-  source_id?: string
+  name: string
+  file: string
+  image_url: string
+  image_name: string
+  image_width?: number
+  image_height?: number
+  source_type: string
+  source_doctype?: string
+  source_name?: string
   source_title?: string
-  sort_order?: number
+  caption?: string
+  sort_order: number
 }
 
 export interface GallerySection {
-  section_id: string
-  section_title: string
+  name: string
+  title: string
+  project?: string
+  sort_order: number
+  pin_count: number
   pins: GalleryPin[]
 }
 
 export interface GalleryBoard {
   board_id: string
   board_title: string
+  goal_id?: string
   cover_url?: string
   pin_count: number
-  board_pins: GalleryPin[]
   sections: GallerySection[]
+  board_pins: GalleryPin[]
 }
 
 export interface GalleryData {
@@ -1249,32 +1248,91 @@ export interface GalleryData {
   orphan_pins: GalleryPin[]
 }
 
+export interface TaskAttachment {
+  name: string
+  file_name: string
+  file_type: string
+  file_url: string
+  file_size: number
+  is_private: number
+  creation: string
+  pin_name?: string
+  sort_order: number
+  caption?: string
+}
+
 export async function getGalleryBoards() {
   return callGet<{ data?: GalleryData }>('hambaft.hambaft.api.get_gallery_boards')
 }
 
-export async function reorderGalleryPins(items: Array<{ file_name: string; sort_order: number; scope_type: string; scope_id: string }>) {
-  return call('hambaft.hambaft.api.reorder_gallery_pins', { items: JSON.stringify(items) })
+export async function getGalleryBoardDetail(boardName: string) {
+  return call('hambaft.hambaft.api.get_gallery_board_detail', { board_name: boardName })
 }
 
-export async function reorderGallerySections(boardId: string, sectionOrder: string[]) {
-  return call('hambaft.hambaft.api.reorder_gallery_sections', { board_id: boardId, section_order: JSON.stringify(sectionOrder) })
+export async function createGalleryPin(fileName: string, sourceDoctype?: string, sourceName?: string, board?: string, section?: string, caption?: string) {
+  return call('hambaft.hambaft.api.create_gallery_pin', {
+    file_name: fileName,
+    source_doctype: sourceDoctype || '',
+    source_name: sourceName || '',
+    board: board || '',
+    section: section || '',
+    caption: caption || '',
+  })
 }
 
-export async function uploadGalleryImage(filedata: string, filename: string, doctype?: string, docname?: string) {
+export async function uploadGalleryImage(filedata: string, filename: string, doctype?: string, docname?: string, board?: string, section?: string, caption?: string) {
   return call('hambaft.hambaft.api.upload_gallery_image', {
     filedata, filename,
     doctype: doctype || '',
     docname: docname || '',
+    board: board || '',
+    section: section || '',
+    caption: caption || '',
   })
 }
 
-export async function deleteGalleryPin(fileName: string) {
-  return call('hambaft.hambaft.api.delete_gallery_pin', { file_name: fileName })
+export async function moveGalleryPin(pinName: string, board?: string, section?: string) {
+  return call('hambaft.hambaft.api.move_gallery_pin', {
+    pin_name: pinName,
+    board: board || '',
+    section: section || '',
+  })
 }
 
-export async function backfillGalleryPins() {
-  return call('hambaft.hambaft.api.backfill_gallery_pins')
+export async function reorderGalleryPins(items: Array<{ pin_name: string; sort_order: number }>) {
+  return call('hambaft.hambaft.api.reorder_gallery_pins', { items: JSON.stringify(items) })
+}
+
+export async function reorderGallerySections(boardName: string, sectionOrder: string[]) {
+  return call('hambaft.hambaft.api.reorder_gallery_sections', { board_name: boardName, section_order: JSON.stringify(sectionOrder) })
+}
+
+export async function updateGalleryPinMeta(pinName: string, caption?: string, note?: string) {
+  return call('hambaft.hambaft.api.update_gallery_pin_meta', { pin_name: pinName, caption: caption || '', note: note || '' })
+}
+
+export async function deleteGalleryPin(pinName: string) {
+  return call('hambaft.hambaft.api.delete_gallery_pin', { pin_name: pinName })
+}
+
+export async function getTaskAttachments(taskName: string) {
+  return callGet<{ data?: { attachments?: TaskAttachment[] } }>(`hambaft.hambaft.api.get_task_attachments?task_name=${encodeURIComponent(taskName)}`)
+}
+
+export async function reorderTaskAttachments(taskName: string, items: Array<{ file_name: string; sort_order: number }>) {
+  return call('hambaft.hambaft.api.reorder_task_attachments', { task_name: taskName, items: JSON.stringify(items) })
+}
+
+export async function deleteTaskAttachment(fileName: string) {
+  return call('hambaft.hambaft.api.delete_task_attachment', { file_name: fileName })
+}
+
+export async function syncGalleryFromExistingFiles() {
+  return call('hambaft.hambaft.api.sync_gallery_from_existing_files')
+}
+
+export async function migratePinOrderToDomain() {
+  return call('hambaft.hambaft.api.migrate_pin_order_to_domain')
 }
 
 // ─── Planner Board Views ──────────────────────────────────
