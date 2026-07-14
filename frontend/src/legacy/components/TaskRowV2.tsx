@@ -1,39 +1,38 @@
 /**
- * TaskRowV2 — Task row with inline quick actions, subtask accordion, and + button.
- * Supports: checkbox, quick priority, quick importance, quick status,
- * quick schedule, add subtask (+ button), accordion to show subtasks.
- * Uses progressive disclosure: hover/click reveals action chips.
+ * TaskRowV2 — Task row with accordion subtasks, + button, and quick actions.
+ * Nested subtasks render recursively inside the accordion.
+ * Hover actions use absolute positioning so row height doesn't change.
  */
 import React, { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import {
   CheckCircle2, Circle, Flag, Calendar, Clock, AlertCircle,
   FolderKanban, Target, Plus, ChevronDown, ChevronRight, Trash2, PanelRightOpen,
-  Sparkles, Pin, MoreHorizontal,
+  Sparkles,
 } from 'lucide-react'
 import type { Task } from '../types'
 import type { ImportanceLevel } from './TaskV2Shared'
-import { ImportanceBadge, ImpactScoreBadge, BlockedTaskIndicator, TaskImpactBanner } from './TaskV2Shared'
+import { ImportanceBadge, ImpactScoreBadge, BlockedTaskIndicator } from './TaskV2Shared'
 import type { ViewConfig } from './ViewConfigStore'
 import { DENSITY_CONFIG, isColumnVisible } from './ViewConfigStore'
 import { getTaskChildren, quickAddTask, mapBackendTaskRecord } from '../../app/hambaft-api'
 
 // ─── Status quick-switch ─────────────────────────────────────
 const STATUS_OPTIONS = [
-  { id: 'inbox', label: 'ورودی', color: 'bg-[#F9F1D8] text-[#5A5A40] border-[#EBE3C8]' },
-  { id: 'today', label: 'امروز', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-  { id: 'next', label: 'بعدی', color: 'bg-blue-50 text-blue-700 border-blue-200' },
-  { id: 'in_progress', label: 'درحال', color: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
-  { id: 'done', label: 'انجام‌شده', color: 'bg-green-50 text-green-700 border-green-200' },
-  { id: 'on_hold', label: 'متوقف', color: 'bg-orange-50 text-orange-700 border-orange-200' },
-  { id: 'someday', label: 'شاید', color: 'bg-[#F9F6EE] text-[#8D7F72] border-[#D6CFC3]' },
+  { id: 'inbox', label: 'ورودی', color: 'bg-[#F9F1D8] text-[#5A5A40] border-[#EBE3C8]', darkColor: 'dark:bg-[#2B201D]/80 dark:text-[#F9F1D8] dark:border-[#5A4A30]' },
+  { id: 'today', label: 'امروز', color: 'bg-emerald-50 text-emerald-700 border-emerald-200', darkColor: 'dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-700' },
+  { id: 'next', label: 'بعدی', color: 'bg-blue-50 text-blue-700 border-blue-200', darkColor: 'dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-700' },
+  { id: 'in_progress', label: 'درحال', color: 'bg-indigo-50 text-indigo-700 border-indigo-200', darkColor: 'dark:bg-indigo-900/30 dark:text-indigo-300 dark:border-indigo-700' },
+  { id: 'done', label: 'انجام‌شده', color: 'bg-green-50 text-green-700 border-green-200', darkColor: 'dark:bg-green-900/30 dark:text-green-300 dark:border-green-700' },
+  { id: 'on_hold', label: 'متوقف', color: 'bg-orange-50 text-orange-700 border-orange-200', darkColor: 'dark:bg-orange-900/30 dark:text-orange-300 dark:border-orange-700' },
+  { id: 'someday', label: 'شاید', color: 'bg-[#F9F6EE] text-[#8D7F72] border-[#D6CFC3]', darkColor: 'dark:bg-[#3D4133]/50 dark:text-[#9D978B] dark:border-[#3D4133]' },
 ] as const
 
 const PRIORITY_QUICK = [
-  { id: 'low', label: 'پایین', color: 'bg-[#7C8363]/10 text-[#5a6b4a]' },
-  { id: 'medium', label: 'متوسط', color: 'bg-[#d4a017]/10 text-[#b8860b]' },
-  { id: 'high', label: 'بالا', color: 'bg-[#c44a3d]/10 text-[#c44a3d]' },
-  { id: 'urgent', label: 'فوری', color: 'bg-red-100 text-red-800 font-black' },
+  { id: 'low', label: 'پایین', color: 'bg-[#7C8363]/10 text-[#5a6b4a]', darkColor: 'dark:bg-[#9ECE9A]/10 dark:text-[#9ECE9A]' },
+  { id: 'medium', label: 'متوسط', color: 'bg-[#d4a017]/10 text-[#b8860b]', darkColor: 'dark:bg-[#d4a017]/15 dark:text-[#d4a017]' },
+  { id: 'high', label: 'بالا', color: 'bg-[#c44a3d]/10 text-[#c44a3d]', darkColor: 'dark:bg-[#c44a3d]/15 dark:text-[#E26645]' },
+  { id: 'urgent', label: 'فوری', color: 'bg-red-100 text-red-800 font-black', darkColor: 'dark:bg-red-900/30 dark:text-red-300' },
 ] as const
 
 interface TaskRowV2Props {
@@ -51,6 +50,8 @@ interface TaskRowV2Props {
   todayDate: string
   viewConfig: ViewConfig
   dCfg: typeof DENSITY_CONFIG.comfortable
+  /** Nesting depth — 0 = top level, 1 = subtask, 2 = sub-subtask... */
+  depth?: number
 }
 
 export default function TaskRowV2({
@@ -68,6 +69,7 @@ export default function TaskRowV2({
   todayDate,
   viewConfig,
   dCfg,
+  depth = 0,
 }: TaskRowV2Props) {
   const [showActions, setShowActions] = useState(false)
   const [showSubtaskInput, setShowSubtaskInput] = useState(false)
@@ -95,9 +97,7 @@ export default function TaskRowV2({
   }, [task.id])
 
   useEffect(() => {
-    if (expanded && task.id) {
-      fetchChildren()
-    }
+    if (expanded && task.id) fetchChildren()
   }, [expanded, task.id, fetchChildren])
 
   const isOverdue = !task.completed && task.dueDate && task.dueDate < todayDate
@@ -109,18 +109,21 @@ export default function TaskRowV2({
   const childDone = childTasks.filter(c => c.completed).length
   const childTotal = childTasks.length
 
-  // Visual border accent based on task state
-  const borderAccent = task.completed
-    ? 'border-[#E6DFD3] bg-[#f9f7f2] opacity-60'
+  // Nesting indent
+  const indentPx = depth * 20
+
+  // Row background — proper dark mode
+  const rowBg = task.completed
+    ? 'bg-[#f9f7f2] dark:bg-[#1B1D16] border-[#E6DFD3] dark:border-[#3D4133] opacity-60'
     : isOverdue
-      ? 'border-[#c44a3d]/30 bg-[#c44a3d]/5'
+      ? 'bg-[#c44a3d]/5 dark:bg-[#c44a3d]/10 border-[#c44a3d]/30 dark:border-[#c44a3d]/40'
       : isBlocked
-        ? 'border-orange-200 bg-orange-50/30'
+        ? 'bg-orange-50/30 dark:bg-orange-900/10 border-orange-200 dark:border-orange-800/40'
         : isMilestone
-          ? 'border-[#EBE3C8]/50 bg-[#F9F1D8]/20'
-          : isHighImpact
-            ? 'border-[#7C8363]/30 bg-[#7C8363]/5'
-            : 'border-[#E6DFD3] bg-white hover:border-[#7C8363]/40'
+          ? 'bg-[#F9F1D8]/20 dark:bg-[#2B201D]/30 border-[#EBE3C8]/50 dark:border-[#5A4A30]/40'
+          : depth > 0
+            ? 'bg-transparent border-transparent hover:bg-[#7C8363]/5 dark:hover:bg-[#9ECE9A]/5'
+            : 'bg-white dark:bg-[#1B1D16] border-[#E6DFD3] dark:border-[#3D4133] hover:border-[#7C8363]/40 dark:hover:border-[#9ECE9A]/30'
 
   const handleAddSubtask = async () => {
     if (!subtaskText.trim()) return
@@ -129,7 +132,6 @@ export default function TaskRowV2({
       if (onAddSubtask) {
         onAddSubtask(task.id, subtaskText.trim())
       } else {
-        // Create a real task as subtask
         const resp = await quickAddTask(subtaskText.trim(), {
           project: task.projectId,
           area: task.areaId,
@@ -152,56 +154,61 @@ export default function TaskRowV2({
     }
   }
 
+  // Get current status/priority display colors
+  const statusOpt = STATUS_OPTIONS.find(s => s.id === task.status)
+  const priorityOpt = PRIORITY_QUICK.find(p => p.id === task.priority)
+
   return (
     <div
-      className={`group rounded-xl border ${dCfg.rowPadding} transition-all ${borderAccent}`}
+      className={`rounded-xl border transition-colors ${dCfg.rowPadding} ${rowBg}`}
       onMouseEnter={() => setShowActions(true)}
       onMouseLeave={() => { setShowActions(false); setActionMode(null) }}
       dir="rtl"
+      style={{ marginRight: indentPx }}
     >
-      <div className="flex items-start gap-2">
-        {/* Selection checkbox */}
-        <input
-          type="checkbox"
-          checked={selected}
-          onChange={onToggleSelect}
-          className="w-3.5 h-3.5 rounded border-[#E6DFD3] text-[#7C8363] focus:ring-[#7C8363]/20 cursor-pointer mt-1 shrink-0"
-        />
+      <div className="flex items-center gap-2">
+        {/* Selection checkbox — only at top level */}
+        {depth === 0 && (
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={onToggleSelect}
+            className="w-3.5 h-3.5 rounded border-[#E6DFD3] dark:border-[#3D4133] text-[#7C8363] dark:text-[#9ECE9A] focus:ring-[#7C8363]/20 cursor-pointer shrink-0"
+          />
+        )}
 
         {/* Done toggle */}
         <button
           onClick={onToggle}
-          className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors mt-0.5 shrink-0 ${
+          className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors shrink-0 ${
             task.completed
-              ? 'bg-[#7C8363] border-[#7C8363] text-white'
-              : 'border-[#D6CFC3] hover:border-[#7C8363]'
+              ? 'bg-[#7C8363] dark:bg-[#9ECE9A] border-[#7C8363] dark:border-[#9ECE9A] text-[#121411]'
+              : 'border-[#D6CFC3] dark:border-[#3D4133] hover:border-[#7C8363] dark:hover:border-[#9ECE9A]'
           }`}
         >
-          {task.completed && (
-            <CheckCircle2 className="w-3 h-3" />
-          )}
+          {task.completed && <CheckCircle2 className="w-3 h-3" />}
         </button>
 
         {/* Content */}
-        <div className="flex-1 min-w-0 space-y-1">
+        <div className="flex-1 min-w-0">
           {/* Title row */}
-          <div className="flex items-center gap-1.5 flex-wrap">
+          <div className="flex items-center gap-1.5">
             {/* Accordion toggle */}
             <button
               onClick={() => setExpanded(!expanded)}
-              className="shrink-0 cursor-pointer p-0.5 rounded hover:bg-[#7C8363]/10 transition-all"
+              className="shrink-0 cursor-pointer p-0.5 rounded hover:bg-[#7C8363]/10 dark:hover:bg-[#9ECE9A]/10 transition-all"
               title={expanded ? 'بستن ساب‌تسک‌ها' : 'باز کردن ساب‌تسک‌ها'}
             >
               {expanded
-                ? <ChevronDown className="w-3.5 h-3.5 text-[#8D7F72] dark:text-[#9D978B]" />
-                : <ChevronRight className="w-3.5 h-3.5 text-[#D6CFC3] dark:text-[#3D4133] hover:text-[#7C8363] dark:hover:text-[#9ECE9A]" />
+                ? <ChevronDown className="w-3 h-3 text-[#8D7F72] dark:text-[#9D978B]" />
+                : <ChevronRight className="w-3 h-3 text-[#D6CFC3] dark:text-[#3D4133] hover:text-[#7C8363] dark:hover:text-[#9ECE9A]" />
               }
             </button>
 
             <span
               onClick={onView}
-              className={`${dCfg.textSize} font-bold cursor-pointer ${
-                task.completed ? 'line-through text-[#9D978B]' : 'text-[#2d3025] hover:text-[#7C8363]'
+              className={`${depth === 0 ? dCfg.textSize : 'text-xs'} font-bold cursor-pointer ${
+                task.completed ? 'line-through text-[#9D978B]' : 'text-[#2d3025] dark:text-[#E8ECE0] hover:text-[#7C8363] dark:hover:text-[#9ECE9A]'
               }`}
             >
               {task.title}
@@ -209,246 +216,148 @@ export default function TaskRowV2({
 
             {/* Subtask count badge */}
             {childTotal > 0 && (
-              <span className="text-[9px] font-bold bg-[#7C8363]/10 text-[#7C8363] px-1.5 py-0.5 rounded-full">
+              <span className="text-[8px] font-bold bg-[#7C8363]/10 dark:bg-[#9ECE9A]/10 text-[#7C8363] dark:text-[#9ECE9A] px-1.5 py-0.5 rounded-full">
                 {childDone}/{childTotal}
               </span>
             )}
 
-            {/* Visual indicators — always visible */}
+            {/* Visual indicators */}
             {isMilestone && !task.completed && (
-              <span className="text-[9px] font-bold bg-[#F9F1D8] text-[#5A5A40] px-1.5 py-0.5 rounded-full border border-[#EBE3C8]">◆ نقطه‌عطف</span>
+              <span className="text-[8px] font-bold bg-[#F9F1D8] dark:bg-[#2B201D] text-[#5A5A40] dark:text-[#F9F1D8] px-1.5 py-0.5 rounded-full border border-[#EBE3C8] dark:border-[#5A4A30]">◆ نقطه‌عطف</span>
             )}
             {isKey && !task.completed && (
-              <span className="text-[9px] font-bold bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded-full border border-blue-200">★ کلیدی</span>
+              <span className="text-[8px] font-bold bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 px-1.5 py-0.5 rounded-full border border-blue-200 dark:border-blue-700">★ کلیدی</span>
             )}
             {isHighImpact && !task.completed && (
               <ImpactScoreBadge score={task.impactScore} />
             )}
             {isOverdue && !task.completed && (
-              <span className="text-[9px] font-bold bg-[#c44a3d]/15 text-[#c44a3d] px-1.5 py-0.5 rounded">تاریخ گذشته</span>
+              <span className="text-[8px] font-bold bg-[#c44a3d]/15 dark:bg-[#c44a3d]/20 text-[#c44a3d] dark:text-[#E26645] px-1.5 py-0.5 rounded">تاریخ گذشته</span>
             )}
             {task.isDailyHighlight && (
-              <span className="text-[9px] font-bold bg-[#d4a017]/15 text-[#b8860b] px-1.5 py-0.5 rounded">⭐ برجسته</span>
+              <span className="text-[8px] font-bold bg-[#d4a017]/15 dark:bg-[#d4a017]/20 text-[#b8860b] dark:text-[#d4a017] px-1.5 py-0.5 rounded">⭐</span>
             )}
           </div>
-
-          {/* Metadata badges row */}
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {isColumnVisible(viewConfig, 'status') && task.status && !task.completed && (
-              <button
-                onClick={() => setActionMode(actionMode === 'status' ? null : 'status')}
-                className={`${dCfg.badgeSize} font-bold rounded border cursor-pointer transition-all hover:shadow-sm ${
-                  STATUS_OPTIONS.find(s => s.id === task.status)?.color || 'bg-[#F9F6EE] text-[#8D7F72] border-[#D6CFC3]'
-                }`}
-              >
-                {STATUS_OPTIONS.find(s => s.id === task.status)?.label || task.status}
-              </button>
-            )}
-            {isColumnVisible(viewConfig, 'priority') && !task.completed && (
-              <button
-                onClick={() => setActionMode(actionMode === 'priority' ? null : 'priority')}
-                className={`${dCfg.badgeSize} font-bold rounded border cursor-pointer transition-all hover:shadow-sm ${
-                  PRIORITY_QUICK.find(p => p.id === task.priority)?.color || PRIORITY_QUICK[1].color
-                }`}
-              >
-                {PRIORITY_QUICK.find(p => p.id === task.priority)?.label || 'متوسط'}
-              </button>
-            )}
-            {isColumnVisible(viewConfig, 'importance') && !task.completed && task.importance && task.importance !== 'normal' && (
-              <ImportanceBadge importance={task.importance} size="xs" />
-            )}
-            {isColumnVisible(viewConfig, 'dueDate') && task.dueDate && (
-              <span className={`${dCfg.badgeSize} font-bold flex items-center gap-0.5 ${isOverdue ? 'text-[#c44a3d]' : 'text-[#8D7F72]'}`}>
-                <Calendar className="w-2.5 h-2.5" /> {task.dueDate}
-              </span>
-            )}
-            {isColumnVisible(viewConfig, 'scheduledDate') && task.scheduledDate && !task.dueDate && (
-              <span className={`${dCfg.badgeSize} font-bold text-[#7C8363] flex items-center gap-0.5`}>
-                <Calendar className="w-2.5 h-2.5" /> {task.scheduledDate}
-              </span>
-            )}
-            {isColumnVisible(viewConfig, 'project') && task.sourceProject && (
-              <span className={`${dCfg.badgeSize} font-bold text-[#5a6b8a] flex items-center gap-0.5`}>
-                <FolderKanban className="w-2.5 h-2.5" /> {task.sourceProject}
-              </span>
-            )}
-            {isColumnVisible(viewConfig, 'goal') && task.sourceGoal && !task.sourceProject && (
-              <span className={`${dCfg.badgeSize} font-bold text-[#6b5a8a] flex items-center gap-0.5`}>
-                <Target className="w-2.5 h-2.5" /> {task.sourceGoal}
-              </span>
-            )}
-            {isColumnVisible(viewConfig, 'estimatedMinutes') && task.estimatedMinutes && (
-              <span className={`${dCfg.badgeSize} font-bold text-indigo-600 flex items-center gap-0.5`}>
-                <Clock className="w-2.5 h-2.5" /> {task.estimatedMinutes} دقیقه
-              </span>
-            )}
-          </div>
-
-          {/* Quick action panel — shown on hover or click */}
-          <AnimatePresence>
-            {(showActions || actionMode) && !task.completed && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.12 }}
-                className="overflow-hidden"
-              >
-                {/* Status quick switch */}
-                {actionMode === 'status' && (
-                  <div className="flex flex-wrap gap-1 py-1.5">
-                    {STATUS_OPTIONS.map(s => (
-                      <button
-                        key={s.id}
-                        onClick={() => { onQuickAction(task.id, 'status', s.id); setActionMode(null) }}
-                        className={`text-[9px] font-bold px-2 py-1 rounded-lg border transition-all cursor-pointer ${
-                          task.status === s.id
-                            ? `${s.color} ring-1 ring-[#7C8363]/30 shadow-sm`
-                            : 'bg-white text-[#8D7F72] border-[#E6DFD3] hover:border-[#7C8363]'
-                        }`}
-                      >
-                        {s.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {/* Priority quick switch */}
-                {actionMode === 'priority' && (
-                  <div className="flex flex-wrap gap-1 py-1.5">
-                    {PRIORITY_QUICK.map(p => (
-                      <button
-                        key={p.id}
-                        onClick={() => { onQuickAction(task.id, 'priority', p.id); setActionMode(null) }}
-                        className={`text-[9px] font-bold px-2 py-1 rounded-lg border transition-all cursor-pointer ${
-                          task.priority === p.id
-                            ? `${p.color} border-current ring-1 ring-[#7C8363]/30 shadow-sm`
-                            : 'bg-white text-[#8D7F72] border-[#E6DFD3] hover:border-[#7C8363]'
-                        }`}
-                      >
-                        {p.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* Blocked indicator — always visible */}
-          {isBlocked && (
-            <BlockedTaskIndicator task={task} />
-          )}
-
-          {/* ── Accordion: Subtask list ── */}
-          <AnimatePresence>
-            {expanded && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.15 }}
-                className="overflow-hidden"
-              >
-                <div className="mt-2 mr-7 space-y-0.5 border-r-2 border-[#E6DFD3] dark:border-[#3D4133] pr-3">
-                  {loadingChildren && (
-                    <div className="flex items-center gap-2 py-2 text-[10px] text-[#8D7F72] dark:text-[#9D978B]">
-                      <div className="w-3 h-3 border-2 border-[#7C8363]/30 border-t-[#7C8363] rounded-full animate-spin" />
-                      <span>بارگذاری ساب‌تسک‌ها...</span>
-                    </div>
-                  )}
-                  {!loadingChildren && childTasks.map(child => (
-                    <div key={child.id} className={`group/child flex items-center gap-2 py-1.5 rounded-md transition-all hover:bg-[#7C8363]/5 dark:hover:bg-[#9ECE9A]/5 ${child.completed ? 'opacity-50' : ''}`}>
-                      <button
-                        onClick={() => onToggleSubtask?.(child)}
-                        className="shrink-0 cursor-pointer active:scale-90 transition-transform"
-                      >
-                        {child.completed
-                          ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                          : <Circle className="w-3.5 h-3.5 text-[#D6CFC3] dark:text-[#3D4133] hover:text-[#7C8363] dark:hover:text-[#9ECE9A]" />
-                        }
-                      </button>
-                      <span
-                        onClick={() => onViewSubtask?.(child.id)}
-                        className={`flex-1 min-w-0 text-[11px] font-semibold cursor-pointer ${child.completed ? 'line-through text-[#9D978B]' : 'text-[#2D3025] dark:text-[#E8ECE0] hover:text-[#7C8363] dark:hover:text-[#9ECE9A]'}`}
-                      >{child.title}</span>
-                      {/* Quick status dot */}
-                      {child.status && !child.completed && (
-                        <span className={`w-2 h-2 rounded-full shrink-0 ${
-                          child.status === 'in_progress' ? 'bg-indigo-500' :
-                          child.status === 'today' ? 'bg-emerald-500' :
-                          child.status === 'next' ? 'bg-blue-500' : 'bg-[#9D978B]'
-                        }`} />
-                      )}
-                    </div>
-                  ))}
-                  {!loadingChildren && childTasks.length === 0 && !showSubtaskInput && (
-                    <div className="flex items-center gap-2 py-2 text-[10px] text-[#8D7F72] dark:text-[#9D978B]">
-                      <Sparkles className="w-3 h-3 text-[#9B6B61]" />
-                      <span>ساب‌تسکی ندارد</span>
-                    </div>
-                  )}
-
-                  {/* Inline subtask add */}
-                  {showSubtaskInput ? (
-                    <div className="flex items-center gap-2 py-1.5">
-                      <Circle className="w-3.5 h-3.5 text-[#E6DFD3] dark:text-[#3D4133] shrink-0" />
-                      <input
-                        type="text"
-                        value={subtaskText}
-                        onChange={(e) => setSubtaskText(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && handleAddSubtask()}
-                        placeholder="ساب‌تسک جدید + Enter..."
-                        className="flex-1 min-w-0 text-[11px] bg-transparent dark:text-[#E8ECE0] focus:outline-none font-semibold placeholder:text-[#D6CFC3] dark:placeholder:text-[#3D4133]"
-                        autoFocus
-                      />
-                      {addingSubtask && (
-                        <div className="w-3 h-3 border-2 border-[#7C8363]/30 border-t-[#7C8363] rounded-full animate-spin" />
-                      )}
-                      {!addingSubtask && subtaskText.trim() && (
-                        <button onClick={handleAddSubtask} className="text-[#7C8363] dark:text-[#9ECE9A] cursor-pointer">
-                          <Plus className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  ) : null}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
         </div>
 
-        {/* Right-side actions — visible on hover */}
-        <div className="flex flex-col gap-1 shrink-0">
-          {showActions && !task.completed && (
-            <>
-              {onOpenDrawer && (
+        {/* Right-side actions — absolute, no height change */}
+        <div className="relative shrink-0">
+          <AnimatePresence>
+            {showActions && !task.completed && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.1 }}
+                className="flex items-center gap-0.5"
+              >
+                {onOpenDrawer && (
+                  <button
+                    onClick={onOpenDrawer}
+                    className="p-1 text-[#9D978B] hover:text-[#5a6b8a] dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-all cursor-pointer"
+                    title="باز کردن در پنل"
+                  >
+                    <PanelRightOpen className="w-3.5 h-3.5" />
+                  </button>
+                )}
                 <button
-                  onClick={onOpenDrawer}
-                  className="p-1 text-[#9D978B] hover:text-[#5a6b8a] hover:bg-blue-50 rounded-lg transition-all"
-                  title="باز کردن در پنل"
+                  onClick={() => { setShowSubtaskInput(!showSubtaskInput); if (!expanded) setExpanded(true) }}
+                  className="p-1 text-[#9D978B] hover:text-[#7C8363] dark:hover:text-[#9ECE9A] hover:bg-[#E8ECE0]/50 dark:hover:bg-[#9ECE9A]/10 rounded-lg transition-all cursor-pointer"
+                  title="افزودن ساب‌تسک"
                 >
-                  <PanelRightOpen className="w-3.5 h-3.5" />
+                  <Plus className="w-3.5 h-3.5" />
                 </button>
-              )}
-              <button
-                onClick={() => { setShowSubtaskInput(!showSubtaskInput); if (!expanded) setExpanded(true) }}
-                className="p-1 text-[#9D978B] hover:text-[#7C8363] hover:bg-[#E8ECE0]/50 rounded-lg transition-all"
-                title="افزودن ساب‌تسک"
-              >
-                <Plus className="w-3.5 h-3.5" />
-              </button>
-              <button
-                onClick={onDelete}
-                className="p-1 text-[#D6CFC3] hover:text-[#c44a3d] hover:bg-[#c44a3d]/10 rounded-lg transition-all"
-                title="حذف"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
-            </>
-          )}
+                <button
+                  onClick={onDelete}
+                  className="p-1 text-[#D6CFC3] dark:text-[#3D4133] hover:text-[#c44a3d] dark:hover:text-[#E26645] hover:bg-[#c44a3d]/10 dark:hover:bg-[#c44a3d]/15 rounded-lg transition-all cursor-pointer"
+                  title="حذف"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
+
+      {/* Blocked indicator */}
+      {isBlocked && (
+        <div className="mt-1 mr-7">
+          <BlockedTaskIndicator task={task} />
+        </div>
+      )}
+
+      {/* ── Accordion: Subtask list (recursive) ── */}
+      <AnimatePresence>
+        {expanded && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.15 }}
+            className="overflow-hidden"
+          >
+            <div className="mt-1 mr-7 space-y-0.5 border-r-2 border-[#E6DFD3] dark:border-[#3D4133] pr-3">
+              {loadingChildren && (
+                <div className="flex items-center gap-2 py-2 text-[10px] text-[#8D7F72] dark:text-[#9D978B]">
+                  <div className="w-3 h-3 border-2 border-[#7C8363]/30 dark:border-[#9ECE9A]/30 border-t-[#7C8363] dark:border-t-[#9ECE9A] rounded-full animate-spin" />
+                  <span>بارگذاری...</span>
+                </div>
+              )}
+              {!loadingChildren && childTasks.map(child => (
+                <TaskRowV2
+                  key={child.id}
+                  task={child}
+                  selected={false}
+                  onToggleSelect={() => {}}
+                  onToggle={() => onToggleSubtask?.(child)}
+                  onDelete={() => {}}
+                  onView={() => onViewSubtask?.(child.id)}
+                  onOpenDrawer={() => onViewSubtask?.(child.id)}
+                  onQuickAction={onQuickAction}
+                  onToggleSubtask={onToggleSubtask}
+                  onViewSubtask={onViewSubtask}
+                  todayDate={todayDate}
+                  viewConfig={viewConfig}
+                  dCfg={dCfg}
+                  depth={depth + 1}
+                />
+              ))}
+
+              {/* Inline subtask add */}
+              {showSubtaskInput && (
+                <div className="flex items-center gap-2 py-1.5">
+                  <Circle className="w-3.5 h-3.5 text-[#E6DFD3] dark:text-[#3D4133] shrink-0" />
+                  <input
+                    type="text"
+                    value={subtaskText}
+                    onChange={(e) => setSubtaskText(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleAddSubtask()}
+                    placeholder="ساب‌تسک جدید + Enter..."
+                    className="flex-1 min-w-0 text-[11px] bg-transparent text-[#2D3025] dark:text-[#E8ECE0] focus:outline-none font-semibold placeholder:text-[#D6CFC3] dark:placeholder:text-[#3D4133]"
+                    autoFocus
+                  />
+                  {addingSubtask && (
+                    <div className="w-3 h-3 border-2 border-[#7C8363]/30 dark:border-[#9ECE9A]/30 border-t-[#7C8363] dark:border-t-[#9ECE9A] rounded-full animate-spin" />
+                  )}
+                  {!addingSubtask && subtaskText.trim() && (
+                    <button onClick={handleAddSubtask} className="text-[#7C8363] dark:text-[#9ECE9A] cursor-pointer">
+                      <Plus className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {!loadingChildren && childTasks.length === 0 && !showSubtaskInput && (
+                <div className="flex items-center gap-2 py-1.5 text-[10px] text-[#8D7F72] dark:text-[#9D978B]">
+                  <Sparkles className="w-3 h-3 text-[#9B6B61]" />
+                  <span>ساب‌تسکی ندارد</span>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

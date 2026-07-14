@@ -139,6 +139,8 @@ export default function TaskManagerSection({
 
   const filteredTasks = useMemo(() => {
     let result = allTasks.filter((t) => {
+      // Hide subtasks from top-level list — they appear under their parent's accordion
+      if (t.parentTaskId) return false
       if (search.trim()) {
         const q = search.trim().toLowerCase()
         if (!t.title.toLowerCase().includes(q) && !(t.description || '').toLowerCase().includes(q)) return false
