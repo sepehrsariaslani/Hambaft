@@ -10,7 +10,7 @@ import {
   ArrowRight, Plus, X, Upload, ChevronDown,
   Image as ImageIcon, Trash2, FolderKanban,
   Target, Search, GripVertical, Download,
-  Pencil, Move, Check,
+  Pencil, Move, Check, FolderOpen, ArrowLeftRight,
 } from 'lucide-react'
 import {
   getGalleryBoards, uploadGalleryImage, deleteGalleryPin,
@@ -40,8 +40,13 @@ export default function GalleryPage({ onBack, onNavigate }: GalleryPageProps) {
   const [reorderMode, setReorderMode] = useState(false)
   const [editingPin, setEditingPin] = useState<string | null>(null)
   const [editCaption, setEditCaption] = useState('')
+  const [movePinModal, setMovePinModal] = useState<{ pinName: string; currentBoard: string; currentSection: string | null; pinImageUrl?: string } | null>(null)
+  const [moveTargetBoard, setMoveTargetBoard] = useState<string>('')
+  const [moveTargetSection, setMoveTargetSection] = useState<string>('')
+  const [movingPin, setMovingPin] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dragItem = useRef<string | null>(null)
+  const sectionDragItem = useRef<string | null>(null)
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -89,6 +94,40 @@ export default function GalleryPage({ onBack, onNavigate }: GalleryPageProps) {
   const handleSaveCaption = async (pinName: string) => {
     try { await updateGalleryPinMeta(pinName, editCaption); await fetchData() } catch { /* silent */ }
     setEditingPin(null)
+  }
+
+  const handleMovePin = async () => {
+    if (!movePinModal || !moveTargetBoard) return
+    setMovingPin(true)
+    try {
+      await moveGalleryPin(movePinModal.pinName, moveTargetBoard, moveTargetSection || undefined)
+      await fetchData()
+      setMovePinModal(null)
+      setMoveTargetBoard('')
+      setMoveTargetSection('')
+    } catch (err) { console.error('[hambaft] move pin failed', err) }
+    finally { setMovingPin(false) }
+  }
+
+  const openMovePinModal = (pinName: string, boardId: string, sectionName: string | null, imageUrl?: string) => {
+    setMovePinModal({ pinName, currentBoard: boardId, currentSection: sectionName, pinImageUrl: imageUrl })
+    setMoveTargetBoard(boardId)
+    setMoveTargetSection(sectionName || '')
+  }
+
+  const findPinLocation = (pinName: string): { boardId: string; sectionName: string | null } => {
+    for (const board of boards) {
+      if (board.board_pins.some(p => p.name === pinName)) return { boardId: board.board_id, sectionName: null }
+      for (const section of board.sections) {
+        if (section.pins.some(p => p.name === pinName)) return { boardId: board.board_id, sectionName: section.name }
+      }
+    }
+    return { boardId: '', sectionName: null }
+  }
+
+  const handleSectionReorder = async (boardId: string, sections: GallerySection[]) => {
+    const sectionOrder = sections.map(s => s.name)
+    try { await reorderGallerySections(boardId, sectionOrder) } catch { /* silent */ }
   }
 
   const handleSync = async () => {
@@ -203,16 +242,40 @@ export default function GalleryPage({ onBack, onNavigate }: GalleryPageProps) {
                             <PinMasonry pins={board.board_pins} onPinClick={reorderMode ? undefined : setLightboxPin}
                               onDelete={handleDelete} onReorder={handleReorder} reorderMode={reorderMode}
                               onEditCaption={(pin) => { setEditingPin(pin.name); setEditCaption(pin.caption || '') }}
+                              onMovePin={(pin) => openMovePinModal(pin.name, board.board_id, null, pin.image_url)}
                               dragItem={dragItem} onDragStart={handleDragStart}
                               onDragOver={(e, target, pins, set) => handleDragOver(e, target, pins, (newPins) => {
                                 setBoards(prev => prev.map(b => b.board_id === board.board_id ? { ...b, board_pins: newPins } : b))
                               })}
                               onDragEnd={(pins) => handleDragEnd(pins)} />
                           )}
-                          {board.sections.map(section => (
-                            <div key={section.name}>
-                              <div className="flex items-center gap-2 mb-2.5">
-                                <FolderKanban className="w-3.5 h-3.5 text-[#8D7F72] dark:text-[#9D978B]" />
+                          {board.sections.map((section, secIdx) => (
+                            <div key={section.name}
+                              draggable={reorderMode}
+                              onDragStart={() => { sectionDragItem.current = section.name }}
+                              onDragOver={e => {
+                                e.preventDefault()
+                                if (!sectionDragItem.current || sectionDragItem.current === section.name) return
+                                const fromIdx = board.sections.findIndex(s => s.name === sectionDragItem.current)
+                                const toIdx = secIdx
+                                if (fromIdx === -1) return
+                                setBoards(prev => prev.map(b => {
+                                  if (b.board_id !== board.board_id) return b
+                                  const newSections = [...b.sections]
+                                  const [moved] = newSections.splice(fromIdx, 1)
+                                  newSections.splice(toIdx, 0, moved)
+                                  return { ...b, sections: newSections }
+                                }))
+                              }}
+                              onDragEnd={() => {
+                                sectionDragItem.current = null
+                                const currentBoard = boards.find(b => b.board_id === board.board_id)
+                                if (currentBoard) handleSectionReorder(board.board_id, currentBoard.sections)
+                              }}
+                            >
+                              <div className={`flex items-center gap-2 mb-2.5 ${reorderMode ? 'cursor-grab bg-[#F9F6EE]/60 dark:bg-[#3D4133]/30 rounded-lg px-2 py-1.5 -mx-2' : ''}`}>
+                                {reorderMode && <GripVertical className="w-3 h-3 text-[#8D7F72] dark:text-[#9D978B] shrink-0" />}
+                                <FolderKanban className="w-3.5 h-3.5 text-[#8D7F72] dark:text-[#9D978B] shrink-0" />
                                 <span className="text-[11px] font-bold text-[#8D7F72] dark:text-[#9D978B]">{section.title}</span>
                                 <span className="text-[8px] font-bold text-[#9D978B]">({section.pins.length})</span>
                                 <div className="flex-1" />
@@ -222,6 +285,7 @@ export default function GalleryPage({ onBack, onNavigate }: GalleryPageProps) {
                               <PinMasonry pins={section.pins} onPinClick={reorderMode ? undefined : setLightboxPin}
                                 onDelete={handleDelete} onReorder={handleReorder} reorderMode={reorderMode}
                                 showTaskName onEditCaption={(pin) => { setEditingPin(pin.name); setEditCaption(pin.caption || '') }}
+                                onMovePin={(pin) => openMovePinModal(pin.name, board.board_id, section.name, pin.image_url)}
                                 dragItem={dragItem} onDragStart={handleDragStart}
                                 onDragOver={(e, target, pins, set) => handleDragOver(e, target, pins, (newPins) => {
                                   setBoards(prev => prev.map(b => b.board_id === board.board_id ? {
@@ -251,6 +315,7 @@ export default function GalleryPage({ onBack, onNavigate }: GalleryPageProps) {
                 <div className="px-3 pb-3">
                   <PinMasonry pins={orphanPins} onPinClick={setLightboxPin} onDelete={handleDelete}
                     onReorder={handleReorder} onEditCaption={(pin) => { setEditingPin(pin.name); setEditCaption(pin.caption || '') }}
+                    onMovePin={(pin) => openMovePinModal(pin.name, '', null, pin.image_url)}
                     dragItem={dragItem} onDragStart={handleDragStart}
                     onDragOver={(e, target, pins, set) => handleDragOver(e, target, pins, setOrphanPins)}
                     onDragEnd={(pins) => handleDragEnd(pins)} />
@@ -305,6 +370,8 @@ export default function GalleryPage({ onBack, onNavigate }: GalleryPageProps) {
                   <div className="flex items-center gap-2">
                     <a href={lightboxPin.image_url} download target="_blank" rel="noopener noreferrer"
                       className="p-1.5 rounded-lg bg-white/10 text-white hover:bg-white/20 cursor-pointer"><Download className="w-3.5 h-3.5" /></a>
+                    <button onClick={() => { const loc = findPinLocation(lightboxPin.name); openMovePinModal(lightboxPin.name, loc.boardId, loc.sectionName, lightboxPin.image_url); setLightboxPin(null) }}
+                      className="p-1.5 rounded-lg bg-white/10 text-white hover:bg-white/20 cursor-pointer" title="انتقال"><ArrowLeftRight className="w-3.5 h-3.5" /></button>
                     <button onClick={() => { handleDelete(lightboxPin.name); setLightboxPin(null) }}
                       className="p-1.5 rounded-lg bg-white/10 text-white hover:bg-red-500/80 cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>
                   </div>
@@ -336,12 +403,119 @@ export default function GalleryPage({ onBack, onNavigate }: GalleryPageProps) {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Move Pin Modal */}
+      <AnimatePresence>
+        {movePinModal && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => { setMovePinModal(null); setMoveTargetBoard(''); setMoveTargetSection('') }}>
+            <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 20 }}
+              onClick={e => e.stopPropagation()}
+              className="bg-white dark:bg-[#1B1D16] rounded-2xl p-5 max-w-sm w-full shadow-2xl border border-[#E6DFD3]/60 dark:border-[#3D4133]/60 max-h-[80vh] flex flex-col">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-8 h-8 rounded-lg bg-[#7C8363]/10 dark:bg-[#9ECE9A]/10 flex items-center justify-center shrink-0">
+                  <ArrowLeftRight className="w-4 h-4 text-[#7C8363] dark:text-[#9ECE9A]" />
+                </div>
+                <div>
+                  <h3 className="text-[12px] font-black text-[#2D3025] dark:text-[#E8ECE0]">انتقال تصویر</h3>
+                  <p className="text-[9px] text-[#8D7F72] dark:text-[#9D978B]">مقصد جدید رو انتخاب کن</p>
+                </div>
+              </div>
+
+              {movePinModal.pinImageUrl && (
+                <div className="mb-3 flex justify-center">
+                  <img src={movePinModal.pinImageUrl} alt="" className="w-16 h-16 rounded-lg object-cover border border-[#E6DFD3] dark:border-[#3D4133]" />
+                </div>
+              )}
+
+              <div className="flex-1 overflow-y-auto space-y-1 min-h-0">
+                {boards.map(board => {
+                  const isCurrentBoard = board.board_id === movePinModal.currentBoard
+                  const isSelectedBoard = board.board_id === moveTargetBoard
+                  return (
+                    <div key={board.board_id}>
+                      <button onClick={() => { setMoveTargetBoard(board.board_id); if (moveTargetSection && !board.sections.find(s => s.name === moveTargetSection)) setMoveTargetSection('') }}
+                        className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl cursor-pointer transition-all text-right ${
+                          isSelectedBoard
+                            ? 'bg-[#7C8363]/10 dark:bg-[#9ECE9A]/10 ring-1 ring-[#7C8363]/30 dark:ring-[#9ECE9A]/30'
+                            : 'hover:bg-[#F9F6EE] dark:hover:bg-[#3D4133]/30'
+                        }`}>
+                        {board.cover_url ? (
+                          <img src={board.cover_url} alt="" className="w-7 h-7 rounded-md object-cover shrink-0" />
+                        ) : (
+                          <div className="w-7 h-7 rounded-md bg-[#7C8363]/10 dark:bg-[#9ECE9A]/10 flex items-center justify-center shrink-0">
+                            <Target className="w-3.5 h-3.5 text-[#7C8363] dark:text-[#9ECE9A]" />
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <span className="text-[11px] font-bold text-[#2D3025] dark:text-[#E8ECE0] block truncate">{board.board_title}</span>
+                          <span className="text-[8px] text-[#8D7F72] dark:text-[#9D978B]">{board.pin_count} تصویر</span>
+                        </div>
+                        {isCurrentBoard && (
+                          <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full bg-[#7C8363]/10 dark:bg-[#9ECE9A]/10 text-[#7C8363] dark:text-[#9ECE9A] shrink-0">فعلی</span>
+                        )}
+                        <ChevronDown className={`w-3.5 h-3.5 text-[#8D7F72] dark:text-[#9D978B] transition-transform shrink-0 ${isSelectedBoard ? '' : '-rotate-90'}`} />
+                      </button>
+
+                      {isSelectedBoard && board.sections.length > 0 && (
+                        <div className="mr-6 mt-1 space-y-0.5">
+                          {/* Board-level option */}
+                          <button onClick={() => setMoveTargetSection('')}
+                            className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-all text-right ${
+                              moveTargetSection === ''
+                                ? 'bg-[#7C8363]/10 dark:bg-[#9ECE9A]/10 ring-1 ring-[#7C8363]/30 dark:ring-[#9ECE9A]/30'
+                                : 'hover:bg-[#F9F6EE] dark:hover:bg-[#3D4133]/30'
+                            }`}>
+                            <FolderOpen className="w-3 h-3 text-[#8D7F72] dark:text-[#9D978B] shrink-0" />
+                            <span className="text-[10px] font-bold text-[#8D7F72] dark:text-[#9D978B]">سطح بورد</span>
+                            {isCurrentBoard && !movePinModal.currentSection && (
+                              <span className="text-[7px] font-bold px-1 py-0.5 rounded bg-[#7C8363]/10 dark:bg-[#9ECE9A]/10 text-[#7C8363] dark:text-[#9ECE9A] mr-auto">فعلی</span>
+                            )}
+                          </button>
+                          {board.sections.map(section => {
+                            const isCurrentSection = isCurrentBoard && section.name === movePinModal.currentSection
+                            return (
+                              <button key={section.name} onClick={() => setMoveTargetSection(section.name)}
+                                className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-all text-right ${
+                                  moveTargetSection === section.name
+                                    ? 'bg-[#7C8363]/10 dark:bg-[#9ECE9A]/10 ring-1 ring-[#7C8363]/30 dark:ring-[#9ECE9A]/30'
+                                    : 'hover:bg-[#F9F6EE] dark:hover:bg-[#3D4133]/30'
+                                }`}>
+                                <FolderKanban className="w-3 h-3 text-[#8D7F72] dark:text-[#9D978B] shrink-0" />
+                                <span className="text-[10px] font-bold text-[#8D7F72] dark:text-[#9D978B]">{section.title}</span>
+                                <span className="text-[7px] text-[#9D978B]">({section.pin_count})</span>
+                                {isCurrentSection && (
+                                  <span className="text-[7px] font-bold px-1 py-0.5 rounded bg-[#7C8363]/10 dark:bg-[#9ECE9A]/10 text-[#7C8363] dark:text-[#9ECE9A] mr-auto">فعلی</span>
+                                )}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+
+              <div className="flex items-center gap-2 mt-4 pt-3 border-t border-[#E6DFD3]/40 dark:border-[#3D4133]/40">
+                <button onClick={() => { setMovePinModal(null); setMoveTargetBoard(''); setMoveTargetSection('') }}
+                  className="px-3 py-1.5 text-[10px] font-bold text-[#8D7F72] dark:text-[#9D978B] cursor-pointer">انصراف</button>
+                <div className="flex-1" />
+                <button onClick={handleMovePin} disabled={movingPin || !moveTargetBoard || (moveTargetBoard === movePinModal.currentBoard && ((moveTargetSection || '') === (movePinModal.currentSection || '')))}
+                  className="px-4 py-1.5 bg-[#7C8363] dark:bg-[#9ECE9A] text-white dark:text-[#121411] rounded-lg text-[10px] font-bold cursor-pointer hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed shadow-sm">
+                  {movingPin ? 'در حال انتقال...' : 'انتقال'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
 
 // ─── Masonry Grid ───────────────────────────────────────────
-function PinMasonry({ pins, onPinClick, onDelete, onReorder, showTaskName, reorderMode, onEditCaption, dragItem, onDragStart, onDragOver, onDragEnd }: {
+function PinMasonry({ pins, onPinClick, onDelete, onReorder, showTaskName, reorderMode, onEditCaption, onMovePin, dragItem, onDragStart, onDragOver, onDragEnd }: {
   pins: GalleryPin[]
   onPinClick?: (pin: GalleryPin) => void
   onDelete: (pinName: string) => void
@@ -349,6 +523,7 @@ function PinMasonry({ pins, onPinClick, onDelete, onReorder, showTaskName, reord
   showTaskName?: boolean
   reorderMode?: boolean
   onEditCaption?: (pin: GalleryPin) => void
+  onMovePin?: (pin: GalleryPin) => void
   dragItem: React.MutableRefObject<string | null>
   onDragStart: (pinName: string) => void
   onDragOver: (e: React.DragEvent, targetPinName: string, pins: GalleryPin[], setter: (p: GalleryPin[]) => void) => void
@@ -405,6 +580,10 @@ function PinMasonry({ pins, onPinClick, onDelete, onReorder, showTaskName, reord
                 {reorderMode && <div className="p-1 rounded-md bg-black/40 text-white cursor-grab"><GripVertical className="w-3 h-3" /></div>}
                 <button onClick={e => { e.stopPropagation(); onEditCaption?.(pin) }}
                   className="p-1 rounded-md bg-black/40 text-white hover:bg-white/20 cursor-pointer"><Pencil className="w-3 h-3" /></button>
+                {onMovePin && (
+                  <button onClick={e => { e.stopPropagation(); onMovePin(pin) }}
+                    className="p-1 rounded-md bg-black/40 text-white hover:bg-white/20 cursor-pointer" title="انتقال"><ArrowLeftRight className="w-3 h-3" /></button>
+                )}
                 <button onClick={e => { e.stopPropagation(); onDelete(pin.name) }}
                   className="p-1 rounded-md bg-black/40 text-white hover:bg-red-500/80 cursor-pointer"><Trash2 className="w-3 h-3" /></button>
               </div>
