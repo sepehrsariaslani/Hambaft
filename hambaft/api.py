@@ -4230,7 +4230,7 @@ def _get_or_create_board(goal_name, user):
     existing = frappe.db.get_value("Hambaft Gallery Board", {"goal": goal_name, "user": user}, "name")
     if existing:
         return existing
-    goal_title = frappe.db.get_value("Hambaft Goal", goal_name, "title") or goal_name
+    goal_title = frappe.db.get_value("Goal", goal_name, "title") or goal_name
     board = frappe.get_doc({
         "doctype": "Hambaft Gallery Board",
         "user": user,
@@ -4304,7 +4304,7 @@ def _resolve_pin_scope(source_doctype, source_name, user):
         elif proj:
             is_orphan = True
 
-    elif source_doctype == "Hambaft Goal" and source_name:
+    elif source_doctype == "Goal" and source_name:
         board_name = _get_or_create_board(source_name, user)
 
     else:
@@ -4334,6 +4334,45 @@ def _sync_pin_counts():
             section.name
         )[0][0]
         frappe.db.set_value("Hambaft Gallery Section", section.name, "pin_count", count)
+
+
+def on_file_after_insert(doc, method=None):
+    """Auto-create gallery pin when an image File is attached to Task/Hambaft Project/Goal.
+    Hooked via doc_events in hooks.py.
+    """
+    if not doc or not doc.file_type or doc.file_type not in IMAGE_TYPES:
+        return
+    if not doc.attached_to_doctype or not doc.attached_to_name:
+        return
+    if doc.attached_to_doctype not in ("Task", "Hambaft Project", "Goal"):
+        return
+
+    # Determine user from the attached entity
+    user = None
+    try:
+        if doc.attached_to_doctype == "Task":
+            user = frappe.db.get_value("Task", doc.attached_to_name, "user")
+        elif doc.attached_to_doctype == "Hambaft Project":
+            user = frappe.db.get_value("Hambaft Project", doc.attached_to_name, "user")
+        elif doc.attached_to_doctype == "Goal":
+            user = frappe.db.get_value("Goal", doc.attached_to_name, "user")
+    except Exception:
+        return
+
+    if not user or user != frappe.session.user:
+        return
+
+    # Skip if pin already exists for this file
+    if frappe.db.exists("Hambaft Gallery Pin", {"file": doc.name, "user": user}):
+        return
+
+    try:
+        create_gallery_pin(doc.name, source_doctype=doc.attached_to_doctype, source_name=doc.attached_to_name)
+    except Exception as e:
+        frappe.log_error(
+            f"Gallery auto-pin failed for File {doc.name} attached to {doc.attached_to_doctype}/{doc.attached_to_name}: {e}",
+            "Gallery Auto-Pin"
+        )
 
 
 @frappe.whitelist()
@@ -4520,9 +4559,9 @@ def upload_gallery_image(filedata, filename, doctype=None, docname=None, board=N
     attach_docname = docname or ""
 
     if doctype == "Goal" and docname:
-        if not frappe.db.exists("Hambaft Goal", {"name": docname, "user": user}):
+        if not frappe.db.exists("Goal", {"name": docname, "user": user}):
             frappe.throw(_("Permission denied"), frappe.PermissionError)
-        attach_doctype = "Hambaft Goal"
+        attach_doctype = "Goal"
     elif doctype == "Hambaft Project" and docname:
         if not frappe.db.exists("Hambaft Project", {"name": docname, "user": user}):
             frappe.throw(_("Permission denied"), frappe.PermissionError)
@@ -4659,8 +4698,10 @@ def update_gallery_pin_meta(pin_name, caption=None, note=None):
 
 
 @frappe.whitelist()
-def delete_gallery_pin(pin_name):
-    """Delete a gallery pin (and optionally the File)."""
+def delete_gallery_pin(pin_name, delete_file=False):
+    """Delete a gallery pin. By default, only removes the pin (detach).
+    If delete_file=True, also deletes the source File record (requires explicit opt-in).
+    """
     _check_auth()
     user = frappe.session.user
     pin = frappe.get_doc("Hambaft Gallery Pin", pin_name)
@@ -4672,16 +4713,16 @@ def delete_gallery_pin(pin_name):
 
     frappe.delete_doc("Hambaft Gallery Pin", pin_name, force=True)
 
-    # Also delete the File
-    if file_name and frappe.db.exists("File", file_name):
+    # Only delete the File if explicitly requested
+    if delete_file and file_name and frappe.db.exists("File", file_name):
         try:
             frappe.delete_doc("File", file_name, force=True)
-        except Exception:
-            pass  # File may be referenced elsewhere
+        except Exception as e:
+            frappe.log_error(f"Failed to delete File {file_name} during pin deletion: {e}", "Gallery Pin Delete")
 
     frappe.db.commit()
     _sync_pin_counts()
-    return _api_response({"ok": True})
+    return _api_response({"ok": True, "file_deleted": bool(delete_file and file_name)})
 
 
 @frappe.whitelist()
@@ -4775,11 +4816,14 @@ def delete_task_attachment(file_name):
 def sync_gallery_from_existing_files():
     """Idempotent migration: sync all existing image attachments into gallery domain.
     Creates boards, sections, and pins for every image File attached to user's entities.
+    Returns detailed report of synced and failed items.
     """
     _check_auth()
     user = frappe.session.user
     img_ph = ",".join(["%s"] * len(IMAGE_TYPES))
     count = 0
+    errors = []
+    skipped = 0
 
     # 1. Task images
     task_files = frappe.db.sql("""
@@ -4791,14 +4835,14 @@ def sync_gallery_from_existing_files():
     """.format(ph=img_ph), (user, *IMAGE_TYPES), as_dict=True)
 
     for row in task_files:
-        # Skip if pin already exists
         if frappe.db.exists("Hambaft Gallery Pin", {"file": row.name, "user": user}):
+            skipped += 1
             continue
         try:
             create_gallery_pin(row.name, source_doctype="Task", source_name=row.task_name)
             count += 1
-        except Exception:
-            pass
+        except Exception as e:
+            errors.append({"file": row.name, "source": f"Task/{row.task_name}", "error": str(e)})
 
     # 2. Project images
     proj_files = frappe.db.sql("""
@@ -4810,12 +4854,13 @@ def sync_gallery_from_existing_files():
 
     for row in proj_files:
         if frappe.db.exists("Hambaft Gallery Pin", {"file": row.name, "user": user}):
+            skipped += 1
             continue
         try:
             create_gallery_pin(row.name, source_doctype="Hambaft Project", source_name=row.proj_name)
             count += 1
-        except Exception:
-            pass
+        except Exception as e:
+            errors.append({"file": row.name, "source": f"Hambaft Project/{row.proj_name}", "error": str(e)})
 
     # 3. Goal images
     goal_files = frappe.db.sql("""
@@ -4827,16 +4872,18 @@ def sync_gallery_from_existing_files():
 
     for row in goal_files:
         if frappe.db.exists("Hambaft Gallery Pin", {"file": row.name, "user": user}):
+            skipped += 1
+            continue
             continue
         try:
-            create_gallery_pin(row.name, source_doctype="Hambaft Goal", source_name=row.goal_name)
+            create_gallery_pin(row.name, source_doctype="Goal", source_name=row.goal_name)
             count += 1
-        except Exception:
-            pass
+        except Exception as e:
+            errors.append({"file": row.name, "source": f"Goal/{row.goal_name}", "error": str(e)})
 
     _sync_pin_counts()
     frappe.db.commit()
-    return _api_response({"synced": count})
+    return _api_response({"synced": count, "skipped": skipped, "errors": errors, "total_files": len(task_files) + len(proj_files) + len(goal_files)})
 
 
 @frappe.whitelist()
@@ -4853,6 +4900,7 @@ def migrate_pin_order_to_domain():
                 "source_type", "source_id", "source_title", "sort_order", "image_name"])
 
     count = 0
+    errors = []
     for old in old_records:
         if not old.file_name or old.file_name == "section_order_placeholder":
             continue
@@ -4887,19 +4935,19 @@ def migrate_pin_order_to_domain():
                 "section": section_name,
                 "sort_order": old.sort_order or 0,
                 "source_type": old.source_type or "direct",
-                "source_doctype": old.source_type if old.source_type in ("Task", "Hambaft Project", "Hambaft Goal") else None,
+                "source_doctype": old.source_type if old.source_type in ("Task", "Hambaft Project", "Goal") else None,
                 "source_name": old.source_id or None,
                 "source_title": old.source_title or "",
                 "is_orphan": 1 if is_orphan else 0,
             })
             pin.insert(ignore_permissions=True)
             count += 1
-        except Exception:
-            pass
+        except Exception as e:
+            errors.append({"file": old.file_name, "source_type": old.source_type, "source_id": old.source_id, "error": str(e)})
 
     _sync_pin_counts()
     frappe.db.commit()
-    return _api_response({"migrated": count, "total_old": len(old_records)})
+    return _api_response({"migrated": count, "total_old": len(old_records), "errors": errors})
 
 # ─── Planner Board Views ───────────────────────────────────────
 

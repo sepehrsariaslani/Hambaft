@@ -26,7 +26,12 @@ import {
   TaskImpactBanner, TaskImpactExplanation, BlockedTaskIndicator,
 } from './TaskV2Shared'
 import type { ImportanceLevel } from './TaskV2Shared'
-import { getTaskSessions, getTaskChildren, quickAddTask, getTaskTrackedMinutes, mapBackendTaskRecord, getTaskAttachments, deleteTaskAttachment } from '../../app/hambaft-api'
+import {
+  getTaskSessions, getTaskChildren, quickAddTask, getTaskTrackedMinutes,
+  mapBackendTaskRecord, getTaskAttachments, deleteTaskAttachment,
+  createGalleryPin, reorderTaskAttachments, reorderGalleryPins,
+  type TaskAttachment,
+} from '../../app/hambaft-api'
 import EntityNoteEditor from '../../notes/components/EntityNoteEditor'
 import PersianDatePicker from './PersianDatePicker'
 
@@ -1322,17 +1327,35 @@ function TimeSection({ task, isActiveSession, activeTimerSeconds, isTimerRunning
 }
 
 // ══════════════════════════════════════════════════════════════
-// Files Section — Attachments
+// Files Section — Pinterest-like attachments with gallery context
 // ══════════════════════════════════════════════════════════════
 function FilesSection({ task, onAttachmentChange }: {
   task: Task; onAttachmentChange?: () => void
 }) {
-  const [attachments, setAttachments] = useState<any[]>([])
+  const [attachments, setAttachments] = useState<TaskAttachment[]>([])
   const [loading, setLoading] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [apiError, setApiError] = useState(false)
-  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
+  const [lightboxAtt, setLightboxAtt] = useState<TaskAttachment | null>(null)
+  const [reorderMode, setReorderMode] = useState(false)
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const dragItem = useRef<string | null>(null)
+  const [imgCols, setImgCols] = useState(2)
+
+  // Responsive column count
+  useEffect(() => {
+    const update = () => {
+      const w = window.innerWidth
+      if (w >= 1280) setImgCols(5)
+      else if (w >= 1024) setImgCols(4)
+      else if (w >= 640) setImgCols(3)
+      else setImgCols(2)
+    }
+    update()
+    window.addEventListener('resize', update)
+    return () => window.removeEventListener('resize', update)
+  }, [])
 
   const fetchAttachments = useCallback(async () => {
     if (!task.id) return
@@ -1342,7 +1365,6 @@ function FilesSection({ task, onAttachmentChange }: {
       const resp = await getTaskAttachments(task.id)
       setAttachments(resp?.data?.attachments || [])
     } catch {
-      // API might not be deployed yet — try Frappe's native file list
       try {
         const { getList } = await import('../../app/frappe')
         const files = await getList('File', {
@@ -1381,6 +1403,14 @@ function FilesSection({ task, onAttachmentChange }: {
         credentials: 'same-origin',
       })
       if (!resp.ok) throw new Error('Upload failed')
+      // Try to create gallery pin for this new image
+      try {
+        const result = await resp.json()
+        const fileName = result?.message?.file_url ? result.message.name : null
+        if (fileName) {
+          await createGalleryPin(fileName, 'Task', task.id)
+        }
+      } catch { /* pin creation is best-effort */ }
       await fetchAttachments()
       onAttachmentChange?.()
     } catch (err) {
@@ -1397,7 +1427,6 @@ function FilesSection({ task, onAttachmentChange }: {
       await fetchAttachments()
       onAttachmentChange?.()
     } catch {
-      // Fallback: use Frappe's native delete_doc
       try {
         const { call: frappeCall } = await import('../../app/frappe')
         await frappeCall('frappe.client.delete', { doctype: 'File', name: fileName })
@@ -1407,6 +1436,31 @@ function FilesSection({ task, onAttachmentChange }: {
         console.error('[hambaft] file delete failed', err2)
       }
     }
+    setDeleteConfirm(null)
+  }
+
+  const handleReorder = async (items: TaskAttachment[]) => {
+    const reorderItems = items.map((a, idx) => ({ file_name: a.name, sort_order: idx }))
+    try {
+      await reorderTaskAttachments(task.id, reorderItems)
+    } catch { /* silent */ }
+  }
+
+  const handleDragStart = (fileName: string) => { dragItem.current = fileName }
+  const handleDragOver = (e: React.DragEvent, targetName: string, items: TaskAttachment[], setter: (a: TaskAttachment[]) => void) => {
+    e.preventDefault()
+    if (!dragItem.current || dragItem.current === targetName) return
+    const fromIdx = items.findIndex(a => a.name === dragItem.current)
+    const toIdx = items.findIndex(a => a.name === targetName)
+    if (fromIdx === -1 || toIdx === -1) return
+    const newItems = [...items]
+    const [moved] = newItems.splice(fromIdx, 1)
+    newItems.splice(toIdx, 0, moved)
+    setter(newItems)
+  }
+  const handleDragEnd = (items: TaskAttachment[]) => {
+    dragItem.current = null
+    handleReorder(items)
   }
 
   const formatSize = (bytes: number) => {
@@ -1421,134 +1475,208 @@ function FilesSection({ task, onAttachmentChange }: {
     try { return new Date(iso).toLocaleDateString('fa-IR', { month: 'short', day: 'numeric' }) } catch { return iso }
   }
 
-  const getFileIcon = (type: string) => {
-    if (!type) return <FileText className="w-4 h-4 text-[#8D7F72] dark:text-[#9D978B]" />
-    if (type.startsWith('image/')) return <BookOpen className="w-4 h-4 text-emerald-500" />
-    if (type.startsWith('video/')) return <Play className="w-4 h-4 text-blue-500" />
-    if (type.includes('pdf')) return <FileText className="w-4 h-4 text-red-500" />
-    return <FileText className="w-4 h-4 text-[#8D7F72] dark:text-[#9D978B]" />
-  }
-
   const isImage = (type: string) => type?.startsWith('image/')
 
-  // Separate images and other files
   const imageAttachments = attachments.filter(a => isImage(a.file_type))
   const otherAttachments = attachments.filter(a => !isImage(a.file_type))
 
+  // Masonry columns
+  const imageColumns = useMemo(() => {
+    const c: TaskAttachment[][] = Array.from({ length: imgCols }, () => [])
+    imageAttachments.forEach((att, idx) => c[idx % imgCols].push(att))
+    return c
+  }, [imageAttachments, imgCols])
+
   return (
     <div className="space-y-4">
-      {/* Upload area */}
-      <div
-        onClick={() => fileInputRef.current?.click()}
-        className="flex items-center justify-center gap-2 py-4 border-2 border-dashed border-[#E6DFD3] dark:border-[#3D4133] rounded-xl cursor-pointer hover:border-[#7C8363] dark:hover:border-[#9ECE9A] hover:bg-[#7C8363]/5 dark:hover:bg-[#9ECE9A]/5 transition-all"
-      >
-        {uploading ? (
-          <div className="flex items-center gap-2 text-[11px] font-bold text-[#7C8363] dark:text-[#9ECE9A]">
-            <div className="w-3 h-3 border-2 border-[#7C8363]/30 dark:border-[#9ECE9A]/30 border-t-[#7C8363] dark:border-t-[#9ECE9A] rounded-full animate-spin" />
-            در حال آپلود...
-          </div>
-        ) : (
-          <div className="flex items-center gap-2 text-[11px] font-bold text-[#8D7F72] dark:text-[#9D978B]">
-            <Upload className="w-4 h-4" />
-            آپلود فایل یا تصویر
-          </div>
+      {/* Upload area + reorder toggle */}
+      <div className="flex items-center gap-2">
+        <div
+          onClick={() => fileInputRef.current?.click()}
+          className="flex-1 flex items-center justify-center gap-2 py-3 border-2 border-dashed border-[#E6DFD3] dark:border-[#3D4133] rounded-xl cursor-pointer hover:border-[#7C8363] dark:hover:border-[#9ECE9A] hover:bg-[#7C8363]/5 dark:hover:bg-[#9ECE9A]/5 transition-all"
+        >
+          {uploading ? (
+            <div className="flex items-center gap-2 text-[11px] font-bold text-[#7C8363] dark:text-[#9ECE9A]">
+              <div className="w-3 h-3 border-2 border-[#7C8363]/30 dark:border-[#9ECE9A]/30 border-t-[#7C8363] dark:border-t-[#9ECE9A] rounded-full animate-spin" />
+              در حال آپلود...
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 text-[11px] font-bold text-[#8D7F72] dark:text-[#9D978B]">
+              <Upload className="w-4 h-4" />
+              آپلود فایل یا تصویر
+            </div>
+          )}
+        </div>
+        {imageAttachments.length > 1 && (
+          <button onClick={() => setReorderMode(!reorderMode)}
+            className={`p-2 rounded-lg cursor-pointer transition-all ${reorderMode ? 'bg-[#7C8363]/15 dark:bg-[#9ECE9A]/15 text-[#7C8363] dark:text-[#9ECE9A]' : 'text-[#8D7F72] dark:text-[#9D978B] hover:bg-[#7C8363]/5'}`}
+            title="مرتب‌سازی">
+            <GripVertical className="w-4 h-4" />
+          </button>
         )}
       </div>
-      <input
-        ref={fileInputRef}
-        type="file"
-        className="hidden"
-        onChange={handleUpload}
-      />
+      <input ref={fileInputRef} type="file" accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.zip" className="hidden" onChange={handleUpload} />
 
-      {/* Image grid — Pinterest style masonry */}
       {loading ? (
-        <div className="text-[10px] text-[#8D7F72] dark:text-[#9D978B] text-center py-4">در حال بارگذاری...</div>
+        <div className="flex flex-col items-center py-8 gap-2">
+          <div className="w-5 h-5 border-2 border-[#7C8363]/30 dark:border-[#9ECE9A]/30 border-t-[#7C8363] dark:border-t-[#9ECE9A] rounded-full animate-spin" />
+          <span className="text-[10px] text-[#8D7F72] dark:text-[#9D978B]">در حال بارگذاری...</span>
+        </div>
       ) : (
         <>
+          {/* Image masonry grid — Pinterest-style */}
           {imageAttachments.length > 0 && (
-            <div className="flex gap-2">
-              {(() => {
-                const cols = 2
-                const columns: any[][] = Array.from({ length: cols }, () => [])
-                imageAttachments.forEach((att, idx) => columns[idx % cols].push(att))
-                return columns.map((col, colIdx) => (
-                  <div key={colIdx} className="flex-1 space-y-2">
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <BookOpen className="w-3 h-3 text-emerald-500" />
+                <span className="text-[10px] font-black text-[#8D7F72] dark:text-[#9D978B]">تصاویر</span>
+                <span className="text-[8px] font-bold text-[#9D978B]">({imageAttachments.length})</span>
+              </div>
+              <div className="flex gap-2">
+                {imageColumns.map((col, ci) => (
+                  <div key={ci} className="flex-1 space-y-2">
                     {col.map(att => (
-                      <div key={att.name} className="group relative rounded-lg overflow-hidden cursor-pointer"
-                        onClick={() => setLightboxUrl(att.file_url)}>
+                      <div key={att.name}
+                        draggable={reorderMode}
+                        onDragStart={() => handleDragStart(att.name)}
+                        onDragOver={e => handleDragOver(e, att.name, imageAttachments, setAttachments)}
+                        onDragEnd={() => handleDragEnd(imageAttachments)}
+                        className={`group relative rounded-xl overflow-hidden cursor-pointer bg-[#F9F6EE] dark:bg-[#3D4133]/30 transition-all ${reorderMode ? 'ring-1 ring-[#7C8363]/30 dark:ring-[#9ECE9A]/30' : ''}`}
+                        onClick={() => !reorderMode && setLightboxAtt(att)}>
                         <img src={att.file_url} alt={att.file_name}
-                          className="w-full object-cover rounded-lg transition-transform group-hover:scale-[1.02]"
-                          loading="lazy" />
-                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors rounded-lg" />
-                        <button onClick={e => { e.stopPropagation(); handleDelete(att.name) }}
-                          className="absolute top-1.5 right-1.5 p-1 rounded-md bg-black/40 text-white opacity-0 group-hover:opacity-100 hover:bg-red-500/80 cursor-pointer transition-all">
-                          <Trash2 className="w-2.5 h-2.5" />
-                        </button>
-                        <div className="absolute bottom-0 left-0 right-0 px-2 py-1 bg-gradient-to-t from-black/50 to-transparent">
-                          <span className="text-[8px] font-bold text-white/80 truncate block">{att.file_name}</span>
+                          className="w-full object-cover rounded-xl transition-transform group-hover:scale-[1.02]" loading="lazy" />
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors rounded-xl" />
+                        {/* Caption or filename */}
+                        {(att.caption || att.file_name) && (
+                          <div className="absolute bottom-0 left-0 right-0 px-2 py-1.5 bg-gradient-to-t from-black/50 to-transparent rounded-b-xl">
+                            <span className="text-[8px] text-white/80 truncate block">{att.caption || att.file_name}</span>
+                          </div>
+                        )}
+                        {/* Gallery pin badge */}
+                        {att.pin_name && (
+                          <div className="absolute top-1.5 right-1.5">
+                            <span className="text-[7px] font-bold px-1 py-0.5 rounded bg-[#7C8363]/60 dark:bg-[#9ECE9A]/60 text-white">📌 گالری</span>
+                          </div>
+                        )}
+                        {/* Action buttons */}
+                        <div className="absolute top-1.5 left-1.5 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          {reorderMode && <div className="p-1 rounded-md bg-black/40 text-white cursor-grab"><GripVertical className="w-3 h-3" /></div>}
+                          <button onClick={e => { e.stopPropagation(); setDeleteConfirm(att.name) }}
+                            className="p-1 rounded-md bg-black/40 text-white hover:bg-red-500/80 cursor-pointer"><Trash2 className="w-3 h-3" /></button>
                         </div>
                       </div>
                     ))}
                   </div>
-                ))
-              })()}
+                ))}
+              </div>
             </div>
           )}
 
           {/* Other files as list */}
           {otherAttachments.length > 0 && (
-            <div className="space-y-1.5">
-              {otherAttachments.map((att, idx) => (
-                <div key={att.name || idx}
-                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-[#F9F6EE]/60 dark:hover:bg-[#3D4133]/30 transition-colors group"
-                >
-                  {getFileIcon(att.file_type)}
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[11px] font-bold text-[#2D3025] dark:text-[#E8ECE0] truncate">
-                      {att.file_name}
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <FileText className="w-3 h-3 text-[#8D7F72] dark:text-[#9D978B]" />
+                <span className="text-[10px] font-black text-[#8D7F72] dark:text-[#9D978B]">فایل‌ها</span>
+                <span className="text-[8px] font-bold text-[#9D978B]">({otherAttachments.length})</span>
+              </div>
+              <div className="space-y-1.5">
+                {otherAttachments.map((att, idx) => {
+                  const getIcon = () => {
+                    if (att.file_type?.startsWith('video/')) return <Play className="w-4 h-4 text-blue-500" />
+                    if (att.file_type?.includes('pdf')) return <FileText className="w-4 h-4 text-red-500" />
+                    return <FileText className="w-4 h-4 text-[#8D7F72] dark:text-[#9D978B]" />
+                  }
+                  return (
+                    <div key={att.name || idx}
+                      className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-[#F9F6EE]/60 dark:hover:bg-[#3D4133]/30 transition-colors group">
+                      {getIcon()}
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[11px] font-bold text-[#2D3025] dark:text-[#E8ECE0] truncate">{att.file_name}</div>
+                        <div className="flex items-center gap-2 text-[9px] text-[#8D7F72] dark:text-[#9D978B]">
+                          {att.file_size ? formatSize(att.file_size) : ''}
+                          {att.creation ? formatTime(att.creation) : ''}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {att.file_url && (
+                          <a href={att.file_url} target="_blank" rel="noopener noreferrer"
+                            className="p-1 rounded text-[#8D7F72] dark:text-[#9D978B] hover:text-[#7C8363] dark:hover:text-[#9ECE9A] cursor-pointer">
+                            <Download className="w-3 h-3" />
+                          </a>
+                        )}
+                        <button onClick={() => setDeleteConfirm(att.name)}
+                          className="p-1 rounded text-[#8D7F72] dark:text-[#9D978B] hover:text-red-400 cursor-pointer">
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2 text-[9px] text-[#8D7F72] dark:text-[#9D978B]">
-                      {att.file_size ? formatSize(att.file_size) : ''}
-                      {att.creation ? formatTime(att.creation) : ''}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    {att.file_url && (
-                      <a href={att.file_url} target="_blank" rel="noopener noreferrer"
-                        className="p-1 rounded text-[#8D7F72] dark:text-[#9D978B] hover:text-[#7C8363] dark:hover:text-[#9ECE9A] cursor-pointer">
-                        <Download className="w-3 h-3" />
-                      </a>
-                    )}
-                    <button onClick={() => handleDelete(att.name)}
-                      className="p-1 rounded text-[#8D7F72] dark:text-[#9D978B] hover:text-red-400 cursor-pointer">
-                      <Trash2 className="w-3 h-3" />
-                    </button>
-                  </div>
-                </div>
-              ))}
+                  )
+                })}
+              </div>
             </div>
           )}
 
-          {attachments.length === 0 && (
-            <div className="text-[10px] text-[#9D978B] text-center py-4">هنوز فایلی پیوست نشده</div>
+          {attachments.length === 0 && !apiError && (
+            <div className="flex flex-col items-center py-6 gap-2">
+              <Paperclip className="w-8 h-8 text-[#E6DFD3] dark:text-[#3D4133]" />
+              <span className="text-[10px] text-[#9D978B]">هنوز فایلی پیوست نشده</span>
+            </div>
+          )}
+          {apiError && (
+            <div className="text-[10px] text-orange-500 text-center py-3">خطا در بارگذاری فایل‌ها — API هنوز مستقر نشده</div>
           )}
         </>
       )}
 
+      {/* Delete confirmation */}
+      <AnimatePresence>
+        {deleteConfirm && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setDeleteConfirm(null)}>
+            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }}
+              onClick={e => e.stopPropagation()}
+              className="bg-white dark:bg-[#1B1D16] rounded-2xl p-5 max-w-xs w-full shadow-2xl border border-[#E6DFD3]/60 dark:border-[#3D4133]/60">
+              <h3 className="text-[12px] font-black text-[#2D3025] dark:text-[#E8ECE0] mb-2">حذف فایل</h3>
+              <p className="text-[10px] text-[#8D7F72] dark:text-[#9D978B] mb-3">مطمئنی؟ فایل هم از گالری حذف می‌شه.</p>
+              <div className="flex items-center gap-2 justify-end">
+                <button onClick={() => setDeleteConfirm(null)} className="px-3 py-1.5 text-[10px] font-bold text-[#8D7F72] dark:text-[#9D978B] cursor-pointer">انصراف</button>
+                <button onClick={() => handleDelete(deleteConfirm)} className="px-3 py-1.5 bg-red-500 text-white rounded-lg text-[10px] font-bold cursor-pointer">حذف</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Lightbox */}
       <AnimatePresence>
-        {lightboxUrl && (
+        {lightboxAtt && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
-            onClick={() => setLightboxUrl(null)}>
+            onClick={() => setLightboxAtt(null)}>
             <motion.div initial={{ scale: 0.8 }} animate={{ scale: 1 }} exit={{ scale: 0.8 }}
               className="relative max-w-4xl max-h-[90vh] w-full">
-              <img src={lightboxUrl} alt=""
+              <img src={lightboxAtt.file_url} alt=""
                 className="max-w-full max-h-[85vh] mx-auto object-contain rounded-lg"
                 onClick={e => e.stopPropagation()} />
+              <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/70 to-transparent rounded-b-lg" onClick={e => e.stopPropagation()}>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-[11px] font-bold text-white block">{lightboxAtt.caption || lightboxAtt.file_name}</span>
+                    {lightboxAtt.pin_name && (
+                      <span className="text-[8px] text-white/50 block mt-0.5">📌 در گالری</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <a href={lightboxAtt.file_url} download target="_blank" rel="noopener noreferrer"
+                      className="p-1.5 rounded-lg bg-white/10 text-white hover:bg-white/20 cursor-pointer"><Download className="w-3.5 h-3.5" /></a>
+                    <button onClick={() => { setDeleteConfirm(lightboxAtt.name); setLightboxAtt(null) }}
+                      className="p-1.5 rounded-lg bg-white/10 text-white hover:bg-red-500/80 cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>
+                  </div>
+                </div>
+              </div>
             </motion.div>
-            <button onClick={() => setLightboxUrl(null)}
+            <button onClick={() => setLightboxAtt(null)}
               className="absolute top-4 left-4 p-2 rounded-full bg-white/10 text-white hover:bg-white/20 cursor-pointer">
               <X className="w-5 h-5" />
             </button>

@@ -1299,6 +1299,13 @@ export async function moveGalleryPin(pinName: string, board?: string, section?: 
   })
 }
 
+export async function deleteGalleryPinWithFile(pinName: string, deleteFile: boolean = false) {
+  return call('hambaft.hambaft.api.delete_gallery_pin', {
+    pin_name: pinName,
+    delete_file: deleteFile ? 1 : 0,
+  })
+}
+
 export async function reorderGalleryPins(items: Array<{ pin_name: string; sort_order: number }>) {
   return call('hambaft.hambaft.api.reorder_gallery_pins', { items: JSON.stringify(items) })
 }

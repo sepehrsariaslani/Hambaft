@@ -10,7 +10,7 @@
   ],
   "fields": [
     {"fieldname": "user", "fieldtype": "Link", "options": "User", "required": 1, "in_list_view": 1, "in_standard_filter": 1},
-    {"fieldname": "goal", "fieldtype": "Link", "options": "Hambaft Goal", "in_list_view": 1, "in_standard_filter": 1, "description": "Goal this board represents. One board per goal."},
+    {"fieldname": "goal", "fieldtype": "Link", "options": "Goal", "in_list_view": 1, "in_standard_filter": 1, "description": "Goal this board represents. One board per goal."},
     {"fieldname": "title", "fieldtype": "Data", "required": 1, "in_list_view": 1},
     {"fieldname": "cover_file", "fieldtype": "Link", "options": "File", "description": "Cover image for the board"},
     {"fieldname": "sort_order", "fieldtype": "Int", "default": "0"},

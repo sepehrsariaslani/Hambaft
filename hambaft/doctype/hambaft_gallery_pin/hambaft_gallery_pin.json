@@ -22,7 +22,7 @@
     {"fieldname": "section", "fieldtype": "Link", "options": "Hambaft Gallery Section", "in_standard_filter": 1, "description": "Section (project) — null means board-level pin"},
     {"fieldname": "sort_order", "fieldtype": "Int", "default": "0", "in_list_view": 1},
     {"fieldname": "column_break_1", "fieldtype": "Column Break"},
-    {"fieldname": "source_type", "fieldtype": "Select", "options": "Task\nHambaft Project\nHambaft Goal\ndirect", "in_list_view": 1, "description": "What entity originally owned this image"},
+    {"fieldname": "source_type", "fieldtype": "Select", "options": "Task\nHambaft Project\nGoal\ndirect", "in_list_view": 1, "description": "What entity originally owned this image"},
     {"fieldname": "source_doctype", "fieldtype": "Data", "description": "Doctype of the source entity"},
     {"fieldname": "source_name", "fieldtype": "Data", "description": "Name/ID of the source entity", "in_standard_filter": 1},
     {"fieldname": "source_title", "fieldtype": "Data", "in_list_view": 1, "description": "Title of the source entity for display"},

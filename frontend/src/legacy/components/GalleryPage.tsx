@@ -13,7 +13,7 @@ import {
   Pencil, Move, Check, FolderOpen, ArrowLeftRight,
 } from 'lucide-react'
 import {
-  getGalleryBoards, uploadGalleryImage, deleteGalleryPin,
+  getGalleryBoards, uploadGalleryImage, deleteGalleryPin, deleteGalleryPinWithFile,
   moveGalleryPin, reorderGalleryPins, reorderGallerySections,
   updateGalleryPinMeta, syncGalleryFromExistingFiles, migratePinOrderToDomain,
   type GalleryBoard, type GalleryPin, type GallerySection,
@@ -44,6 +44,7 @@ export default function GalleryPage({ onBack, onNavigate }: GalleryPageProps) {
   const [moveTargetBoard, setMoveTargetBoard] = useState<string>('')
   const [moveTargetSection, setMoveTargetSection] = useState<string>('')
   const [movingPin, setMovingPin] = useState(false)
+  const [deletePinModal, setDeletePinModal] = useState<{ pinName: string; pinTitle: string } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dragItem = useRef<string | null>(null)
   const sectionDragItem = useRef<string | null>(null)
@@ -81,9 +82,16 @@ export default function GalleryPage({ onBack, onNavigate }: GalleryPageProps) {
     }
   }
 
-  const handleDelete = async (pinName: string) => {
-    try { await deleteGalleryPin(pinName); await fetchData() }
-    catch { console.error('[hambaft] gallery delete failed') }
+  const handleDelete = async (pinName: string, deleteFile: boolean = false) => {
+    try {
+      if (deleteFile) {
+        await deleteGalleryPinWithFile(pinName, true)
+      } else {
+        await deleteGalleryPin(pinName)
+      }
+      await fetchData()
+    } catch { console.error('[hambaft] gallery delete failed') }
+    setDeletePinModal(null)
   }
 
   const handleReorder = async (pins: GalleryPin[]) => {
@@ -243,6 +251,7 @@ export default function GalleryPage({ onBack, onNavigate }: GalleryPageProps) {
                               onDelete={handleDelete} onReorder={handleReorder} reorderMode={reorderMode}
                               onEditCaption={(pin) => { setEditingPin(pin.name); setEditCaption(pin.caption || '') }}
                               onMovePin={(pin) => openMovePinModal(pin.name, board.board_id, null, pin.image_url)}
+                              onDeleteConfirm={(pin) => setDeletePinModal({ pinName: pin.name, pinTitle: pin.caption || pin.source_title || '' })}
                               dragItem={dragItem} onDragStart={handleDragStart}
                               onDragOver={(e, target, pins, set) => handleDragOver(e, target, pins, (newPins) => {
                                 setBoards(prev => prev.map(b => b.board_id === board.board_id ? { ...b, board_pins: newPins } : b))
@@ -286,6 +295,7 @@ export default function GalleryPage({ onBack, onNavigate }: GalleryPageProps) {
                                 onDelete={handleDelete} onReorder={handleReorder} reorderMode={reorderMode}
                                 showTaskName onEditCaption={(pin) => { setEditingPin(pin.name); setEditCaption(pin.caption || '') }}
                                 onMovePin={(pin) => openMovePinModal(pin.name, board.board_id, section.name, pin.image_url)}
+                                onDeleteConfirm={(pin) => setDeletePinModal({ pinName: pin.name, pinTitle: pin.caption || pin.source_title || '' })}
                                 dragItem={dragItem} onDragStart={handleDragStart}
                                 onDragOver={(e, target, pins, set) => handleDragOver(e, target, pins, (newPins) => {
                                   setBoards(prev => prev.map(b => b.board_id === board.board_id ? {
@@ -316,6 +326,7 @@ export default function GalleryPage({ onBack, onNavigate }: GalleryPageProps) {
                   <PinMasonry pins={orphanPins} onPinClick={setLightboxPin} onDelete={handleDelete}
                     onReorder={handleReorder} onEditCaption={(pin) => { setEditingPin(pin.name); setEditCaption(pin.caption || '') }}
                     onMovePin={(pin) => openMovePinModal(pin.name, '', null, pin.image_url)}
+                    onDeleteConfirm={(pin) => setDeletePinModal({ pinName: pin.name, pinTitle: pin.caption || pin.source_title || '' })}
                     dragItem={dragItem} onDragStart={handleDragStart}
                     onDragOver={(e, target, pins, set) => handleDragOver(e, target, pins, setOrphanPins)}
                     onDragEnd={(pins) => handleDragEnd(pins)} />
@@ -364,7 +375,7 @@ export default function GalleryPage({ onBack, onNavigate }: GalleryPageProps) {
                   <div>
                     {lightboxPin.source_title && <span className="text-[11px] font-bold text-white">{lightboxPin.source_title}</span>}
                     <span className="text-[9px] text-white/50 block mt-0.5">
-                      {lightboxPin.source_type === 'Task' ? 'تسک' : lightboxPin.source_type === 'Hambaft Project' ? 'پروژه' : lightboxPin.source_type === 'Hambaft Goal' ? 'هدف' : ''}
+                      {lightboxPin.source_type === 'Task' ? 'تسک' : lightboxPin.source_type === 'Hambaft Project' ? 'پروژه' : lightboxPin.source_type === 'Goal' ? 'هدف' : ''}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
@@ -372,13 +383,51 @@ export default function GalleryPage({ onBack, onNavigate }: GalleryPageProps) {
                       className="p-1.5 rounded-lg bg-white/10 text-white hover:bg-white/20 cursor-pointer"><Download className="w-3.5 h-3.5" /></a>
                     <button onClick={() => { const loc = findPinLocation(lightboxPin.name); openMovePinModal(lightboxPin.name, loc.boardId, loc.sectionName, lightboxPin.image_url); setLightboxPin(null) }}
                       className="p-1.5 rounded-lg bg-white/10 text-white hover:bg-white/20 cursor-pointer" title="انتقال"><ArrowLeftRight className="w-3.5 h-3.5" /></button>
-                    <button onClick={() => { handleDelete(lightboxPin.name); setLightboxPin(null) }}
+                    <button onClick={() => { setDeletePinModal({ pinName: lightboxPin.name, pinTitle: lightboxPin.caption || lightboxPin.source_title || '' }); setLightboxPin(null) }}
                       className="p-1.5 rounded-lg bg-white/10 text-white hover:bg-red-500/80 cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>
                   </div>
                 </div>
               </div>
             </motion.div>
             <button onClick={() => setLightboxPin(null)} className="absolute top-4 left-4 p-2 rounded-full bg-white/10 text-white hover:bg-white/20 cursor-pointer"><X className="w-5 h-5" /></button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Delete Pin Confirm Modal */}
+      <AnimatePresence>
+        {deletePinModal && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setDeletePinModal(null)}>
+            <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 20 }}
+              onClick={e => e.stopPropagation()}
+              className="bg-white dark:bg-[#1B1D16] rounded-2xl p-5 max-w-sm w-full shadow-2xl border border-[#E6DFD3]/60 dark:border-[#3D4133]/60">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-8 h-8 rounded-lg bg-red-500/10 flex items-center justify-center shrink-0">
+                  <Trash2 className="w-4 h-4 text-red-500" />
+                </div>
+                <h3 className="text-[12px] font-black text-[#2D3025] dark:text-[#E8ECE0]">حذف تصویر</h3>
+              </div>
+              <p className="text-[10px] text-[#8D7F72] dark:text-[#9D978B] mb-3">
+                می‌خوای این تصویر رو از گالری حذف کنی؟
+              </p>
+              <div className="bg-[#F9F6EE] dark:bg-[#3D4133]/30 rounded-lg p-3 mb-3 space-y-2">
+                <button onClick={() => handleDelete(deletePinModal.pinName, false)}
+                  className="w-full text-right px-3 py-2 rounded-lg text-[10px] font-bold text-[#2D3025] dark:text-[#E8ECE0] hover:bg-white dark:hover:bg-[#1B1D16] cursor-pointer transition-all">
+                  <span className="block">فقط از گالری حذف کن</span>
+                  <span className="text-[8px] text-[#8D7F72] dark:text-[#9D978B]">فایل اصلی حفظ می‌شه</span>
+                </button>
+                <button onClick={() => handleDelete(deletePinModal.pinName, true)}
+                  className="w-full text-right px-3 py-2 rounded-lg text-[10px] font-bold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 cursor-pointer transition-all">
+                  <span className="block">تصویر + فایل اصلی حذف بشه</span>
+                  <span className="text-[8px] text-red-400">این عمل قابل بازگشت نیست</span>
+                </button>
+              </div>
+              <button onClick={() => setDeletePinModal(null)}
+                className="w-full py-2 text-[10px] font-bold text-[#8D7F72] dark:text-[#9D978B] cursor-pointer hover:text-[#2D3025] dark:hover:text-[#E8ECE0] transition-colors">
+                انصراف
+              </button>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -515,7 +564,7 @@ export default function GalleryPage({ onBack, onNavigate }: GalleryPageProps) {
 }
 
 // ─── Masonry Grid ───────────────────────────────────────────
-function PinMasonry({ pins, onPinClick, onDelete, onReorder, showTaskName, reorderMode, onEditCaption, onMovePin, dragItem, onDragStart, onDragOver, onDragEnd }: {
+function PinMasonry({ pins, onPinClick, onDelete, onReorder, showTaskName, reorderMode, onEditCaption, onMovePin, onDeleteConfirm, dragItem, onDragStart, onDragOver, onDragEnd }: {
   pins: GalleryPin[]
   onPinClick?: (pin: GalleryPin) => void
   onDelete: (pinName: string) => void
@@ -524,6 +573,7 @@ function PinMasonry({ pins, onPinClick, onDelete, onReorder, showTaskName, reord
   reorderMode?: boolean
   onEditCaption?: (pin: GalleryPin) => void
   onMovePin?: (pin: GalleryPin) => void
+  onDeleteConfirm?: (pin: GalleryPin) => void
   dragItem: React.MutableRefObject<string | null>
   onDragStart: (pinName: string) => void
   onDragOver: (e: React.DragEvent, targetPinName: string, pins: GalleryPin[], setter: (p: GalleryPin[]) => void) => void
@@ -584,7 +634,7 @@ function PinMasonry({ pins, onPinClick, onDelete, onReorder, showTaskName, reord
                   <button onClick={e => { e.stopPropagation(); onMovePin(pin) }}
                     className="p-1 rounded-md bg-black/40 text-white hover:bg-white/20 cursor-pointer" title="انتقال"><ArrowLeftRight className="w-3 h-3" /></button>
                 )}
-                <button onClick={e => { e.stopPropagation(); onDelete(pin.name) }}
+                <button onClick={e => { e.stopPropagation(); onDeleteConfirm?.(pin) || onDelete(pin.name) }}
                   className="p-1 rounded-md bg-black/40 text-white hover:bg-red-500/80 cursor-pointer"><Trash2 className="w-3 h-3" /></button>
               </div>
             </div>
