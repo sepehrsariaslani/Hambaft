@@ -46,6 +46,7 @@ interface TaskRowV2Props {
   onQuickAction: (taskId: string, field: string, value: any) => void
   onAddSubtask?: (parentId: string, title: string) => void
   onToggleSubtask?: (subtask: Task) => void
+  onDeleteSubtask?: (id: string) => void
   onViewSubtask?: (id: string) => void
   todayDate: string
   viewConfig: ViewConfig
@@ -65,6 +66,7 @@ export default function TaskRowV2({
   onQuickAction,
   onAddSubtask,
   onToggleSubtask,
+  onDeleteSubtask,
   onViewSubtask,
   todayDate,
   viewConfig,
@@ -109,8 +111,8 @@ export default function TaskRowV2({
   const childDone = childTasks.filter(c => c.completed).length
   const childTotal = childTasks.length
 
-  // Nesting indent
-  const indentPx = depth * 20
+  // Nesting indent — small per level
+  const indentPx = depth * 12
 
   // Row background — proper dark mode
   const rowBg = task.completed
@@ -297,7 +299,7 @@ export default function TaskRowV2({
             transition={{ duration: 0.15 }}
             className="overflow-hidden"
           >
-            <div className="mt-1 mr-7 space-y-0.5 border-r-2 border-[#E6DFD3] dark:border-[#3D4133] pr-3">
+            <div className="mt-1 mr-5 space-y-0.5 border-r-2 border-[#E6DFD3] dark:border-[#3D4133] pr-2">
               {loadingChildren && (
                 <div className="flex items-center gap-2 py-2 text-[10px] text-[#8D7F72] dark:text-[#9D978B]">
                   <div className="w-3 h-3 border-2 border-[#7C8363]/30 dark:border-[#9ECE9A]/30 border-t-[#7C8363] dark:border-t-[#9ECE9A] rounded-full animate-spin" />
@@ -311,11 +313,12 @@ export default function TaskRowV2({
                   selected={false}
                   onToggleSelect={() => {}}
                   onToggle={() => onToggleSubtask?.(child)}
-                  onDelete={() => {}}
+                  onDelete={() => onDeleteSubtask?.(child.id)}
                   onView={() => onViewSubtask?.(child.id)}
                   onOpenDrawer={() => onViewSubtask?.(child.id)}
                   onQuickAction={onQuickAction}
                   onToggleSubtask={onToggleSubtask}
+                  onDeleteSubtask={onDeleteSubtask}
                   onViewSubtask={onViewSubtask}
                   todayDate={todayDate}
                   viewConfig={viewConfig}

@@ -507,6 +507,7 @@ export default function TaskManagerSection({
                       const newCompleted = !subtask.completed
                       onUpdateTask({ ...subtask, completed: newCompleted, status: newCompleted ? 'done' : 'inbox' })
                     }}
+                    onDeleteSubtask={(id) => onDeleteTask(id)}
                     onViewSubtask={(id) => onViewTaskDetails ? onViewTaskDetails(id) : setDrawerTaskId(id)}
                     todayDate={todayDate}
                     viewConfig={viewConfig}
