@@ -1215,6 +1215,20 @@ export async function deleteTaskAttachment(fileName: string) {
   return call('hambaft.hambaft.api.delete_task_attachment', { file_name: fileName })
 }
 
+// ─── Gallery ────────────────────────────────────────────────
+
+export async function getGalleryData() {
+  return callGet<{ data?: { boards?: any[]; orphan_pins?: any[] } }>('hambaft.hambaft.api.get_gallery_data')
+}
+
+export async function uploadGalleryImage(filedata: string, filename: string, doctype?: string, docname?: string) {
+  return call('hambaft.hambaft.api.upload_gallery_image', {
+    filedata, filename,
+    doctype: doctype || '',
+    docname: docname || '',
+  })
+}
+
 // ─── Planner Board Views ──────────────────────────────────
 
 export async function getTasksByProject(limit = 100) {

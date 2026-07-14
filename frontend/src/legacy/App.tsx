@@ -104,6 +104,7 @@ const MoodSection = React.lazy(() => import('./components/MoodSection'));
 const BalanceReportSection = React.lazy(() => import('./components/BalanceReportSection'));
 const ContactsSection = React.lazy(() => import('./components/ContactsSection'));
 const TaskDetailPage = React.lazy(() => import('./components/TaskDetailPage'));
+const GalleryPage = React.lazy(() => import('./components/GalleryPage'));
 import { Contact, MoodLog } from './types';
 
 import { 
@@ -147,7 +148,8 @@ import {
   Users,
   Activity,
   Layers,
-  ChevronDown
+  ChevronDown,
+  Image as ImageIcon
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -188,6 +190,7 @@ const NAVIGATION_GROUPS = [
       { id: 'goals', label: 'اهداف', icon: Target },
       { id: 'projects', label: 'پروژه‌ها', icon: FolderKanban },
       { id: 'areas', label: 'حوزه‌ها', icon: Layers },
+      { id: 'gallery', label: 'گالری', icon: ImageIcon },
       { id: 'notes', label: 'یادداشت‌Notion', icon: FileText },
       { id: 'finance', label: 'مالی', icon: Wallet },
       { id: 'documents', label: 'اسناد', icon: FolderOpen },
@@ -277,6 +280,7 @@ function tabToPath(tab: string, ids: { taskId?: string | null; goalId?: string |
     case 'goals': return ids.goalId ? `/goals/${ids.goalId}` : '/goals';
     case 'projects': return ids.projectId ? `/projects/${ids.projectId}` : '/projects';
     case 'areas': return '/areas';
+    case 'gallery': return '/gallery';
     case 'notes': return '/notes';
     case 'finance': return '/finance';
     case 'documents': return '/documents';
@@ -3684,6 +3688,15 @@ export default function App({
             onSelectTask={(id) => goToTaskDetail(id)}
             onUpdateAreas={(areas) => setLifeData(prev => ({ ...prev, areas }))}
           />
+        );
+      case 'gallery':
+        return (
+          <React.Suspense fallback={<div className="flex items-center justify-center py-20"><div className="w-6 h-6 border-2 border-[#7C8363]/30 border-t-[#7C8363] rounded-full animate-spin" /></div>}>
+            <GalleryPage
+              onBack={() => goToTab('dashboard')}
+              onNavigate={(tab, id) => { if (tab === 'goals' && id) goToGoal(id); else if (tab === 'task-detail' && id) goToTaskDetail(id); else goToTab(tab); }}
+            />
+          </React.Suspense>
         );
       case 'notes':
         return (

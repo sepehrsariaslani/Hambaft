@@ -1331,6 +1331,7 @@ function FilesSection({ task, onAttachmentChange }: {
   const [loading, setLoading] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [apiError, setApiError] = useState(false)
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const fetchAttachments = useCallback(async () => {
@@ -1428,12 +1429,18 @@ function FilesSection({ task, onAttachmentChange }: {
     return <FileText className="w-4 h-4 text-[#8D7F72] dark:text-[#9D978B]" />
   }
 
+  const isImage = (type: string) => type?.startsWith('image/')
+
+  // Separate images and other files
+  const imageAttachments = attachments.filter(a => isImage(a.file_type))
+  const otherAttachments = attachments.filter(a => !isImage(a.file_type))
+
   return (
     <div className="space-y-4">
       {/* Upload area */}
       <div
         onClick={() => fileInputRef.current?.click()}
-        className="flex items-center justify-center gap-2 py-6 border-2 border-dashed border-[#E6DFD3] dark:border-[#3D4133] rounded-xl cursor-pointer hover:border-[#7C8363] dark:hover:border-[#9ECE9A] hover:bg-[#7C8363]/5 dark:hover:bg-[#9ECE9A]/5 transition-all"
+        className="flex items-center justify-center gap-2 py-4 border-2 border-dashed border-[#E6DFD3] dark:border-[#3D4133] rounded-xl cursor-pointer hover:border-[#7C8363] dark:hover:border-[#9ECE9A] hover:bg-[#7C8363]/5 dark:hover:bg-[#9ECE9A]/5 transition-all"
       >
         {uploading ? (
           <div className="flex items-center gap-2 text-[11px] font-bold text-[#7C8363] dark:text-[#9ECE9A]">
@@ -1443,7 +1450,7 @@ function FilesSection({ task, onAttachmentChange }: {
         ) : (
           <div className="flex items-center gap-2 text-[11px] font-bold text-[#8D7F72] dark:text-[#9D978B]">
             <Upload className="w-4 h-4" />
-            کلیک کنید یا فایل را بکشید
+            آپلود فایل یا تصویر
           </div>
         )}
       </div>
@@ -1454,43 +1461,100 @@ function FilesSection({ task, onAttachmentChange }: {
         onChange={handleUpload}
       />
 
-      {/* File list */}
+      {/* Image grid — Pinterest style masonry */}
       {loading ? (
         <div className="text-[10px] text-[#8D7F72] dark:text-[#9D978B] text-center py-4">در حال بارگذاری...</div>
-      ) : attachments.length === 0 ? (
-        <div className="text-[10px] text-[#9D978B] text-center py-4">هنوز فایلی پیوست نشده</div>
       ) : (
-        <div className="space-y-1.5">
-          {attachments.map((att, idx) => (
-            <div key={att.name || idx}
-              className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-[#F9F6EE]/60 dark:hover:bg-[#3D4133]/30 transition-colors group"
-            >
-              {getFileIcon(att.file_type)}
-              <div className="flex-1 min-w-0">
-                <div className="text-[11px] font-bold text-[#2D3025] dark:text-[#E8ECE0] truncate">
-                  {att.file_name}
-                </div>
-                <div className="flex items-center gap-2 text-[9px] text-[#8D7F72] dark:text-[#9D978B]">
-                  {att.file_size ? formatSize(att.file_size) : ''}
-                  {att.creation ? formatTime(att.creation) : ''}
-                </div>
-              </div>
-              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                {att.file_url && (
-                  <a href={att.file_url} target="_blank" rel="noopener noreferrer"
-                    className="p-1 rounded text-[#8D7F72] dark:text-[#9D978B] hover:text-[#7C8363] dark:hover:text-[#9ECE9A] cursor-pointer">
-                    <Download className="w-3 h-3" />
-                  </a>
-                )}
-                <button onClick={() => handleDelete(att.name)}
-                  className="p-1 rounded text-[#8D7F72] dark:text-[#9D978B] hover:text-red-400 cursor-pointer">
-                  <Trash2 className="w-3 h-3" />
-                </button>
-              </div>
+        <>
+          {imageAttachments.length > 0 && (
+            <div className="flex gap-2">
+              {(() => {
+                const cols = 2
+                const columns: any[][] = Array.from({ length: cols }, () => [])
+                imageAttachments.forEach((att, idx) => columns[idx % cols].push(att))
+                return columns.map((col, colIdx) => (
+                  <div key={colIdx} className="flex-1 space-y-2">
+                    {col.map(att => (
+                      <div key={att.name} className="group relative rounded-lg overflow-hidden cursor-pointer"
+                        onClick={() => setLightboxUrl(att.file_url)}>
+                        <img src={att.file_url} alt={att.file_name}
+                          className="w-full object-cover rounded-lg transition-transform group-hover:scale-[1.02]"
+                          loading="lazy" />
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors rounded-lg" />
+                        <button onClick={e => { e.stopPropagation(); handleDelete(att.name) }}
+                          className="absolute top-1.5 right-1.5 p-1 rounded-md bg-black/40 text-white opacity-0 group-hover:opacity-100 hover:bg-red-500/80 cursor-pointer transition-all">
+                          <Trash2 className="w-2.5 h-2.5" />
+                        </button>
+                        <div className="absolute bottom-0 left-0 right-0 px-2 py-1 bg-gradient-to-t from-black/50 to-transparent">
+                          <span className="text-[8px] font-bold text-white/80 truncate block">{att.file_name}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ))
+              })()}
             </div>
-          ))}
-        </div>
+          )}
+
+          {/* Other files as list */}
+          {otherAttachments.length > 0 && (
+            <div className="space-y-1.5">
+              {otherAttachments.map((att, idx) => (
+                <div key={att.name || idx}
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-[#F9F6EE]/60 dark:hover:bg-[#3D4133]/30 transition-colors group"
+                >
+                  {getFileIcon(att.file_type)}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[11px] font-bold text-[#2D3025] dark:text-[#E8ECE0] truncate">
+                      {att.file_name}
+                    </div>
+                    <div className="flex items-center gap-2 text-[9px] text-[#8D7F72] dark:text-[#9D978B]">
+                      {att.file_size ? formatSize(att.file_size) : ''}
+                      {att.creation ? formatTime(att.creation) : ''}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {att.file_url && (
+                      <a href={att.file_url} target="_blank" rel="noopener noreferrer"
+                        className="p-1 rounded text-[#8D7F72] dark:text-[#9D978B] hover:text-[#7C8363] dark:hover:text-[#9ECE9A] cursor-pointer">
+                        <Download className="w-3 h-3" />
+                      </a>
+                    )}
+                    <button onClick={() => handleDelete(att.name)}
+                      className="p-1 rounded text-[#8D7F72] dark:text-[#9D978B] hover:text-red-400 cursor-pointer">
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {attachments.length === 0 && (
+            <div className="text-[10px] text-[#9D978B] text-center py-4">هنوز فایلی پیوست نشده</div>
+          )}
+        </>
       )}
+
+      {/* Lightbox */}
+      <AnimatePresence>
+        {lightboxUrl && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
+            onClick={() => setLightboxUrl(null)}>
+            <motion.div initial={{ scale: 0.8 }} animate={{ scale: 1 }} exit={{ scale: 0.8 }}
+              className="relative max-w-4xl max-h-[90vh] w-full">
+              <img src={lightboxUrl} alt=""
+                className="max-w-full max-h-[85vh] mx-auto object-contain rounded-lg"
+                onClick={e => e.stopPropagation()} />
+            </motion.div>
+            <button onClick={() => setLightboxUrl(null)}
+              className="absolute top-4 left-4 p-2 rounded-full bg-white/10 text-white hover:bg-white/20 cursor-pointer">
+              <X className="w-5 h-5" />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

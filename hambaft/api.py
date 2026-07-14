@@ -4211,6 +4211,182 @@ def delete_task_attachment(file_name):
     return _api_response({"ok": True})
 
 
+# ─── Gallery ──────────────────────────────────────────────────
+
+@frappe.whitelist()
+def get_gallery_data():
+    """Get all image attachments organized by goal > project > task (Pinterest-style).
+    
+    Returns:
+      boards: list of { goal_id, goal_title, goal_color, sections: [ { project_id, project_title, pins: [ { file_name, file_url, file_size, task_id, task_title } ] } ], board_pins: [ ... ] }
+      orphan_pins: images attached to tasks with no goal/project
+    """
+    _check_auth()
+    user = frappe.session.user
+    
+    # Get all image files attached to tasks owned by this user
+    image_types = ("image/jpeg", "image/png", "image/gif", "image/webp", "image/svg+xml", "image/bmp")
+    placeholders = ",".join(["%s"] * len(image_types))
+    
+    # All image attachments on user's tasks
+    files = frappe.db.sql("""
+        SELECT f.name, f.file_name, f.file_type, f.file_url, f.file_size, 
+               f.attached_to_name as task_name, f.creation,
+               t.title as task_title, t.project, t.area, t.goal,
+               p.title as project_title, p.goal as project_goal,
+               g.title as goal_title, g.goal_progress, g.status as goal_status
+        FROM `tabFile` f
+        LEFT JOIN `tabTask` t ON f.attached_to_name = t.name AND f.attached_to_doctype = 'Task'
+        LEFT JOIN `tabHambaft Project` p ON t.project = p.name
+        LEFT JOIN `tabGoal` g ON t.goal = g.name OR p.goal = g.name
+        WHERE t.user = %s AND f.file_type IN ({placeholders})
+        ORDER BY g.title, p.title, t.title, f.creation DESC
+    """.format(placeholders=placeholders), 
+    (user, *image_types), as_dict=True)
+    
+    # Also get images attached directly to projects
+    project_files = frappe.db.sql("""
+        SELECT f.name, f.file_name, f.file_type, f.file_url, f.file_size,
+               f.attached_to_name as project_name, f.creation,
+               p.title as project_title, p.goal as project_goal,
+               g.title as goal_title
+        FROM `tabFile` f
+        LEFT JOIN `tabHambaft Project` p ON f.attached_to_name = p.name AND f.attached_to_doctype = 'Hambaft Project'
+        LEFT JOIN `tabGoal` g ON p.goal = g.name
+        WHERE p.user = %s AND f.file_type IN ({placeholders})
+        ORDER BY g.title, p.title, f.creation DESC
+    """.format(placeholders=placeholders),
+    (user, *image_types), as_dict=True)
+    
+    # Organize into boards (goals) > sections (projects) > pins (images)
+    boards_map = {}  # goal_id -> board data
+    orphan_pins = []
+    
+    # Process task images
+    for f in files:
+        pin = {
+            "file_name": f.name,
+            "file_url": f.file_url,
+            "file_size": f.file_size,
+            "file_type": f.file_type,
+            "image_name": f.file_name,
+            "task_id": f.task_name,
+            "task_title": f.task_title,
+            "source_type": "task",
+        }
+        
+        goal_id = f.goal or f.project_goal
+        goal_title = f.goal_title or "بدون هدف"
+        project_id = f.project
+        project_title = f.project_title
+        
+        if goal_id and goal_id not in boards_map:
+            boards_map[goal_id] = {
+                "goal_id": goal_id,
+                "goal_title": goal_title,
+                "goal_progress": f.goal_progress or 0,
+                "sections": {},  # project_id -> section
+                "board_pins": [],
+            }
+        
+        if goal_id and project_id:
+            board = boards_map[goal_id]
+            if project_id not in board["sections"]:
+                board["sections"][project_id] = {
+                    "project_id": project_id,
+                    "project_title": project_title or "بدون پروژه",
+                    "pins": [],
+                }
+            board["sections"][project_id]["pins"].append(pin)
+        elif goal_id:
+            boards_map[goal_id]["board_pins"].append(pin)
+        else:
+            orphan_pins.append(pin)
+    
+    # Process project images
+    for f in project_files:
+        pin = {
+            "file_name": f.name,
+            "file_url": f.file_url,
+            "file_size": f.file_size,
+            "file_type": f.file_type,
+            "image_name": f.file_name,
+            "source_type": "project",
+            "project_id": f.project_name,
+            "project_title": f.project_title,
+        }
+        
+        goal_id = f.project_goal
+        if goal_id and goal_id in boards_map:
+            boards_map[goal_id]["board_pins"].append(pin)
+        else:
+            orphan_pins.append(pin)
+    
+    # Convert maps to lists
+    boards = []
+    for goal_id, board in boards_map.items():
+        sections = []
+        for proj_id, section in board["sections"].items():
+            sections.append(section)
+        boards.append({
+            "goal_id": board["goal_id"],
+            "goal_title": board["goal_title"],
+            "goal_progress": board["goal_progress"],
+            "sections": sections,
+            "board_pins": board["board_pins"],
+        })
+    
+    return _api_response({
+        "boards": boards,
+        "orphan_pins": orphan_pins,
+    })
+
+
+@frappe.whitelist()
+def upload_gallery_image(filedata, filename, doctype=None, docname=None):
+    """Upload an image directly to the gallery. Can attach to a goal or project."""
+    _check_auth()
+    user = frappe.session.user
+    
+    import base64
+    from frappe.handler import upload_file
+    
+    # Decode base64 file data
+    if "," in filedata:
+        filedata = filedata.split(",")[1]
+    
+    file_doc = frappe.get_doc({
+        "doctype": "File",
+        "file_name": filename,
+        "content": base64.b64decode(filedata),
+        "is_private": 1,
+        "attached_to_doctype": doctype or "Task",
+        "attached_to_name": docname or "",
+    })
+    
+    # If attaching to a goal, use Goal doctype
+    if doctype == "Goal":
+        if not frappe.db.exists("Goal", {"name": docname, "user": user}):
+            frappe.throw(_("Permission denied"), frappe.PermissionError)
+        file_doc.attached_to_doctype = "Goal"
+        file_doc.attached_to_name = docname
+    elif doctype == "Hambaft Project":
+        if not frappe.db.exists("Hambaft Project", {"name": docname, "user": user}):
+            frappe.throw(_("Permission denied"), frappe.PermissionError)
+    elif doctype == "Task":
+        if not frappe.db.exists("Task", {"name": docname, "user": user}):
+            frappe.throw(_("Permission denied"), frappe.PermissionError)
+    
+    file_doc.insert(ignore_permissions=True)
+    frappe.db.commit()
+    
+    return _api_response({
+        "file_name": file_doc.name,
+        "file_url": file_doc.file_url,
+        "file_size": file_doc.file_size,
+    })
+
+
 # ─── Planner Board Views ───────────────────────────────────────
 
 @frappe.whitelist()
