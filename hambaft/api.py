@@ -1303,6 +1303,10 @@ def complete_task(name, actual_minutes=None):
     if actual_minutes:
         doc.actual_minutes = cint(actual_minutes)
     doc.save()
+    # Also complete all subtasks recursively
+    children = frappe.get_all("Task", filters={"parent_task": name, "status": ["!=", "done"]}, pluck="name")
+    for child in children:
+        complete_task(child)
     frappe.db.commit()
     return _api_response({"task": doc.as_dict()})
 
@@ -1311,6 +1315,13 @@ def complete_task(name, actual_minutes=None):
 def delete_task(name):
     if frappe.session.user == "Guest":
         frappe.throw("Authentication required", frappe.AuthenticationError)
+    # Recursively delete all subtasks first
+    children = frappe.get_all("Task", filters={"parent_task": name}, pluck="name")
+    for child in children:
+        # Recursively delete grandchildren
+        delete_task(child)
+    # Clear parent_task references that point to this task
+    frappe.db.sql("UPDATE `tabTask` SET parent_task = NULL WHERE parent_task = %s", name)
     frappe.delete_doc("Task", name)
     frappe.db.commit()
     return _api_response({"ok": True})

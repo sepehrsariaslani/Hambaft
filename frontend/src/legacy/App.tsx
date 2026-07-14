@@ -2710,15 +2710,22 @@ export default function App({
     setLifeData(prev => {
       let isStopping = false;
       let completedFinanceTask: any = null;
+      const toggled = prev.tasks.find(t => t.id === id);
+      if (!toggled) return prev;
+      const nextCompleted = !toggled.completed;
+
       const updatedTasks = prev.tasks.map(t => {
         if (t.id === id) {
-          const nextCompleted = !t.completed;
           if (nextCompleted && activeTimerTaskId === id) {
             isStopping = true;
           }
           if (nextCompleted) {
             completedFinanceTask = t;
           }
+          return { ...t, completed: nextCompleted, status: nextCompleted ? 'done' : 'inbox' };
+        }
+        // Also toggle subtasks when parent is toggled
+        if (t.parentTaskId === id) {
           return { ...t, completed: nextCompleted, status: nextCompleted ? 'done' : 'inbox' };
         }
         return t;
@@ -2754,6 +2761,15 @@ export default function App({
     if (syncedTask && !id.startsWith('tk-')) {
       runSync('toggle task', async () => {
         await updateTaskRecord(syncedTask as Task);
+        // Also complete subtasks on backend
+        if (syncedTask!.completed) {
+          try {
+            const { call: frappeCall } = await import('../app/frappe');
+            await frappeCall('hambaft.hambaft.api.complete_task', { name: id });
+          } catch (e) {
+            console.error('[hambaft] complete subtasks failed', e);
+          }
+        }
       });
     }
   };
@@ -2765,10 +2781,27 @@ export default function App({
       setIsTimerRunning(false);
     }
     setLifeData(prev => {
-      const updatedTasks = prev.tasks.filter(t => t.id !== id);
+      // Collect all descendant task IDs to remove from state
+      const toRemove = new Set<string>()
+      toRemove.add(id)
+      // Find direct and indirect children
+      const findDescendants = (parentId: string) => {
+        prev.tasks.filter(t => t.parentTaskId === parentId).forEach(child => {
+          toRemove.add(child.id)
+          findDescendants(child.id)
+        })
+      }
+      findDescendants(id)
+      // Also stop timer if any child was active
+      if (activeTimerTaskId && toRemove.has(activeTimerTaskId)) {
+        setActiveTimerTaskId(null)
+        setActiveTimerSeconds(0)
+        setIsTimerRunning(false)
+      }
+      const updatedTasks = prev.tasks.filter(t => !toRemove.has(t.id));
       const updatedGoals = prev.goals.map(g => {
         const updatedProjects = (g.projects || []).map(p => {
-          return { ...p, tasks: (p.tasks || []).filter(t => t.id !== id) };
+          return { ...p, tasks: (p.tasks || []).filter(t => !toRemove.has(t.id)) };
         });
         return { ...g, projects: updatedProjects };
       });
@@ -2776,7 +2809,7 @@ export default function App({
     });
     if (!id.startsWith('tk-')) {
       runSync('delete task', async () => {
-        await deleteTaskRecord(id);
+        await deleteTaskRecord(id); // backend delete_task now recursively deletes subtasks
       });
     }
   };
