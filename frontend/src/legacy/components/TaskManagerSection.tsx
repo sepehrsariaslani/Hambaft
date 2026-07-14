@@ -276,7 +276,7 @@ export default function TaskManagerSection({
     <div className="space-y-6">
       {/* Header Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
-        <StatCard label="کل تسک‌ها" value={stats.total} color="bg-[#2d3025] text-white" />
+        <StatCard label="کل تسک‌ها" value={stats.total} color="bg-[#2d3025] dark:bg-[#E8ECE0] text-white dark:text-[#121411]" />
         <StatCard label="انجام‌شده" value={stats.completed} color="bg-[#7C8363] text-white" />
         <StatCard label="تاریخ گذشته" value={stats.overdue} color="bg-[#c44a3d] text-white" />
         <StatCard label="اولویت بالا" value={stats.highPriority} color="bg-[#d4a017] text-white" />
@@ -294,7 +294,7 @@ export default function TaskManagerSection({
           <div className="flex-1" />
           <div className="flex items-center gap-2">
             <select
-              className="text-[10px] px-2 py-1.5 rounded-lg border border-[#D6CFC3] bg-white font-bold"
+              className="text-[10px] px-2 py-1.5 rounded-lg border border-[#D6CFC3] dark:border-[#3D4133] bg-white dark:bg-[#1B1D16] dark:text-[#E8ECE0] font-bold"
               defaultValue=""
               onChange={async (e) => {
                 if (!e.target.value) return
@@ -314,7 +314,7 @@ export default function TaskManagerSection({
               <option value="someday">شاید</option>
             </select>
             <select
-              className="text-[10px] px-2 py-1.5 rounded-lg border border-[#D6CFC3] bg-white font-bold"
+              className="text-[10px] px-2 py-1.5 rounded-lg border border-[#D6CFC3] dark:border-[#3D4133] bg-white dark:bg-[#1B1D16] dark:text-[#E8ECE0] font-bold"
               defaultValue=""
               onChange={async (e) => {
                 if (!e.target.value) return
@@ -331,7 +331,7 @@ export default function TaskManagerSection({
               <option value="low">پایین</option>
             </select>
             <select
-              className="text-[10px] px-2 py-1.5 rounded-lg border border-[#D6CFC3] bg-white font-bold"
+              className="text-[10px] px-2 py-1.5 rounded-lg border border-[#D6CFC3] dark:border-[#3D4133] bg-white dark:bg-[#1B1D16] dark:text-[#E8ECE0] font-bold"
               defaultValue=""
               onChange={async (e) => {
                 if (!e.target.value) return
@@ -361,7 +361,7 @@ export default function TaskManagerSection({
             </button>
             <button
               onClick={() => setSelectedTaskIds(new Set())}
-              className="text-[10px] px-3 py-1.5 rounded-lg bg-white text-[#8D7F72] border border-[#D6CFC3] font-bold hover:bg-[#F9F6EE] transition-colors"
+              className="text-[10px] px-3 py-1.5 rounded-lg bg-white dark:bg-[#1B1D16] text-[#8D7F72] dark:text-[#9D978B] border border-[#D6CFC3] dark:border-[#3D4133] font-bold hover:bg-[#F9F6EE] transition-colors"
             >
               لغو انتخاب
             </button>
@@ -386,7 +386,7 @@ export default function TaskManagerSection({
       </div>
 
       {/* Filters & Controls */}
-      <div className="rounded-2xl border border-[#E6DFD3] bg-[#FDFBF7] p-4 space-y-4">
+      <div className="rounded-2xl border border-[#E6DFD3] dark:border-[#3D4133] bg-[#FDFBF7] dark:bg-[#1B1D16] p-4 space-y-4">
         <div className="flex flex-wrap gap-3 items-center">
           <div className="relative flex-1 min-w-[200px]">
             <svg className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9D978B]" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
@@ -395,7 +395,7 @@ export default function TaskManagerSection({
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="جستجو در تسک‌ها..."
-              className="w-full rounded-lg border border-[#E6DFD3] bg-white pr-9 pl-3 py-2 text-sm text-[#2d3025] placeholder:text-[#9D978B] focus:border-[#7C8363] focus:outline-none focus:ring-1 focus:ring-[#7C8363]/20"
+              className="w-full rounded-lg border border-[#E6DFD3] dark:border-[#3D4133] bg-white dark:bg-[#1B1D16] pr-9 pl-3 py-2 text-sm text-[#2d3025] dark:text-[#E8ECE0] placeholder:text-[#9D978B] focus:border-[#7C8363] focus:outline-none focus:ring-1 focus:ring-[#7C8363]/20"
             />
           </div>
 
@@ -429,7 +429,7 @@ export default function TaskManagerSection({
           ]} />
         </div>
 
-        <div className="flex flex-wrap gap-3 items-center border-t border-[#E6DFD3] pt-3">
+        <div className="flex flex-wrap gap-3 items-center border-t border-[#E6DFD3] dark:border-[#3D4133] pt-3">
           {/* View Switcher — reusable component */}
           <ViewSwitcher
             views={[
@@ -487,8 +487,8 @@ export default function TaskManagerSection({
             <div key={groupName} className="space-y-3">
               {groupBy !== 'none' && (
                 <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-black text-[#2d3025]">{groupName}</h3>
-                  <span className="text-[10px] font-bold text-[#8D7F72] bg-[#E6DFD3] px-2 py-0.5 rounded-full">{groupTasks.length}</span>
+                  <h3 className="text-sm font-black text-[#2d3025] dark:text-[#E8ECE0]">{groupName}</h3>
+                  <span className="text-[10px] font-bold text-[#8D7F72] dark:text-[#9D978B] bg-[#E6DFD3] dark:bg-[#3D4133] px-2 py-0.5 rounded-full">{groupTasks.length}</span>
                 </div>
               )}
               <div className="space-y-2">
@@ -603,7 +603,7 @@ function Select({ value, onChange, options }: { value: string; onChange: (v: str
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="rounded-lg border border-[#E6DFD3] bg-white px-3 py-2 text-sm text-[#2d3025] focus:border-[#7C8363] focus:outline-none focus:ring-1 focus:ring-[#7C8363]/20 cursor-pointer"
+      className="rounded-lg border border-[#E6DFD3] dark:border-[#3D4133] bg-white dark:bg-[#1B1D16] px-3 py-2 text-sm text-[#2d3025] dark:text-[#E8ECE0] focus:border-[#7C8363] focus:outline-none focus:ring-1 focus:ring-[#7C8363]/20 cursor-pointer"
     >
       {options.map((o) => (
         <option key={o.value} value={o.value}>{o.label}</option>
@@ -614,15 +614,15 @@ function Select({ value, onChange, options }: { value: string; onChange: (v: str
 
 function Segmented({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: { value: string; label: string }[] }) {
   return (
-    <div className="inline-flex rounded-lg border border-[#E6DFD3] bg-white overflow-hidden">
+    <div className="inline-flex rounded-lg border border-[#E6DFD3] dark:border-[#3D4133] bg-white dark:bg-[#1B1D16] overflow-hidden">
       {options.map((o) => (
         <button
           key={o.value}
           onClick={() => onChange(o.value)}
           className={`px-3 py-1.5 text-xs font-bold transition-colors ${
             value === o.value
-              ? 'bg-[#2d3025] text-white'
-              : 'text-[#5f6156] hover:bg-[#f3ebdf]'
+              ? 'bg-[#2d3025] dark:bg-[#E8ECE0] text-white dark:text-[#121411]'
+              : 'text-[#5f6156] dark:text-[#9D978B] hover:bg-[#f3ebdf] dark:hover:bg-[#3D4133]'
           }`}
         >
           {o.label}
@@ -660,12 +660,12 @@ function TaskRow({
     <div
       className={`group flex items-start ${dCfg.gap} rounded-xl border ${dCfg.rowPadding} transition-all hover:shadow-sm ${
         task.completed
-          ? 'border-[#E6DFD3] bg-[#f9f7f2] opacity-60'
+          ? 'border-[#E6DFD3] dark:border-[#3D4133] bg-[#f9f7f2] dark:bg-[#1B1D16] opacity-60'
           : isOverdue
             ? 'border-[#c44a3d]/30 bg-[#c44a3d]/5'
             : hasBlockers
               ? 'border-orange-200 bg-orange-50/30 hover:border-orange-300'
-              : 'border-[#E6DFD3] bg-white hover:border-[#7C8363]/40'
+              : 'border-[#E6DFD3] dark:border-[#3D4133] bg-white dark:bg-[#1B1D16] hover:border-[#7C8363]/40'
       }`}
     >
       <div className={`flex items-center ${dCfg.gap} pt-0.5`}>
@@ -673,14 +673,14 @@ function TaskRow({
           type="checkbox"
           checked={selected}
           onChange={onToggleSelect}
-          className="w-4 h-4 rounded border-[#E6DFD3] text-[#7C8363] focus:ring-[#7C8363]/20 cursor-pointer"
+          className="w-4 h-4 rounded border-[#E6DFD3] dark:border-[#3D4133] text-[#7C8363] dark:text-[#9ECE9A] focus:ring-[#7C8363]/20 cursor-pointer"
         />
         <button
           onClick={onToggle}
           className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${
             task.completed
               ? 'bg-[#7C8363] border-[#7C8363] text-white'
-              : 'border-[#E6DFD3] hover:border-[#7C8363]'
+              : 'border-[#E6DFD3] dark:border-[#3D4133] hover:border-[#7C8363]'
           }`}
         >
           {task.completed && (
@@ -712,7 +712,7 @@ function TaskRow({
         </div>
         <div className={`flex items-center ${dCfg.gap} flex-wrap`}>
           {isColumnVisible(viewConfig, 'status') && task.status && (
-            <span className={`${dCfg.badgeSize} font-bold rounded bg-[#f3ebdf] text-[#8D7F72]`}>
+            <span className={`${dCfg.badgeSize} font-bold rounded bg-[#f3ebdf] dark:bg-[#3D4133]/50 text-[#8D7F72] dark:text-[#9D978B]`}>
               {statusLabelsMap[task.status] || task.status}
             </span>
           )}
