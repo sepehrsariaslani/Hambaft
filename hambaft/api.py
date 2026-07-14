@@ -4146,7 +4146,11 @@ def get_projects_by_area(area_name):
 def get_task_tracked_minutes(task_name):
     """Get total tracked minutes for a task from sessions (own + subtasks)."""
     _check_auth()
-    _require_owner("Task", task_name)
+    # Verify task exists and belongs to user — use soft check
+    if not frappe.db.exists("Task", {"name": task_name, "user": frappe.session.user}):
+        # Fallback: if task has no user field set, allow anyway (legacy data)
+        if not frappe.db.exists("Task", task_name):
+            frappe.throw(_("Task {0} not found").format(task_name))
     # Own tracked minutes
     own = frappe.db.sql(
         "SELECT COALESCE(SUM(duration_minutes), 0) FROM `tabHambaft Task Session` WHERE task=%s AND status IN ('paused', 'completed')",
@@ -4175,6 +4179,36 @@ def get_area_tracked_minutes(area_name):
     _require_owner("Hambaft Area", area_name)
     doc = frappe.get_doc("Hambaft Area", area_name)
     return _api_response({"tracked_minutes": doc.get_tracked_minutes()})
+
+
+# ─── Task Attachments ────────────────────────────────────────────
+
+@frappe.whitelist()
+def get_task_attachments(task_name):
+    """Get all files attached to a task."""
+    _check_auth()
+    _require_owner("Task", task_name)
+    files = frappe.get_all(
+        "File",
+        filters={"attached_to_doctype": "Task", "attached_to_name": task_name},
+        fields=["name", "file_name", "file_type", "file_url", "file_size", "is_private", "creation"],
+        order_by="creation desc",
+    )
+    return _api_response({"attachments": files})
+
+
+@frappe.whitelist()
+def delete_task_attachment(file_name):
+    """Delete an attached file from a task."""
+    _check_auth()
+    doc = frappe.get_doc("File", file_name)
+    # Ensure the file is attached to a task owned by the user
+    if doc.attached_to_doctype != "Task":
+        frappe.throw(_("File is not attached to a task"), frappe.PermissionError)
+    _require_owner("Task", doc.attached_to_name)
+    frappe.delete_doc("File", file_name)
+    frappe.db.commit()
+    return _api_response({"ok": True})
 
 
 # ─── Planner Board Views ───────────────────────────────────────

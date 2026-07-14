@@ -18,7 +18,7 @@ import {
   FolderKanban, Target, Layers, AlertCircle, Play, Pause,
   Square, RotateCcw, Sparkles, Pin, Link2, ArrowUpRight,
   BookOpen, Timer, History, Plus, ChevronDown, Check, GripVertical,
-  ChevronLeft, X, AlarmClock, Flame, Diamond, Milestone, Home,
+  ChevronLeft, X, AlarmClock, Flame, Diamond, Milestone, Home, Paperclip, Upload, FileText, Download,
 } from 'lucide-react'
 import type { Task } from '../types'
 import {
@@ -26,7 +26,7 @@ import {
   TaskImpactBanner, TaskImpactExplanation, BlockedTaskIndicator,
 } from './TaskV2Shared'
 import type { ImportanceLevel } from './TaskV2Shared'
-import { getTaskSessions, getTaskChildren, quickAddTask, getTaskTrackedMinutes, mapBackendTaskRecord } from '../../app/hambaft-api'
+import { getTaskSessions, getTaskChildren, quickAddTask, getTaskTrackedMinutes, mapBackendTaskRecord, getTaskAttachments, deleteTaskAttachment } from '../../app/hambaft-api'
 import EntityNoteEditor from '../../notes/components/EntityNoteEditor'
 import PersianDatePicker from './PersianDatePicker'
 
@@ -367,7 +367,7 @@ interface TaskDetailPageProps {
   onResetTimer?: (taskId: string) => void
 }
 
-type SubTab = 'steps' | 'time'
+type SubTab = 'steps' | 'time' | 'files'
 
 export default function TaskDetailPage({
   task,
@@ -393,6 +393,7 @@ export default function TaskDetailPage({
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [tempTitle, setTempTitle] = useState(task.title)
   const [newSubtaskText, setNewSubtaskText] = useState('')
+  const [attachmentCount, setAttachmentCount] = useState(0)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
   // Floating pickers
@@ -508,6 +509,14 @@ export default function TaskDetailPage({
       .catch(() => setTrackedTime({ own: 0, subtask: 0, total: 0 }))
   }, [task.id])
 
+  // Fetch attachment count for tab badge
+  useEffect(() => {
+    if (!task.id) return
+    getTaskAttachments(task.id)
+      .then(resp => setAttachmentCount(resp?.data?.attachments?.length || 0))
+      .catch(() => setAttachmentCount(0))
+  }, [task.id])
+
   const subtasks = childTasks
   const subDone = subtasks.filter(st => st.completed).length
   const subTotal = subtasks.length
@@ -539,10 +548,10 @@ export default function TaskDetailPage({
   }, [linkedArea, linkedProject, linkedGoal, onNavigate])
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#fdf9f2_0%,#f3ebdf_100%)] dark:bg-[linear-gradient(180deg,#121411_0%,#1B1D16_100%)]" dir="rtl">
+    <div className="min-h-screen bg-[linear-gradient(180deg,#fdf9f2_0%,#f3ebdf_100%)] dark:bg-[linear-gradient(180deg,#121411_0%,#1B1D16_100%)] overflow-x-hidden" dir="rtl">
       {/* ═══ Top Bar — Minimal ═══ */}
       <div className="sticky top-0 z-30 bg-[#F9F6EE]/80 dark:bg-[#1B1D16]/80 backdrop-blur-xl">
-        <div className="max-w-4xl mx-auto flex items-center gap-3 px-4 py-2">
+        <div className="flex items-center gap-3 px-3 py-2">
           <button onClick={onBack}
             className="p-1.5 rounded-lg text-[#8D7F72] dark:text-[#9D978B] hover:text-[#2D3025] dark:hover:text-[#E8ECE0] hover:bg-[#7C8363]/5 dark:hover:bg-[#9ECE9A]/5 cursor-pointer transition-all active:scale-90">
             <ArrowRight className="w-4 h-4" />
@@ -591,7 +600,7 @@ export default function TaskDetailPage({
       </div>
 
       {/* ═══ Hero: Title + Breadcrumb ═══ */}
-      <div className="max-w-4xl mx-auto px-4 pt-4 pb-2">
+      <div className="px-3 pt-4 pb-2">
         {/* Status dot + Title */}
         <div className="flex items-start gap-2.5">
           <button
@@ -647,7 +656,7 @@ export default function TaskDetailPage({
       </div>
 
       {/* ═══ Two-column: Metadata (right/راست) + Content (left/چپ) ═══ */}
-      <div className="max-w-6xl mx-auto px-4 py-3">
+      <div className="px-3 py-3">
         <div className="flex flex-col lg:flex-row gap-6">
 
           {/* ── ستون راست: پنل متادیتا (در RTL اول می‌آید) ── */}
@@ -820,6 +829,7 @@ export default function TaskDetailPage({
               {[
                 { id: 'steps' as SubTab, label: 'مراحل', icon: <Layers className="w-3 h-3" />, count: subTotal },
                 { id: 'time' as SubTab, label: 'زمان‌سنج', icon: <Timer className="w-3 h-3" />, count: null },
+                { id: 'files' as SubTab, label: 'فایل‌ها', icon: <Paperclip className="w-3 h-3" />, count: attachmentCount || null },
               ].map(tab => (
                 <button
                   key={tab.id}
@@ -874,6 +884,13 @@ export default function TaskDetailPage({
                       formatSeconds={formatSeconds}
                       trackedTime={trackedTime}
                     />
+                  )}
+                  {subTab === 'files' && (
+                    <FilesSection task={task} onAttachmentChange={() => {
+                      getTaskAttachments(task.id)
+                        .then(resp => setAttachmentCount(resp?.data?.attachments?.length || 0))
+                        .catch(() => {})
+                    }} />
                   )}
                 </motion.div>
               </AnimatePresence>
@@ -1284,6 +1301,158 @@ function TimeSection({ task, isActiveSession, activeTimerSeconds, isTimerRunning
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+// ══════════════════════════════════════════════════════════════
+// Files Section — Attachments
+// ══════════════════════════════════════════════════════════════
+function FilesSection({ task, onAttachmentChange }: {
+  task: Task; onAttachmentChange?: () => void
+}) {
+  const [attachments, setAttachments] = useState<any[]>([])
+  const [loading, setLoading] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const fetchAttachments = useCallback(async () => {
+    if (!task.id) return
+    setLoading(true)
+    try {
+      const resp = await getTaskAttachments(task.id)
+      setAttachments(resp?.data?.attachments || [])
+    } catch {
+      setAttachments([])
+    } finally {
+      setLoading(false)
+    }
+  }, [task.id])
+
+  useEffect(() => { fetchAttachments() }, [fetchAttachments])
+
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('is_private', '1')
+      formData.append('doctype', 'Task')
+      formData.append('docname', task.id)
+      formData.append('fieldname', 'attachments')
+      const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+      const resp = await fetch('/api/method/upload_file', {
+        method: 'POST',
+        headers: csrfToken ? { 'X-Frappe-CSRF-Token': csrfToken } : {},
+        body: formData,
+        credentials: 'same-origin',
+      })
+      if (!resp.ok) throw new Error('Upload failed')
+      await fetchAttachments()
+      onAttachmentChange?.()
+    } catch (err) {
+      console.error('[hambaft] file upload failed', err)
+    } finally {
+      setUploading(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
+  const handleDelete = async (fileName: string) => {
+    try {
+      await deleteTaskAttachment(fileName)
+      await fetchAttachments()
+      onAttachmentChange?.()
+    } catch (err) {
+      console.error('[hambaft] file delete failed', err)
+    }
+  }
+
+  const formatSize = (bytes: number) => {
+    if (!bytes) return ''
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  }
+
+  const formatTime = (iso: string) => {
+    if (!iso) return ''
+    try { return new Date(iso).toLocaleDateString('fa-IR', { month: 'short', day: 'numeric' }) } catch { return iso }
+  }
+
+  const getFileIcon = (type: string) => {
+    if (!type) return <FileText className="w-4 h-4 text-[#8D7F72] dark:text-[#9D978B]" />
+    if (type.startsWith('image/')) return <BookOpen className="w-4 h-4 text-emerald-500" />
+    if (type.startsWith('video/')) return <Play className="w-4 h-4 text-blue-500" />
+    if (type.includes('pdf')) return <FileText className="w-4 h-4 text-red-500" />
+    return <FileText className="w-4 h-4 text-[#8D7F72] dark:text-[#9D978B]" />
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Upload area */}
+      <div
+        onClick={() => fileInputRef.current?.click()}
+        className="flex items-center justify-center gap-2 py-6 border-2 border-dashed border-[#E6DFD3] dark:border-[#3D4133] rounded-xl cursor-pointer hover:border-[#7C8363] dark:hover:border-[#9ECE9A] hover:bg-[#7C8363]/5 dark:hover:bg-[#9ECE9A]/5 transition-all"
+      >
+        {uploading ? (
+          <div className="flex items-center gap-2 text-[11px] font-bold text-[#7C8363] dark:text-[#9ECE9A]">
+            <div className="w-3 h-3 border-2 border-[#7C8363]/30 dark:border-[#9ECE9A]/30 border-t-[#7C8363] dark:border-t-[#9ECE9A] rounded-full animate-spin" />
+            در حال آپلود...
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 text-[11px] font-bold text-[#8D7F72] dark:text-[#9D978B]">
+            <Upload className="w-4 h-4" />
+            کلیک کنید یا فایل را بکشید
+          </div>
+        )}
+      </div>
+      <input
+        ref={fileInputRef}
+        type="file"
+        className="hidden"
+        onChange={handleUpload}
+      />
+
+      {/* File list */}
+      {loading ? (
+        <div className="text-[10px] text-[#8D7F72] dark:text-[#9D978B] text-center py-4">در حال بارگذاری...</div>
+      ) : attachments.length === 0 ? (
+        <div className="text-[10px] text-[#9D978B] text-center py-4">هنوز فایلی پیوست نشده</div>
+      ) : (
+        <div className="space-y-1.5">
+          {attachments.map((att, idx) => (
+            <div key={att.name || idx}
+              className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-[#F9F6EE]/60 dark:hover:bg-[#3D4133]/30 transition-colors group"
+            >
+              {getFileIcon(att.file_type)}
+              <div className="flex-1 min-w-0">
+                <div className="text-[11px] font-bold text-[#2D3025] dark:text-[#E8ECE0] truncate">
+                  {att.file_name}
+                </div>
+                <div className="flex items-center gap-2 text-[9px] text-[#8D7F72] dark:text-[#9D978B]">
+                  {att.file_size ? formatSize(att.file_size) : ''}
+                  {att.creation ? formatTime(att.creation) : ''}
+                </div>
+              </div>
+              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                {att.file_url && (
+                  <a href={att.file_url} target="_blank" rel="noopener noreferrer"
+                    className="p-1 rounded text-[#8D7F72] dark:text-[#9D978B] hover:text-[#7C8363] dark:hover:text-[#9ECE9A] cursor-pointer">
+                    <Download className="w-3 h-3" />
+                  </a>
+                )}
+                <button onClick={() => handleDelete(att.name)}
+                  className="p-1 rounded text-[#8D7F72] dark:text-[#9D978B] hover:text-red-400 cursor-pointer">
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

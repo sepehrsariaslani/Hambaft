@@ -1205,6 +1205,16 @@ export async function getAreaTrackedMinutes(areaName: string) {
   return callGet<{ data?: { tracked_minutes?: number } }>(`hambaft.hambaft.api.get_area_tracked_minutes?area_name=${encodeURIComponent(areaName)}`)
 }
 
+// ─── Task Attachments ───────────────────────────────────────
+
+export async function getTaskAttachments(taskName: string) {
+  return callGet<{ data?: { attachments?: any[] } }>(`hambaft.hambaft.api.get_task_attachments?task_name=${encodeURIComponent(taskName)}`)
+}
+
+export async function deleteTaskAttachment(fileName: string) {
+  return call('hambaft.hambaft.api.delete_task_attachment', { file_name: fileName })
+}
+
 // ─── Planner Board Views ──────────────────────────────────
 
 export async function getTasksByProject(limit = 100) {
