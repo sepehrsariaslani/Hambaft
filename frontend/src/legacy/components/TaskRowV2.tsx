@@ -45,9 +45,11 @@ interface TaskRowV2Props {
   onOpenDrawer?: () => void
   onQuickAction: (taskId: string, field: string, value: any) => void
   onAddSubtask?: (parentId: string, title: string) => void
-  onToggleSubtask?: (subtask: Task) => void
+  onToggleSubtask?: (subtaskId: string) => void
   onDeleteSubtask?: (id: string) => void
   onViewSubtask?: (id: string) => void
+  /** Register new subtask in global lifeData so toggle/delete/view works */
+  onAddTask?: (titleOrTask: string | Task) => void
   todayDate: string
   viewConfig: ViewConfig
   dCfg: typeof DENSITY_CONFIG.comfortable
@@ -68,6 +70,7 @@ export default function TaskRowV2({
   onToggleSubtask,
   onDeleteSubtask,
   onViewSubtask,
+  onAddTask,
   todayDate,
   viewConfig,
   dCfg,
@@ -147,6 +150,10 @@ export default function TaskRowV2({
         if (saved?.name) {
           const { updateDoc } = await import('../../app/frappe')
           await updateDoc('Task', saved.name, { parent_task: task.id })
+          // Register the new subtask in global lifeData so toggle/delete/view works from the list
+          const mappedTask = mapBackendTaskRecord(saved)
+          mappedTask.parentTaskId = task.id
+          if (onAddTask) onAddTask(mappedTask)
           if (expanded) await fetchChildren()
         }
       }
@@ -315,7 +322,7 @@ export default function TaskRowV2({
                   task={child}
                   selected={false}
                   onToggleSelect={() => {}}
-                  onToggle={() => onToggleSubtask?.(child)}
+                  onToggle={() => onToggleSubtask?.(child.id)}
                   onDelete={() => onDeleteSubtask?.(child.id)}
                   onView={() => onViewSubtask?.(child.id)}
                   onOpenDrawer={() => onViewSubtask?.(child.id)}
@@ -323,6 +330,7 @@ export default function TaskRowV2({
                   onToggleSubtask={onToggleSubtask}
                   onDeleteSubtask={onDeleteSubtask}
                   onViewSubtask={onViewSubtask}
+                  onAddTask={onAddTask}
                   todayDate={todayDate}
                   viewConfig={viewConfig}
                   dCfg={safeDCfg}

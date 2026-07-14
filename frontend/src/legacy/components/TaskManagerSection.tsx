@@ -503,12 +503,10 @@ export default function TaskManagerSection({
                     onView={() => onViewTaskDetails ? onViewTaskDetails(task.id) : setDrawerTaskId(task.id)}
                     onOpenDrawer={() => setDrawerTaskId(task.id)}
                     onQuickAction={handleQuickAction}
-                    onToggleSubtask={(subtask) => {
-                      const newCompleted = !subtask.completed
-                      onUpdateTask({ ...subtask, completed: newCompleted, status: newCompleted ? 'done' : 'inbox' })
-                    }}
+                    onToggleSubtask={(subtaskId) => onToggleTask(subtaskId)}
                     onDeleteSubtask={(id) => onDeleteTask(id)}
                     onViewSubtask={(id) => onViewTaskDetails ? onViewTaskDetails(id) : setDrawerTaskId(id)}
+                    onAddTask={onAddTask}
                     todayDate={todayDate}
                     viewConfig={viewConfig}
                     dCfg={dCfg}
