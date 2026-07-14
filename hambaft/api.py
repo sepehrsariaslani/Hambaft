@@ -5963,6 +5963,21 @@ def run_project_tasks_migration():
         "لغو‌شده": "dropped", "لغو شده": "dropped",
     }
 
+    # Priority mapping: normalize any legacy value to a valid Task.priority option
+    _PRIORITY_MAP = {
+        "زیاد": "بالا",
+        "خیلی زیاد": "فوری",
+        "کم": "پایین",
+        "متوسط": "متوسط",
+        "بالا": "بالا",
+        "پایین": "پایین",
+        "فوری": "فوری",
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "urgent": "urgent",
+    }
+
     if not frappe.db.exists("DocType", "Hambaft Task"):
         return _api_response({"status": "skipped", "reason": "Hambaft Task DocType not found"})
 
@@ -6014,7 +6029,10 @@ def run_project_tasks_migration():
             task_doc.description = getattr(row, "description", "") or ""
             task_doc.project = proj.name
             task_doc.status = status
-            task_doc.priority = getattr(row, "priority", "متوسط") or "متوسط"
+            task_doc.priority = _PRIORITY_MAP.get(
+                getattr(row, "priority", "متوسط") or "متوسط",
+                "متوسط"
+            )
             task_doc.user = proj.user or frappe.session.user
             task_doc.area = proj.area or None
             task_doc.goal = proj.goal or None
