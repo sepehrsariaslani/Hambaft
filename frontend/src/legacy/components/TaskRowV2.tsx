@@ -3,7 +3,7 @@
  * Nested subtasks render recursively inside the accordion.
  * Hover actions use absolute positioning so row height doesn't change.
  */
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import {
   CheckCircle2, Circle, Flag, Calendar, Clock, AlertCircle,
@@ -50,6 +50,8 @@ interface TaskRowV2Props {
   onViewSubtask?: (id: string) => void
   /** Register new subtask in global lifeData so toggle/delete/view works */
   onAddTask?: (titleOrTask: string | Task) => void
+  /** All tasks from lifeData — used to derive children instead of separate API fetch */
+  allTasks?: Task[]
   todayDate: string
   viewConfig: ViewConfig
   dCfg: typeof DENSITY_CONFIG.comfortable
@@ -71,6 +73,7 @@ export default function TaskRowV2({
   onDeleteSubtask,
   onViewSubtask,
   onAddTask,
+  allTasks,
   todayDate,
   viewConfig,
   dCfg,
@@ -84,22 +87,31 @@ export default function TaskRowV2({
 
   // ─── Accordion: child tasks (real subtasks) ───
   const [expanded, setExpanded] = useState(false)
-  const [childTasks, setChildTasks] = useState<Task[]>([])
   const [loadingChildren, setLoadingChildren] = useState(false)
 
+  // Derive children from allTasks (reactive) — falls back to API fetch
+  const childTasksFromState = useMemo(() => {
+    if (!allTasks || !task.id) return null // null = use API
+    return allTasks.filter(t => t.parentTaskId === task.id)
+  }, [allTasks, task.id])
+
+  const [childTasksFromApi, setChildTasksFromApi] = useState<Task[]>([])
+  const childTasks = childTasksFromState ?? childTasksFromApi
+
   const fetchChildren = useCallback(async () => {
-    if (!task.id) return
-    setLoadingChildren(true)
-    try {
-      const resp = await getTaskChildren(task.id)
-      const raw = resp?.data?.tasks || []
-      setChildTasks(raw.map((item: any) => mapBackendTaskRecord(item)))
-    } catch {
-      setChildTasks([])
-    } finally {
-      setLoadingChildren(false)
+    if (task.id && childTasksFromState === null) {
+      setLoadingChildren(true)
+      try {
+        const resp = await getTaskChildren(task.id)
+        const raw = resp?.data?.tasks || []
+        setChildTasksFromApi(raw.map((item: any) => mapBackendTaskRecord(item)))
+      } catch {
+        setChildTasksFromApi([])
+      } finally {
+        setLoadingChildren(false)
+      }
     }
-  }, [task.id])
+  }, [task.id, childTasksFromState])
 
   useEffect(() => {
     if (expanded && task.id) fetchChildren()
@@ -331,6 +343,7 @@ export default function TaskRowV2({
                   onDeleteSubtask={onDeleteSubtask}
                   onViewSubtask={onViewSubtask}
                   onAddTask={onAddTask}
+                  allTasks={allTasks}
                   todayDate={todayDate}
                   viewConfig={viewConfig}
                   dCfg={safeDCfg}

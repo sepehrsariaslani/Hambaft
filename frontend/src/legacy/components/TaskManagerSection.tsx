@@ -507,6 +507,7 @@ export default function TaskManagerSection({
                     onDeleteSubtask={(id) => onDeleteTask(id)}
                     onViewSubtask={(id) => onViewTaskDetails ? onViewTaskDetails(id) : setDrawerTaskId(id)}
                     onAddTask={onAddTask}
+                    allTasks={allTasks}
                     todayDate={todayDate}
                     viewConfig={viewConfig}
                     dCfg={dCfg}
