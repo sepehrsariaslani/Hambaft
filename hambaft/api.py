@@ -5956,11 +5956,35 @@ def run_project_tasks_migration():
     if frappe.session.user == "Guest":
         frappe.throw("Authentication required", frappe.AuthenticationError)
 
+    # Status mapping: normalize any legacy/local value to a valid Task.status option
+    # Valid Task statuses: inbox, not_started, next, today, in_progress, done, on_hold, someday, dropped,
+    #                      صندوق ورودی, انجام‌شده, انجام‌نشده, در حال انجام, متوقف, شاید
     _STATUS_FA_TO_EN_LOCAL = {
         "انجام‌شده": "done", "انجام شده": "done",
         "در حال انجام": "in_progress", "در_حال_انجام": "in_progress",
         "انجام‌نشده": "inbox", "انجام نشده": "inbox",
         "لغو‌شده": "dropped", "لغو شده": "dropped",
+        # Project statuses that leaked into child tasks
+        "فعال": "in_progress", "برنامه‌ریزی": "inbox",
+        "متوقف‌شده": "on_hold", "متوقف شده": "on_hold",
+        "تکمیل‌شده": "done", "تکمیل شده": "done",
+        # English project statuses
+        "active": "in_progress", "planning": "inbox",
+        "paused": "on_hold", "completed": "done",
+        # Other possible values
+        "شروع‌نشده": "not_started", "شروع نشده": "not_started",
+        "در انتظار": "on_hold",
+        "today": "today", "next": "next",
+        "someday": "someday", "on_hold": "on_hold",
+        "in_progress": "in_progress", "done": "done",
+        "inbox": "inbox", "dropped": "dropped",
+        "not_started": "not_started",
+        "صندوق ورودی": "inbox", "متوقف": "on_hold", "شاید": "someday",
+    }
+    _VALID_TASK_STATUSES = {
+        "inbox", "not_started", "next", "today", "in_progress",
+        "done", "on_hold", "someday", "dropped",
+        "صندوق ورودی", "انجام‌شده", "انجام‌نشده", "در حال انجام", "متوقف", "شاید",
     }
 
     # Priority mapping: normalize any legacy value to a valid Task.priority option
@@ -5977,6 +6001,7 @@ def run_project_tasks_migration():
         "high": "high",
         "urgent": "urgent",
     }
+    _VALID_TASK_PRIORITIES = {"low", "medium", "high", "urgent", "پایین", "متوسط", "بالا", "فوری"}
 
     if not frappe.db.exists("DocType", "Hambaft Task"):
         return _api_response({"status": "skipped", "reason": "Hambaft Task DocType not found"})
@@ -5991,6 +6016,7 @@ def run_project_tasks_migration():
 
     created = 0
     skipped = 0
+    errors = []
 
     for proj in projects:
         doc = frappe.get_doc("Hambaft Project", proj.name)
@@ -6004,8 +6030,11 @@ def run_project_tasks_migration():
             if not title:
                 continue
 
-            status = getattr(row, "status", "انجام‌نشده") or "انجام‌نشده"
+            status = getattr(row, "status", "inbox") or "inbox"
             status = _STATUS_FA_TO_EN_LOCAL.get(status, status)
+            # Final safety: if still not valid, default to inbox
+            if status not in _VALID_TASK_STATUSES:
+                status = "inbox"
 
             # Check if a matching Task already exists
             existing = frappe.get_all(
@@ -6024,22 +6053,32 @@ def run_project_tasks_migration():
                 continue
 
             # Create a real Task record
-            task_doc = frappe.new_doc("Task")
-            task_doc.title = title
-            task_doc.description = getattr(row, "description", "") or ""
-            task_doc.project = proj.name
-            task_doc.status = status
-            task_doc.priority = _PRIORITY_MAP.get(
-                getattr(row, "priority", "متوسط") or "متوسط",
-                "متوسط"
-            )
-            task_doc.user = proj.user or frappe.session.user
-            task_doc.area = proj.area or None
-            task_doc.goal = proj.goal or None
-            task_doc.due_date = getattr(row, "due_date", None) or None
-            task_doc.importance = "عادی"
-            task_doc.insert(ignore_permissions=True)
-            created += 1
+            try:
+                task_doc = frappe.new_doc("Task")
+                task_doc.title = title
+                task_doc.description = getattr(row, "description", "") or ""
+                task_doc.project = proj.name
+                task_doc.status = status
+                task_doc.priority = _PRIORITY_MAP.get(
+                    getattr(row, "priority", "متوسط") or "متوسط",
+                    "متوسط"
+                )
+                # Final safety: if priority still not valid, default to متوسط
+                if task_doc.priority not in _VALID_TASK_PRIORITIES:
+                    task_doc.priority = "متوسط"
+                task_doc.user = proj.user or frappe.session.user
+                task_doc.area = proj.area or None
+                task_doc.goal = proj.goal or None
+                task_doc.due_date = getattr(row, "due_date", None) or None
+                task_doc.importance = "عادی"
+                task_doc.insert(ignore_permissions=True)
+                created += 1
+            except Exception as e:
+                errors.append({
+                    "project": proj.name,
+                    "title": title,
+                    "error": str(e),
+                })
 
     frappe.db.commit()
-    return _api_response({"status": "done", "created": created, "skipped": skipped})
+    return _api_response({"status": "done", "created": created, "skipped": skipped, "errors": errors})
