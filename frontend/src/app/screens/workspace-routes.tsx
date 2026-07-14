@@ -32,6 +32,7 @@ export type WorkspaceTab =
   | 'planner-month'
   | 'planner-board'
   | 'planner-areas'
+  | 'gallery'
 
 type WorkspaceRouteConfig = {
   path: string
@@ -70,6 +71,7 @@ export const workspaceRouteConfigs: WorkspaceRouteConfig[] = [
   { path: 'planner/month', tab: 'planner-month' },
   { path: 'planner/board', tab: 'planner-board' },
   { path: 'planner/areas', tab: 'planner-areas' },
+  { path: 'gallery', tab: 'gallery' },
 ]
 
 export function buildWorkspaceRoutes(): RouteObject[] {

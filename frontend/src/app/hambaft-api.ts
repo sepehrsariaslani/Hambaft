@@ -1215,10 +1215,50 @@ export async function deleteTaskAttachment(fileName: string) {
   return call('hambaft.hambaft.api.delete_task_attachment', { file_name: fileName })
 }
 
-// ─── Gallery ────────────────────────────────────────────────
+// ─── Gallery Domain ─────────────────────────────────────────
 
-export async function getGalleryData() {
-  return callGet<{ data?: { boards?: any[]; orphan_pins?: any[] } }>('hambaft.hambaft.api.get_gallery_data')
+export interface GalleryPin {
+  file_name: string
+  file_url: string
+  file_size: number
+  file_type?: string
+  image_name?: string
+  source_type: 'task' | 'project' | 'goal' | 'direct'
+  source_id?: string
+  source_title?: string
+  sort_order?: number
+}
+
+export interface GallerySection {
+  section_id: string
+  section_title: string
+  pins: GalleryPin[]
+}
+
+export interface GalleryBoard {
+  board_id: string
+  board_title: string
+  cover_url?: string
+  pin_count: number
+  board_pins: GalleryPin[]
+  sections: GallerySection[]
+}
+
+export interface GalleryData {
+  boards: GalleryBoard[]
+  orphan_pins: GalleryPin[]
+}
+
+export async function getGalleryBoards() {
+  return callGet<{ data?: GalleryData }>('hambaft.hambaft.api.get_gallery_boards')
+}
+
+export async function reorderGalleryPins(items: Array<{ file_name: string; sort_order: number; scope_type: string; scope_id: string }>) {
+  return call('hambaft.hambaft.api.reorder_gallery_pins', { items: JSON.stringify(items) })
+}
+
+export async function reorderGallerySections(boardId: string, sectionOrder: string[]) {
+  return call('hambaft.hambaft.api.reorder_gallery_sections', { board_id: boardId, section_order: JSON.stringify(sectionOrder) })
 }
 
 export async function uploadGalleryImage(filedata: string, filename: string, doctype?: string, docname?: string) {
@@ -1227,6 +1267,14 @@ export async function uploadGalleryImage(filedata: string, filename: string, doc
     doctype: doctype || '',
     docname: docname || '',
   })
+}
+
+export async function deleteGalleryPin(fileName: string) {
+  return call('hambaft.hambaft.api.delete_gallery_pin', { file_name: fileName })
+}
+
+export async function backfillGalleryPins() {
+  return call('hambaft.hambaft.api.backfill_gallery_pins')
 }
 
 // ─── Planner Board Views ──────────────────────────────────
