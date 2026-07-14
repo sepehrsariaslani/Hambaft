@@ -11,6 +11,7 @@ import {
   Image as ImageIcon, Trash2, FolderKanban,
   Target, Search, GripVertical, Download,
   Pencil, Move, Check, FolderOpen, ArrowLeftRight,
+  AlertCircle,
 } from 'lucide-react'
 import {
   getGalleryBoards, uploadGalleryImage, deleteGalleryPin, deleteGalleryPinWithFile,
@@ -45,6 +46,7 @@ export default function GalleryPage({ onBack, onNavigate }: GalleryPageProps) {
   const [moveTargetSection, setMoveTargetSection] = useState<string>('')
   const [movingPin, setMovingPin] = useState(false)
   const [deletePinModal, setDeletePinModal] = useState<{ pinName: string; pinTitle: string } | null>(null)
+  const [galleryNotReady, setGalleryNotReady] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dragItem = useRef<string | null>(null)
   const sectionDragItem = useRef<string | null>(null)
@@ -54,9 +56,18 @@ export default function GalleryPage({ onBack, onNavigate }: GalleryPageProps) {
     try {
       const resp = await getGalleryBoards()
       const d = resp?.data
-      setBoards(d?.boards || [])
-      setOrphanPins(d?.orphan_pins || [])
-    } catch { setBoards([]); setOrphanPins([]) }
+      if (d?.gallery_not_ready) {
+        setGalleryNotReady(true)
+        setBoards([])
+        setOrphanPins([])
+      } else {
+        setGalleryNotReady(false)
+        setBoards(d?.boards || [])
+        setOrphanPins(d?.orphan_pins || [])
+      }
+    } catch {
+      setBoards([]); setOrphanPins([])
+    }
     finally { setLoading(false) }
   }, [])
 
@@ -210,10 +221,27 @@ export default function GalleryPage({ onBack, onNavigate }: GalleryPageProps) {
           </div>
         ) : filteredBoards.length === 0 && orphanPins.length === 0 ? (
           <div className="flex flex-col items-center py-20 gap-4">
-            <ImageIcon className="w-12 h-12 text-[#E6DFD3] dark:text-[#3D4133]" />
-            <p className="text-sm font-bold text-[#2D3025] dark:text-[#E8ECE0]">هنوز تصویری نیست</p>
-            <p className="text-[10px] text-[#8D7F72] dark:text-[#9D978B]">تصاویر تسک‌ها و پروژه‌هاتون اینجا نمایش داده می‌شه</p>
-            <button onClick={handleSync} className="px-4 py-2 bg-[#7C8363] dark:bg-[#9ECE9A] text-white dark:text-[#121411] rounded-full text-[10px] font-bold cursor-pointer">آپدیت گالری</button>
+            {galleryNotReady ? (
+              <>
+                <div className="w-12 h-12 rounded-xl bg-orange-500/10 flex items-center justify-center">
+                  <AlertCircle className="w-6 h-6 text-orange-500" />
+                </div>
+                <p className="text-sm font-bold text-[#2D3025] dark:text-[#E8ECE0]">گالری هنوز آماده نیست</p>
+                <p className="text-[10px] text-[#8D7F72] dark:text-[#9D978B] text-center max-w-xs">
+                  جدول‌های گالری در دیتابیس ساخته نشدن. لطفاً روی سرور اجرا کنید:
+                </p>
+                <code className="text-[9px] font-mono bg-[#F9F6EE] dark:bg-[#3D4133]/40 rounded-lg px-3 py-2 text-[#7C8363] dark:text-[#9ECE9A] text-center block">
+                  bench --site hambaft.ir migrate
+                </code>
+              </>
+            ) : (
+              <>
+                <ImageIcon className="w-12 h-12 text-[#E6DFD3] dark:text-[#3D4133]" />
+                <p className="text-sm font-bold text-[#2D3025] dark:text-[#E8ECE0]">هنوز تصویری نیست</p>
+                <p className="text-[10px] text-[#8D7F72] dark:text-[#9D978B]">تصاویر تسک‌ها و پروژه‌هاتون اینجا نمایش داده می‌شه</p>
+                <button onClick={handleSync} className="px-4 py-2 bg-[#7C8363] dark:bg-[#9ECE9A] text-white dark:text-[#121411] rounded-full text-[10px] font-bold cursor-pointer">آپدیت گالری</button>
+              </>
+            )}
           </div>
         ) : (
           <>
@@ -237,7 +265,7 @@ export default function GalleryPage({ onBack, onNavigate }: GalleryPageProps) {
                       </div>
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <button onClick={e => { e.stopPropagation(); setUploadModal({ doctype: 'Hambaft Goal', docname: board.goal_id || '', label: board.board_title, boardId: board.board_id, sectionId: '' }); setTimeout(() => fileInputRef.current?.click(), 100) }}
+                      <button onClick={e => { e.stopPropagation(); setUploadModal({ doctype: 'Goal', docname: board.goal_id || '', label: board.board_title, boardId: board.board_id, sectionId: '' }); setTimeout(() => fileInputRef.current?.click(), 100) }}
                         className="p-1.5 rounded-lg text-[#8D7F72] dark:text-[#9D978B] hover:bg-[#7C8363]/5 dark:hover:bg-[#9ECE9A]/5 cursor-pointer"><Plus className="w-3.5 h-3.5" /></button>
                       <ChevronDown className={`w-4 h-4 text-[#8D7F72] dark:text-[#9D978B] transition-transform ${isExpanded ? '' : '-rotate-90'}`} />
                     </div>

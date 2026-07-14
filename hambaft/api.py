@@ -4222,6 +4222,26 @@ def delete_task_attachment(file_name):
 
 IMAGE_TYPES = ("image/jpeg", "image/png", "image/gif", "image/webp", "image/svg+xml", "image/bmp")
 
+# Track whether gallery tables have been confirmed to exist
+_gallery_tables_ok = None
+
+
+def _gallery_tables_exist():
+    """Check if gallery DocType tables exist in the database.
+    Returns True if all three tables exist, False otherwise.
+    Caches result for the request lifetime.
+    """
+    global _gallery_tables_ok
+    if _gallery_tables_ok is not None:
+        return _gallery_tables_ok
+    try:
+        tables = [t[0] for t in frappe.db.sql("SHOW TABLES LIKE 'tabHambaft Gallery%'")]
+        required = {"tabHambaft Gallery Board", "tabHambaft Gallery Section", "tabHambaft Gallery Pin"}
+        _gallery_tables_ok = required.issubset(set(tables))
+    except Exception:
+        _gallery_tables_ok = False
+    return _gallery_tables_ok
+
 
 def _get_or_create_board(goal_name, user):
     """Get existing board for a goal, or create one. Returns board name."""
@@ -4339,12 +4359,16 @@ def _sync_pin_counts():
 def on_file_after_insert(doc, method=None):
     """Auto-create gallery pin when an image File is attached to Task/Hambaft Project/Goal.
     Hooked via doc_events in hooks.py.
+    Silently skips if gallery tables don't exist yet.
     """
     if not doc or not doc.file_type or doc.file_type not in IMAGE_TYPES:
         return
     if not doc.attached_to_doctype or not doc.attached_to_name:
         return
     if doc.attached_to_doctype not in ("Task", "Hambaft Project", "Goal"):
+        return
+    # Skip if gallery tables don't exist yet (pre-migrate)
+    if not _gallery_tables_exist():
         return
 
     # Determine user from the attached entity
@@ -4377,8 +4401,15 @@ def on_file_after_insert(doc, method=None):
 
 @frappe.whitelist()
 def get_gallery_boards():
-    """Get all gallery boards with sections and pins for the current user."""
+    """Get all gallery boards with sections and pins for the current user.
+    Returns empty result if gallery tables don't exist yet (pre-migrate).
+    """
     _check_auth()
+
+    # Graceful: if tables don't exist yet, return empty instead of 417
+    if not _gallery_tables_exist():
+        return _api_response({"boards": [], "orphan_pins": [], "gallery_not_ready": True})
+
     user = frappe.session.user
 
     boards = frappe.get_all(
@@ -4456,6 +4487,8 @@ def get_gallery_boards():
 def get_gallery_board_detail(board_name):
     """Get a single board with full details."""
     _check_auth()
+    if not _gallery_tables_exist():
+        return _api_response({"board": None, "gallery_not_ready": True})
     user = frappe.session.user
     board = frappe.get_doc("Hambaft Gallery Board", board_name)
     if board.user != user:
@@ -4472,6 +4505,8 @@ def get_gallery_board_detail(board_name):
 def create_gallery_pin(file_name, source_doctype=None, source_name=None, board=None, section=None, caption=None):
     """Create a gallery pin for an existing File record."""
     _check_auth()
+    if not _gallery_tables_exist():
+        return _api_response({"pin_name": None, "created": False, "gallery_not_ready": True})
     user = frappe.session.user
 
     # Verify file exists and belongs to user
@@ -4547,6 +4582,8 @@ def create_gallery_pin(file_name, source_doctype=None, source_name=None, board=N
 def upload_gallery_image(filedata, filename, doctype=None, docname=None, board=None, section=None, caption=None):
     """Upload an image and create a gallery pin."""
     _check_auth()
+    if not _gallery_tables_exist():
+        return _api_response({"file_name": None, "gallery_not_ready": True})
     user = frappe.session.user
     import base64
 
@@ -4614,6 +4651,8 @@ def upload_gallery_image(filedata, filename, doctype=None, docname=None, board=N
 def move_gallery_pin(pin_name, board=None, section=None):
     """Move a pin to a different board/section."""
     _check_auth()
+    if not _gallery_tables_exist():
+        return _api_response({"ok": False, "gallery_not_ready": True})
     user = frappe.session.user
     pin = frappe.get_doc("Hambaft Gallery Pin", pin_name)
     if pin.user != user:
@@ -4645,6 +4684,8 @@ def move_gallery_pin(pin_name, board=None, section=None):
 def reorder_gallery_pins(items):
     """Reorder pins. items = [{ pin_name, sort_order }]"""
     _check_auth()
+    if not _gallery_tables_exist():
+        return _api_response({"ok": False, "gallery_not_ready": True})
     user = frappe.session.user
     if isinstance(items, str):
         items = json.loads(items)
@@ -4666,6 +4707,8 @@ def reorder_gallery_pins(items):
 def reorder_gallery_sections(board_name, section_order):
     """Reorder sections within a board. section_order = [section_name, ...]"""
     _check_auth()
+    if not _gallery_tables_exist():
+        return _api_response({"ok": False, "gallery_not_ready": True})
     user = frappe.session.user
     if isinstance(section_order, str):
         section_order = json.loads(section_order)
@@ -4682,6 +4725,8 @@ def reorder_gallery_sections(board_name, section_order):
 def update_gallery_pin_meta(pin_name, caption=None, note=None):
     """Update pin metadata (caption, note)."""
     _check_auth()
+    if not _gallery_tables_exist():
+        return _api_response({"ok": False, "gallery_not_ready": True})
     user = frappe.session.user
     pin_user = frappe.db.get_value("Hambaft Gallery Pin", pin_name, "user")
     if pin_user != user:
@@ -4703,6 +4748,8 @@ def delete_gallery_pin(pin_name, delete_file=False):
     If delete_file=True, also deletes the source File record (requires explicit opt-in).
     """
     _check_auth()
+    if not _gallery_tables_exist():
+        return _api_response({"ok": False, "gallery_not_ready": True})
     user = frappe.session.user
     pin = frappe.get_doc("Hambaft Gallery Pin", pin_name)
     if pin.user != user:
@@ -4742,15 +4789,26 @@ def get_task_attachments(task_name):
         order_by="creation desc",
     )
 
-    # Enrich with sort order from gallery pins
+    # Enrich with sort order from gallery pins (only if tables exist)
+    gallery_ok = _gallery_tables_exist()
     for f in files:
-        pin = frappe.db.get_value("Hambaft Gallery Pin",
-            {"file": f.name, "user": user},
-            ["name", "sort_order", "caption"], as_dict=True)
-        if pin:
-            f["pin_name"] = pin.name
-            f["sort_order"] = pin.sort_order
-            f["caption"] = pin.caption
+        if gallery_ok:
+            try:
+                pin = frappe.db.get_value("Hambaft Gallery Pin",
+                    {"file": f.name, "user": user},
+                    ["name", "sort_order", "caption"], as_dict=True)
+                if pin:
+                    f["pin_name"] = pin.name
+                    f["sort_order"] = pin.sort_order
+                    f["caption"] = pin.caption
+                else:
+                    f["pin_name"] = None
+                    f["sort_order"] = 0
+                    f["caption"] = ""
+            except Exception:
+                f["pin_name"] = None
+                f["sort_order"] = 0
+                f["caption"] = ""
         else:
             f["pin_name"] = None
             f["sort_order"] = 0
@@ -4765,6 +4823,8 @@ def get_task_attachments(task_name):
 def reorder_task_attachments(task_name, items):
     """Reorder task attachment pins. items = [{ file_name, sort_order }]"""
     _check_auth()
+    if not _gallery_tables_exist():
+        return _api_response({"ok": True})  # silently skip if no gallery yet
     user = frappe.session.user
     if isinstance(items, str):
         items = json.loads(items)
@@ -4775,13 +4835,16 @@ def reorder_task_attachments(task_name, items):
         if not file_name:
             continue
         # Ensure pin exists, create if not
-        pin = frappe.db.get_value("Hambaft Gallery Pin",
-            {"file": file_name, "user": user}, "name")
-        if pin:
-            frappe.db.set_value("Hambaft Gallery Pin", pin, "sort_order", sort_order)
-        else:
-            # Auto-create pin for this task file
-            create_gallery_pin(file_name, source_doctype="Task", source_name=task_name)
+        try:
+            pin = frappe.db.get_value("Hambaft Gallery Pin",
+                {"file": file_name, "user": user}, "name")
+            if pin:
+                frappe.db.set_value("Hambaft Gallery Pin", pin, "sort_order", sort_order)
+            else:
+                # Auto-create pin for this task file
+                create_gallery_pin(file_name, source_doctype="Task", source_name=task_name)
+        except Exception:
+            pass  # Gallery not ready yet
 
     frappe.db.commit()
     return _api_response({"ok": True})
@@ -4802,13 +4865,24 @@ def delete_task_attachment(file_name):
             if not frappe.db.exists("Task", doc.attached_to_name):
                 frappe.throw(_("Task not found"))
 
-    # Remove gallery pin
-    frappe.db.delete("Hambaft Gallery Pin", {"file": file_name, "user": user})
+    # Remove gallery pin (only if tables exist)
+    if _gallery_tables_exist():
+        try:
+            frappe.db.delete("Hambaft Gallery Pin", {"file": file_name, "user": user})
+        except Exception:
+            pass
     # Remove old Pin Order records too (migration compat)
-    frappe.db.delete("Hambaft Gallery Pin Order", {"file_name": file_name, "user": user})
+    try:
+        frappe.db.delete("Hambaft Gallery Pin Order", {"file_name": file_name, "user": user})
+    except Exception:
+        pass
     frappe.delete_doc("File", file_name, force=True)
     frappe.db.commit()
-    _sync_pin_counts()
+    if _gallery_tables_exist():
+        try:
+            _sync_pin_counts()
+        except Exception:
+            pass
     return _api_response({"ok": True})
 
 
@@ -4819,6 +4893,9 @@ def sync_gallery_from_existing_files():
     Returns detailed report of synced and failed items.
     """
     _check_auth()
+    if not _gallery_tables_exist():
+        return _api_response({"synced": 0, "skipped": 0, "errors": [], "total_files": 0, "gallery_not_ready": True,
+                              "message": "Gallery tables don't exist yet. Run bench migrate first."})
     user = frappe.session.user
     img_ph = ",".join(["%s"] * len(IMAGE_TYPES))
     count = 0
@@ -4892,6 +4969,9 @@ def migrate_pin_order_to_domain():
     Idempotent — skips if pin already exists for the same file+user.
     """
     _check_auth()
+    if not _gallery_tables_exist():
+        return _api_response({"migrated": 0, "total_old": 0, "errors": [], "gallery_not_ready": True,
+                              "message": "Gallery tables don't exist yet. Run bench migrate first."})
     user = frappe.session.user
 
     old_records = frappe.get_all("Hambaft Gallery Pin Order",
