@@ -114,6 +114,9 @@ export default function TaskRowV2({
   // Nesting indent — small per level
   const indentPx = depth * 12
 
+  // Fallback for dCfg in case density is invalid
+  const safeDCfg = dCfg || DENSITY_CONFIG.comfortable
+
   // Row background — proper dark mode
   const rowBg = task.completed
     ? 'bg-[#f9f7f2] dark:bg-[#1B1D16] border-[#E6DFD3] dark:border-[#3D4133] opacity-60'
@@ -162,7 +165,7 @@ export default function TaskRowV2({
 
   return (
     <div
-      className={`rounded-xl border transition-colors ${dCfg.rowPadding} ${rowBg}`}
+      className={`rounded-xl border transition-colors ${safeDCfg.rowPadding} ${rowBg}`}
       onMouseEnter={() => setShowActions(true)}
       onMouseLeave={() => { setShowActions(false); setActionMode(null) }}
       dir="rtl"
@@ -209,7 +212,7 @@ export default function TaskRowV2({
 
             <span
               onClick={onView}
-              className={`${depth === 0 ? dCfg.textSize : 'text-xs'} font-bold cursor-pointer ${
+              className={`${depth === 0 ? safeDCfg.textSize : 'text-xs'} font-bold cursor-pointer ${
                 task.completed ? 'line-through text-[#9D978B]' : 'text-[#2d3025] dark:text-[#E8ECE0] hover:text-[#7C8363] dark:hover:text-[#9ECE9A]'
               }`}
             >
@@ -322,7 +325,7 @@ export default function TaskRowV2({
                   onViewSubtask={onViewSubtask}
                   todayDate={todayDate}
                   viewConfig={viewConfig}
-                  dCfg={dCfg}
+                  dCfg={safeDCfg}
                   depth={depth + 1}
                 />
               ))}

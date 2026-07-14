@@ -142,7 +142,7 @@ export default function PlannerSection({ initialView, onNavigate }: PlannerSecti
     getOrInitViewConfig('planner-buckets', 'برنامه‌ریز')
   )
   const density = viewConfig.density
-  const dCfg = DENSITY_CONFIG[density]
+  const dCfg = DENSITY_CONFIG[density] || DENSITY_CONFIG.comfortable
   const drawerTask = drawerTaskId ? tasks.find(t => t.id === drawerTaskId) || null : null
   const handleViewConfigChange = (cfg: ViewConfig) => {
     setViewConfig(cfg)

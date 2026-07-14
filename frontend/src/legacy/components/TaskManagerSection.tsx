@@ -128,7 +128,7 @@ export default function TaskManagerSection({
     getOrInitViewConfig('task-manager', 'مدیریت تسک')
   )
   const density = viewConfig.density
-  const dCfg = DENSITY_CONFIG[density]
+  const dCfg = DENSITY_CONFIG[density] || DENSITY_CONFIG.comfortable
   const handleViewConfigChange = (cfg: ViewConfig) => {
     setViewConfig(cfg)
     setViewConfig('task-manager', cfg)
