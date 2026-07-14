@@ -84,7 +84,6 @@ function mapTasks(items: any[]): Task[] {
     priority: mapBackendTaskPriority(item.priority),
     category: mapBackendTaskCategory(item.category),
     projectId: item.project || undefined,
-    parentTaskId: item.parent_task || undefined,
     blockedBy: (() => { try { return item.blocked_by_json ? JSON.parse(item.blocked_by_json) : [] } catch { return [] } })(),
     blocking: (() => { try { return item.blocking_json ? JSON.parse(item.blocking_json) : [] } catch { return [] } })(),
     isDailyHighlight: !!item.is_daily_highlight,
@@ -95,7 +94,7 @@ function mapTasks(items: any[]): Task[] {
     effortType: item.effort_type === 'fixed' || item.effort_type === 'ثابت' ? 'fixed' : 'variable',
     noteBlocks: parseNoteBlocks(item.note_blocks_json),
     goalId: item.goal || undefined,
-    subTasks: (() => { try { return item.sub_tasks_json ? JSON.parse(item.sub_tasks_json) : [] } catch { return [] } })(),
+    parentTaskId: item.parent_task || undefined,
     // Impact awareness fields (enriched by backend when available)
     impactGoalTitle: item.impact_goal_title || undefined,
     impactGoalHealth: item.impact_goal_health || undefined,

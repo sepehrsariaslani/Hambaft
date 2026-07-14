@@ -19,13 +19,13 @@ import {
   BookOpen, Timer, History, Plus, ChevronDown, Check, GripVertical,
   Maximize2, AlarmClock, Flame, Diamond, Home,
 } from 'lucide-react'
-import type { Task, SubTask } from '../types'
+import type { Task } from '../types'
 import {
   ImportanceBadge, ImportanceSelector, ImpactScoreBadge,
   TaskImpactBanner, TaskImpactExplanation, BlockedTaskIndicator,
 } from './TaskV2Shared'
 import type { ImportanceLevel } from './TaskV2Shared'
-import { getTaskSessions } from '../../app/hambaft-api'
+import { getTaskSessions, getTaskChildren, quickAddTask, getTaskTrackedMinutes, mapBackendTaskRecord } from '../../app/hambaft-api'
 import EntityNoteEditor from '../../notes/components/EntityNoteEditor'
 import PersianDatePicker from './PersianDatePicker'
 
@@ -236,28 +236,78 @@ export default function TaskDetailDrawer({
     setIsEditingTitle(false)
   }
 
-  const addSubtask = () => {
-    if (!newSubtaskText.trim()) return
-    const newSub: SubTask = { id: `subtk-${Date.now()}`, title: newSubtaskText.trim(), completed: false }
-    onUpdateTask({ ...task, subTasks: [...(task.subTasks || []), newSub] })
-    setNewSubtaskText('')
+  // ─── Real subtasks (children with parent_task = this task) ───
+  const [childTasks, setChildTasks] = useState<Task[]>([])
+  const [loadingChildren, setLoadingChildren] = useState(false)
+  const [addingSubtask, setAddingSubtask] = useState(false)
+
+  const fetchChildren = useCallback(async () => {
+    if (!task.id) return
+    setLoadingChildren(true)
+    try {
+      const resp = await getTaskChildren(task.id)
+      const raw = resp?.data?.tasks || []
+      setChildTasks(raw.map((item: any) => mapBackendTaskRecord(item)))
+    } catch (e) {
+      setChildTasks([])
+    } finally {
+      setLoadingChildren(false)
+    }
+  }, [task.id])
+
+  useEffect(() => { fetchChildren() }, [fetchChildren])
+
+  const addSubtask = async () => {
+    if (!newSubtaskText.trim() || addingSubtask) return
+    setAddingSubtask(true)
+    try {
+      const resp = await quickAddTask(newSubtaskText.trim(), {
+        project: task.projectId,
+        area: task.areaId,
+        goal: task.goalId,
+        context: 'task_manager',
+      })
+      const saved = resp?.data?.task
+      if (saved?.name) {
+        const { updateDoc } = await import('../../app/frappe')
+        await updateDoc('Task', saved.name, { parent_task: task.id })
+        await fetchChildren()
+        const mapped = mapBackendTaskRecord(saved)
+        mapped.parentTaskId = task.id
+        onUpdateTask(mapped)
+      }
+      setNewSubtaskText('')
+    } catch (e) {
+      console.error('[hambaft] failed to add subtask', e)
+    } finally {
+      setAddingSubtask(false)
+    }
   }
 
-  const toggleSubtask = (id: string) => {
-    const updated = (task.subTasks || []).map(st => st.id === id ? { ...st, completed: !st.completed } : st)
-    onUpdateTask({ ...task, subTasks: updated })
+  const toggleSubtask = (childTask: Task) => {
+    const newCompleted = !childTask.completed
+    onUpdateTask({ ...childTask, completed: newCompleted, status: newCompleted ? 'done' : 'inbox' })
+    setTimeout(() => fetchChildren(), 500)
   }
 
   const deleteSubtask = (id: string) => {
-    onUpdateTask({ ...task, subTasks: (task.subTasks || []).filter(st => st.id !== id) })
+    onDeleteTask(id)
+    setChildTasks(prev => prev.filter(t => t.id !== id))
   }
 
-  const updateSubtaskTitle = (id: string, title: string) => {
-    const updated = (task.subTasks || []).map(st => st.id === id ? { ...st, title } : st)
-    onUpdateTask({ ...task, subTasks: updated })
-  }
+  // ─── Tracked time (own + subtasks) ───
+  const [trackedTime, setTrackedTime] = useState<{ own: number; subtask: number; total: number }>({ own: 0, subtask: 0, total: 0 })
+  useEffect(() => {
+    if (!task.id) return
+    getTaskTrackedMinutes(task.id)
+      .then(resp => {
+        const d = resp?.data
+        setTrackedTime({ own: d?.tracked_minutes || 0, subtask: d?.subtask_tracked_minutes || 0, total: d?.total_tracked_minutes || 0 })
+      })
+      .catch(() => setTrackedTime({ own: 0, subtask: 0, total: 0 }))
+  }, [task.id])
 
-  const subtasks = task.subTasks || []
+  const subtasks = childTasks
   const subDone = subtasks.filter(st => st.completed).length
   const subTotal = subtasks.length
   const subPct = subTotal > 0 ? Math.round((subDone / subTotal) * 100) : 0
@@ -472,11 +522,15 @@ export default function TaskDetailDrawer({
               {subTab === 'steps' && (
                 <StepsSection task={task} allTasks={allTasks} subtasks={subtasks} subDone={subDone} subTotal={subTotal} subPct={subPct}
                   newSubtaskText={newSubtaskText} setNewSubtaskText={setNewSubtaskText} addSubtask={addSubtask} toggleSubtask={toggleSubtask}
-                  deleteSubtask={deleteSubtask} updateSubtaskTitle={updateSubtaskTitle} onUpdateTask={onUpdateTask} />
+                  deleteSubtask={deleteSubtask} onUpdateTask={onUpdateTask}
+                  onViewSubtask={(id) => onOpenFullPage?.(id)}
+                  loadingChildren={loadingChildren} addingSubtask={addingSubtask}
+                  trackedTime={trackedTime} />
               )}
               {subTab === 'time' && (
                 <TimeSection task={task} isActiveSession={isActiveSession} activeTimerSeconds={activeTimerSeconds} isTimerRunning={isTimerRunning}
-                  onStartTimer={onStartTimer} onPauseTimer={onPauseTimer} onStopTimer={onStopTimer} onResetTimer={onResetTimer} formatSeconds={formatSeconds} />
+                  onStartTimer={onStartTimer} onPauseTimer={onPauseTimer} onStopTimer={onStopTimer} onResetTimer={onResetTimer} formatSeconds={formatSeconds}
+                  trackedTime={trackedTime} />
               )}
             </motion.div>
           </AnimatePresence>
@@ -489,16 +543,16 @@ export default function TaskDetailDrawer({
 // ══════════════════════════════════════════════════════════════
 // Steps Section (shared with Page)
 // ══════════════════════════════════════════════════════════════
-function StepsSection({ task, allTasks, subtasks, subDone, subTotal, subPct, newSubtaskText, setNewSubtaskText, addSubtask, toggleSubtask, deleteSubtask, updateSubtaskTitle, onUpdateTask }: {
-  task: Task; allTasks: Task[]; subtasks: SubTask[]; subDone: number; subTotal: number; subPct: number;
+function StepsSection({ task, allTasks, subtasks, subDone, subTotal, subPct, newSubtaskText, setNewSubtaskText, addSubtask, toggleSubtask, deleteSubtask, onUpdateTask, onViewSubtask, loadingChildren, addingSubtask, trackedTime }: {
+  task: Task; allTasks: Task[]; subtasks: Task[]; subDone: number; subTotal: number; subPct: number;
   newSubtaskText: string; setNewSubtaskText: (v: string) => void; addSubtask: () => void;
-  toggleSubtask: (id: string) => void; deleteSubtask: (id: string) => void; updateSubtaskTitle: (id: string, title: string) => void;
-  onUpdateTask: (t: Task) => void
+  toggleSubtask: (childTask: Task) => void; deleteSubtask: (id: string) => void;
+  onUpdateTask: (t: Task) => void; onViewSubtask?: (id: string) => void;
+  loadingChildren?: boolean; addingSubtask?: boolean;
+  trackedTime: { own: number; subtask: number; total: number }
 }) {
   const [depSearch, setDepSearch] = useState('')
   const [showDeps, setShowDeps] = useState(false)
-  const [editingSubId, setEditingSubId] = useState<string | null>(null)
-  const [editingSubText, setEditingSubText] = useState('')
 
   const possibleDeps = useMemo(() => {
     const filtered = allTasks.filter(t => t.id !== task.id)
@@ -515,6 +569,14 @@ function StepsSection({ task, allTasks, subtasks, subDone, subTotal, subPct, new
     const incomplete = subtasks.find(st => !st.completed)
     return incomplete ? incomplete.title : null
   }, [subtasks])
+
+  const formatDurationMinutes = (minutes: number) => {
+    if (!minutes) return '—'
+    if (minutes < 60) return `${minutes} دقیقه`
+    const h = Math.floor(minutes / 60)
+    const m = minutes % 60
+    return m ? `${h}س ${m}د` : `${h} ساعت`
+  }
 
   return (
     <div className="space-y-3">
@@ -541,34 +603,49 @@ function StepsSection({ task, allTasks, subtasks, subDone, subTotal, subPct, new
         </div>
       )}
 
+      {/* Tracked time summary */}
+      {trackedTime.total > 0 && (
+        <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-[#F9F6EE]/60 dark:bg-[#3D4133]/20">
+          <Clock className="w-3 h-3 text-[#7C8363] dark:text-[#9ECE9A]" />
+          <span className="text-[9px] text-[#8D7F72] dark:text-[#9D978B]">صرف‌شده:</span>
+          <span className="text-[10px] font-black text-[#2D3025] dark:text-[#E8ECE0]">{formatDurationMinutes(trackedTime.total)}</span>
+          {trackedTime.subtask > 0 && (
+            <span className="text-[8px] text-[#8D7F72] dark:text-[#9D978B]">(+ساب‌تسک)</span>
+          )}
+        </div>
+      )}
+
       <div className="space-y-0.5">
-        {subtasks.map(st => (
-          <div key={st.id} className={`group flex items-center gap-2 px-1.5 py-1.5 rounded-lg transition-all hover:bg-[#7C8363]/3 dark:hover:bg-[#9ECE9A]/3 ${st.completed ? 'opacity-60' : ''}`}>
-            <button onClick={() => toggleSubtask(st.id)} className="shrink-0 cursor-pointer active:scale-90 transition-transform">
+        {loadingChildren && (
+          <div className="flex items-center gap-2 px-1.5 py-2 text-[9px] text-[#8D7F72] dark:text-[#9D978B]">
+            <div className="w-3 h-3 border-2 border-[#7C8363]/30 border-t-[#7C8363] rounded-full animate-spin" />
+            <span>بارگذاری...</span>
+          </div>
+        )}
+        {!loadingChildren && subtasks.map(st => (
+          <div key={st.id} className={`group flex items-center gap-2 px-1.5 py-1.5 rounded-lg transition-all hover:bg-[#7C8363]/5 dark:hover:bg-[#9ECE9A]/5 ${st.completed ? 'opacity-60' : ''}`}>
+            <button onClick={() => toggleSubtask(st)} className="shrink-0 cursor-pointer active:scale-90 transition-transform">
               {st.completed ? <CheckCircle className="w-3.5 h-3.5 text-emerald-500" /> : <Circle className="w-3.5 h-3.5 text-[#D6CFC3] dark:text-[#3D4133] hover:text-[#7C8363] dark:hover:text-[#9ECE9A]" />}
             </button>
-            {editingSubId === st.id ? (
-              <input value={editingSubText} onChange={e => setEditingSubText(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') { updateSubtaskTitle(st.id, editingSubText); setEditingSubId(null) }; if (e.key === 'Escape') setEditingSubId(null) }}
-                onBlur={() => { updateSubtaskTitle(st.id, editingSubText); setEditingSubId(null) }}
-                className="flex-1 min-w-0 px-1 py-0.5 text-[11px] bg-transparent dark:text-[#E8ECE0] focus:outline-none font-semibold" autoFocus />
-            ) : (
-              <span onClick={() => { setEditingSubId(st.id); setEditingSubText(st.title) }}
-                className={`flex-1 min-w-0 text-[11px] font-semibold cursor-text ${st.completed ? 'line-through text-[#8D7F72] dark:text-[#9D978B]' : 'text-[#2D3025] dark:text-[#E8ECE0]'}`}>{st.title}</span>
-            )}
+            <span
+              onClick={() => onViewSubtask?.(st.id)}
+              className={`flex-1 min-w-0 text-[11px] font-semibold cursor-pointer ${st.completed ? 'line-through text-[#8D7F72] dark:text-[#9D978B]' : 'text-[#2D3025] dark:text-[#E8ECE0]'} hover:text-[#7C8363] dark:hover:text-[#9ECE9A]`}
+            >{st.title}</span>
             <button onClick={() => deleteSubtask(st.id)} className="p-0.5 text-transparent group-hover:text-[#D6CFC3] dark:group-hover:text-[#3D4133] hover:!text-red-400 rounded shrink-0 cursor-pointer transition-colors"><Trash2 className="w-2.5 h-2.5" /></button>
           </div>
         ))}
         <div className="flex items-center gap-2 px-1.5 py-1">
           <Circle className="w-3.5 h-3.5 text-[#E6DFD3] dark:text-[#3D4133]" />
-          <input type="text" placeholder="مرحله جدید..." value={newSubtaskText} onChange={e => setNewSubtaskText(e.target.value)}
+          <input type="text" placeholder="ساب‌تسک جدید..." value={newSubtaskText} onChange={e => setNewSubtaskText(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && addSubtask()}
+            disabled={addingSubtask}
             className="flex-1 min-w-0 text-[11px] bg-transparent dark:text-[#E8ECE0] focus:outline-none font-semibold placeholder:text-[#D6CFC3] dark:placeholder:text-[#3D4133]" />
-          {newSubtaskText.trim() && (
+          {addingSubtask && <div className="w-3 h-3 border-2 border-[#7C8363]/30 border-t-[#7C8363] rounded-full animate-spin" />}
+          {!addingSubtask && newSubtaskText.trim() && (
             <button onClick={addSubtask} className="p-0.5 text-[#7C8363] dark:text-[#9ECE9A] cursor-pointer"><Plus className="w-3.5 h-3.5" /></button>
           )}
         </div>
-        {subtasks.length === 0 && !newSubtaskText && (
+        {!loadingChildren && subtasks.length === 0 && !newSubtaskText && (
           <div className="flex items-center gap-2 px-1.5 py-2 text-[9px] text-[#8D7F72] dark:text-[#9D978B]">
             <Sparkles className="w-3 h-3 text-[#9B6B61]" /><span>کار بزرگ را به خرده‌کار تبدیل کنید</span>
           </div>
@@ -627,10 +704,11 @@ function StepsSection({ task, allTasks, subtasks, subDone, subTotal, subPct, new
 // ══════════════════════════════════════════════════════════════
 // Time Section
 // ══════════════════════════════════════════════════════════════
-function TimeSection({ task, isActiveSession, activeTimerSeconds, isTimerRunning, onStartTimer, onPauseTimer, onStopTimer, onResetTimer, formatSeconds }: {
+function TimeSection({ task, isActiveSession, activeTimerSeconds, isTimerRunning, onStartTimer, onPauseTimer, onStopTimer, onResetTimer, formatSeconds, trackedTime }: {
   task: Task; isActiveSession: boolean; activeTimerSeconds: number; isTimerRunning: boolean;
   onStartTimer?: (id: string) => void; onPauseTimer?: () => void; onStopTimer?: () => void;
-  onResetTimer?: (id: string) => void; formatSeconds: (s: number) => string
+  onResetTimer?: (id: string) => void; formatSeconds: (s: number) => string;
+  trackedTime: { own: number; subtask: number; total: number }
 }) {
   const [sessions, setSessions] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
@@ -644,7 +722,7 @@ function TimeSection({ task, isActiveSession, activeTimerSeconds, isTimerRunning
       .finally(() => setLoading(false))
   }, [task.id])
 
-  const actualSeconds = task.totalTimeSpent || (task.actualMinutes ? task.actualMinutes * 60 : 0)
+  const actualSeconds = trackedTime.total * 60 || task.totalTimeSpent || (task.actualMinutes ? task.actualMinutes * 60 : 0)
   const estimatedSeconds = task.estimatedMinutes ? task.estimatedMinutes * 60 : 0
   const timePct = estimatedSeconds > 0 ? Math.min(100, Math.round((actualSeconds / estimatedSeconds) * 100)) : 0
   const isOverBudget = estimatedSeconds > 0 && actualSeconds > estimatedSeconds

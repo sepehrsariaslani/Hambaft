@@ -1,13 +1,13 @@
 /**
- * TaskRowV2 — Improved task row with inline quick actions.
+ * TaskRowV2 — Task row with inline quick actions, subtask accordion, and + button.
  * Supports: checkbox, quick priority, quick importance, quick status,
- * quick schedule, add subtask, view detail.
+ * quick schedule, add subtask (+ button), accordion to show subtasks.
  * Uses progressive disclosure: hover/click reveals action chips.
  */
-import React, { useState } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import {
-  CheckCircle2, Circle, Flag, Zap, Calendar, Clock, AlertCircle,
+  CheckCircle2, Circle, Flag, Calendar, Clock, AlertCircle,
   FolderKanban, Target, Plus, ChevronDown, ChevronRight, Trash2, PanelRightOpen,
   Sparkles, Pin, MoreHorizontal,
 } from 'lucide-react'
@@ -16,6 +16,7 @@ import type { ImportanceLevel } from './TaskV2Shared'
 import { ImportanceBadge, ImpactScoreBadge, BlockedTaskIndicator, TaskImpactBanner } from './TaskV2Shared'
 import type { ViewConfig } from './ViewConfigStore'
 import { DENSITY_CONFIG, isColumnVisible } from './ViewConfigStore'
+import { getTaskChildren, quickAddTask, mapBackendTaskRecord } from '../../app/hambaft-api'
 
 // ─── Status quick-switch ─────────────────────────────────────
 const STATUS_OPTIONS = [
@@ -35,12 +36,6 @@ const PRIORITY_QUICK = [
   { id: 'urgent', label: 'فوری', color: 'bg-red-100 text-red-800 font-black' },
 ] as const
 
-const IMPORTANCE_QUICK: { id: ImportanceLevel; label: string; color: string }[] = [
-  { id: 'normal', label: 'عادی', color: 'bg-[#E6DFD3]/40 text-[#8D7F72]' },
-  { id: 'key', label: 'کلیدی', color: 'bg-blue-100 text-blue-800' },
-  { id: 'milestone', label: 'نقطه‌عطف', color: 'bg-[#F9F1D8] text-[#5A5A40]' },
-]
-
 interface TaskRowV2Props {
   task: Task & { sourceGoal?: string; sourceProject?: string }
   selected: boolean
@@ -51,6 +46,8 @@ interface TaskRowV2Props {
   onOpenDrawer?: () => void
   onQuickAction: (taskId: string, field: string, value: any) => void
   onAddSubtask?: (parentId: string, title: string) => void
+  onToggleSubtask?: (subtask: Task) => void
+  onViewSubtask?: (id: string) => void
   todayDate: string
   viewConfig: ViewConfig
   dCfg: typeof DENSITY_CONFIG.comfortable
@@ -66,6 +63,8 @@ export default function TaskRowV2({
   onOpenDrawer,
   onQuickAction,
   onAddSubtask,
+  onToggleSubtask,
+  onViewSubtask,
   todayDate,
   viewConfig,
   dCfg,
@@ -73,7 +72,33 @@ export default function TaskRowV2({
   const [showActions, setShowActions] = useState(false)
   const [showSubtaskInput, setShowSubtaskInput] = useState(false)
   const [subtaskText, setSubtaskText] = useState('')
+  const [addingSubtask, setAddingSubtask] = useState(false)
   const [actionMode, setActionMode] = useState<'status' | 'priority' | 'importance' | null>(null)
+
+  // ─── Accordion: child tasks (real subtasks) ───
+  const [expanded, setExpanded] = useState(false)
+  const [childTasks, setChildTasks] = useState<Task[]>([])
+  const [loadingChildren, setLoadingChildren] = useState(false)
+
+  const fetchChildren = useCallback(async () => {
+    if (!task.id) return
+    setLoadingChildren(true)
+    try {
+      const resp = await getTaskChildren(task.id)
+      const raw = resp?.data?.tasks || []
+      setChildTasks(raw.map((item: any) => mapBackendTaskRecord(item)))
+    } catch {
+      setChildTasks([])
+    } finally {
+      setLoadingChildren(false)
+    }
+  }, [task.id])
+
+  useEffect(() => {
+    if (expanded && task.id) {
+      fetchChildren()
+    }
+  }, [expanded, task.id, fetchChildren])
 
   const isOverdue = !task.completed && task.dueDate && task.dueDate < todayDate
   const hasBlockers = (task.blockedBy || []).length > 0
@@ -81,6 +106,8 @@ export default function TaskRowV2({
   const isMilestone = task.importance === 'milestone'
   const isKey = task.importance === 'key'
   const isHighImpact = (task.impactScore || 0) >= 60
+  const childDone = childTasks.filter(c => c.completed).length
+  const childTotal = childTasks.length
 
   // Visual border accent based on task state
   const borderAccent = task.completed
@@ -95,11 +122,34 @@ export default function TaskRowV2({
             ? 'border-[#7C8363]/30 bg-[#7C8363]/5'
             : 'border-[#E6DFD3] bg-white hover:border-[#7C8363]/40'
 
-  const handleAddSubtask = () => {
-    if (!subtaskText.trim() || !onAddSubtask) return
-    onAddSubtask(task.id, subtaskText.trim())
-    setSubtaskText('')
-    setShowSubtaskInput(false)
+  const handleAddSubtask = async () => {
+    if (!subtaskText.trim()) return
+    setAddingSubtask(true)
+    try {
+      if (onAddSubtask) {
+        onAddSubtask(task.id, subtaskText.trim())
+      } else {
+        // Create a real task as subtask
+        const resp = await quickAddTask(subtaskText.trim(), {
+          project: task.projectId,
+          area: task.areaId,
+          goal: task.goalId,
+          context: 'task_manager',
+        })
+        const saved = resp?.data?.task
+        if (saved?.name) {
+          const { updateDoc } = await import('../../app/frappe')
+          await updateDoc('Task', saved.name, { parent_task: task.id })
+          if (expanded) await fetchChildren()
+        }
+      }
+      setSubtaskText('')
+      setShowSubtaskInput(false)
+    } catch (e) {
+      console.error('[hambaft] failed to add subtask in row', e)
+    } finally {
+      setAddingSubtask(false)
+    }
   }
 
   return (
@@ -136,6 +186,18 @@ export default function TaskRowV2({
         <div className="flex-1 min-w-0 space-y-1">
           {/* Title row */}
           <div className="flex items-center gap-1.5 flex-wrap">
+            {/* Accordion toggle */}
+            <button
+              onClick={() => setExpanded(!expanded)}
+              className="shrink-0 cursor-pointer p-0.5 rounded hover:bg-[#7C8363]/10 transition-all"
+              title={expanded ? 'بستن ساب‌تسک‌ها' : 'باز کردن ساب‌تسک‌ها'}
+            >
+              {expanded
+                ? <ChevronDown className="w-3.5 h-3.5 text-[#8D7F72] dark:text-[#9D978B]" />
+                : <ChevronRight className="w-3.5 h-3.5 text-[#D6CFC3] dark:text-[#3D4133] hover:text-[#7C8363] dark:hover:text-[#9ECE9A]" />
+              }
+            </button>
+
             <span
               onClick={onView}
               className={`${dCfg.textSize} font-bold cursor-pointer ${
@@ -145,7 +207,14 @@ export default function TaskRowV2({
               {task.title}
             </span>
 
-            {/* Visual indicators — always visible (no column toggle needed) */}
+            {/* Subtask count badge */}
+            {childTotal > 0 && (
+              <span className="text-[9px] font-bold bg-[#7C8363]/10 text-[#7C8363] px-1.5 py-0.5 rounded-full">
+                {childDone}/{childTotal}
+              </span>
+            )}
+
+            {/* Visual indicators — always visible */}
             {isMilestone && !task.completed && (
               <span className="text-[9px] font-bold bg-[#F9F1D8] text-[#5A5A40] px-1.5 py-0.5 rounded-full border border-[#EBE3C8]">◆ نقطه‌عطف</span>
             )}
@@ -270,6 +339,83 @@ export default function TaskRowV2({
           {isBlocked && (
             <BlockedTaskIndicator task={task} />
           )}
+
+          {/* ── Accordion: Subtask list ── */}
+          <AnimatePresence>
+            {expanded && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.15 }}
+                className="overflow-hidden"
+              >
+                <div className="mt-2 mr-7 space-y-0.5 border-r-2 border-[#E6DFD3] dark:border-[#3D4133] pr-3">
+                  {loadingChildren && (
+                    <div className="flex items-center gap-2 py-2 text-[10px] text-[#8D7F72] dark:text-[#9D978B]">
+                      <div className="w-3 h-3 border-2 border-[#7C8363]/30 border-t-[#7C8363] rounded-full animate-spin" />
+                      <span>بارگذاری ساب‌تسک‌ها...</span>
+                    </div>
+                  )}
+                  {!loadingChildren && childTasks.map(child => (
+                    <div key={child.id} className={`group/child flex items-center gap-2 py-1.5 rounded-md transition-all hover:bg-[#7C8363]/5 dark:hover:bg-[#9ECE9A]/5 ${child.completed ? 'opacity-50' : ''}`}>
+                      <button
+                        onClick={() => onToggleSubtask?.(child)}
+                        className="shrink-0 cursor-pointer active:scale-90 transition-transform"
+                      >
+                        {child.completed
+                          ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                          : <Circle className="w-3.5 h-3.5 text-[#D6CFC3] dark:text-[#3D4133] hover:text-[#7C8363] dark:hover:text-[#9ECE9A]" />
+                        }
+                      </button>
+                      <span
+                        onClick={() => onViewSubtask?.(child.id)}
+                        className={`flex-1 min-w-0 text-[11px] font-semibold cursor-pointer ${child.completed ? 'line-through text-[#9D978B]' : 'text-[#2D3025] dark:text-[#E8ECE0] hover:text-[#7C8363] dark:hover:text-[#9ECE9A]'}`}
+                      >{child.title}</span>
+                      {/* Quick status dot */}
+                      {child.status && !child.completed && (
+                        <span className={`w-2 h-2 rounded-full shrink-0 ${
+                          child.status === 'in_progress' ? 'bg-indigo-500' :
+                          child.status === 'today' ? 'bg-emerald-500' :
+                          child.status === 'next' ? 'bg-blue-500' : 'bg-[#9D978B]'
+                        }`} />
+                      )}
+                    </div>
+                  ))}
+                  {!loadingChildren && childTasks.length === 0 && !showSubtaskInput && (
+                    <div className="flex items-center gap-2 py-2 text-[10px] text-[#8D7F72] dark:text-[#9D978B]">
+                      <Sparkles className="w-3 h-3 text-[#9B6B61]" />
+                      <span>ساب‌تسکی ندارد</span>
+                    </div>
+                  )}
+
+                  {/* Inline subtask add */}
+                  {showSubtaskInput ? (
+                    <div className="flex items-center gap-2 py-1.5">
+                      <Circle className="w-3.5 h-3.5 text-[#E6DFD3] dark:text-[#3D4133] shrink-0" />
+                      <input
+                        type="text"
+                        value={subtaskText}
+                        onChange={(e) => setSubtaskText(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleAddSubtask()}
+                        placeholder="ساب‌تسک جدید + Enter..."
+                        className="flex-1 min-w-0 text-[11px] bg-transparent dark:text-[#E8ECE0] focus:outline-none font-semibold placeholder:text-[#D6CFC3] dark:placeholder:text-[#3D4133]"
+                        autoFocus
+                      />
+                      {addingSubtask && (
+                        <div className="w-3 h-3 border-2 border-[#7C8363]/30 border-t-[#7C8363] rounded-full animate-spin" />
+                      )}
+                      {!addingSubtask && subtaskText.trim() && (
+                        <button onClick={handleAddSubtask} className="text-[#7C8363] dark:text-[#9ECE9A] cursor-pointer">
+                          <Plus className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
         {/* Right-side actions — visible on hover */}
@@ -286,9 +432,9 @@ export default function TaskRowV2({
                 </button>
               )}
               <button
-                onClick={() => setShowSubtaskInput(!showSubtaskInput)}
+                onClick={() => { setShowSubtaskInput(!showSubtaskInput); if (!expanded) setExpanded(true) }}
                 className="p-1 text-[#9D978B] hover:text-[#7C8363] hover:bg-[#E8ECE0]/50 rounded-lg transition-all"
-                title="افزودن زیرتسک"
+                title="افزودن ساب‌تسک"
               >
                 <Plus className="w-3.5 h-3.5" />
               </button>
@@ -303,37 +449,6 @@ export default function TaskRowV2({
           )}
         </div>
       </div>
-
-      {/* Inline subtask add */}
-      <AnimatePresence>
-        {showSubtaskInput && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            className="overflow-hidden"
-          >
-            <div className="flex gap-2 mr-10 mt-2">
-              <input
-                type="text"
-                value={subtaskText}
-                onChange={(e) => setSubtaskText(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleAddSubtask()}
-                placeholder="زیرتسک جدید + Enter..."
-                className="flex-1 min-w-0 px-3 py-1.5 text-[11px] bg-white border border-[#D6CFC3] rounded-lg focus:outline-none focus:border-[#7C8363] font-semibold"
-                autoFocus
-              />
-              <button
-                onClick={handleAddSubtask}
-                disabled={!subtaskText.trim()}
-                className="px-2 py-1.5 bg-[#7C8363] text-white text-[10px] font-bold rounded-lg disabled:opacity-40"
-              >
-                افزودن
-              </button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   )
 }

@@ -241,7 +241,6 @@ export function mapBackendTaskRecord(item: any): Task {
     priority: mapBackendTaskPriority(item.priority),
     category: mapBackendTaskCategory(item.category),
     projectId: item.project || undefined,
-    parentTaskId: item.parent_task || undefined,
     blockedBy: item.blocked_by_json ? JSON.parse(item.blocked_by_json) : [],
     blocking: item.blocking_json ? JSON.parse(item.blocking_json) : [],
     isDailyHighlight: !!item.is_daily_highlight,
@@ -252,7 +251,7 @@ export function mapBackendTaskRecord(item: any): Task {
     effortType: item.effort_type === 'fixed' || item.effort_type === 'ثابت' ? 'fixed' : 'variable',
     noteBlocks: item.noteBlocks || item.note_blocks_json || [],
     goalId: item.goal || undefined,
-    subTasks: item.sub_tasks_json ? JSON.parse(item.sub_tasks_json) : (item.subTasks || []),
+    parentTaskId: item.parent_task || undefined,
     impactGoalTitle: item.impact_goal_title || undefined,
     impactGoalHealth: item.impact_goal_health || undefined,
     impactGoalProgress: item.impact_goal_progress || undefined,
@@ -290,7 +289,6 @@ export function toTaskPayload(task: Task): Record<string, unknown> {
     area: task.areaId || null,
     goal: task.goalId || null,
     noteBlocks: task.noteBlocks || [],
-    sub_tasks_json: JSON.stringify(task.subTasks || []),
   }
 }
 
@@ -1200,7 +1198,7 @@ export async function getProjectsByArea(areaName: string) {
 // ─── Tracked Time Rollups ─────────────────────────────────
 
 export async function getTaskTrackedMinutes(taskName: string) {
-  return callGet<{ data?: { tracked_minutes?: number } }>(`hambaft.hambaft.api.get_task_tracked_minutes?task_name=${encodeURIComponent(taskName)}`)
+  return callGet<{ data?: { tracked_minutes?: number; subtask_tracked_minutes?: number; total_tracked_minutes?: number } }>(`hambaft.hambaft.api.get_task_tracked_minutes?task_name=${encodeURIComponent(taskName)}`)
 }
 
 export async function getAreaTrackedMinutes(areaName: string) {

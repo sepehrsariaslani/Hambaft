@@ -4133,14 +4133,28 @@ def get_projects_by_area(area_name):
 
 @frappe.whitelist()
 def get_task_tracked_minutes(task_name):
-    """Get total tracked minutes for a task from sessions."""
+    """Get total tracked minutes for a task from sessions (own + subtasks)."""
     _check_auth()
     _require_owner("Task", task_name)
-    total = frappe.db.sql(
+    # Own tracked minutes
+    own = frappe.db.sql(
         "SELECT COALESCE(SUM(duration_minutes), 0) FROM `tabHambaft Task Session` WHERE task=%s AND status IN ('paused', 'completed')",
         task_name,
     )[0][0] or 0
-    return _api_response({"tracked_minutes": int(total)})
+    # Subtask tracked minutes
+    subtask_names = frappe.get_all("Task", filters={"parent_task": task_name, "user": frappe.session.user}, pluck="name")
+    subtask_total = 0
+    if subtask_names:
+        placeholders = ",".join(["%s"] * len(subtask_names))
+        subtask_total = frappe.db.sql(
+            f"SELECT COALESCE(SUM(duration_minutes), 0) FROM `tabHambaft Task Session` WHERE task IN ({placeholders}) AND status IN ('paused', 'completed')",
+            tuple(subtask_names),
+        )[0][0] or 0
+    return _api_response({
+        "tracked_minutes": int(own),
+        "subtask_tracked_minutes": int(subtask_total),
+        "total_tracked_minutes": int(own) + int(subtask_total),
+    })
 
 
 @frappe.whitelist()

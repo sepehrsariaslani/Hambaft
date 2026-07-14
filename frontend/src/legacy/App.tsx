@@ -3407,6 +3407,7 @@ export default function App({
                 else if (tab === 'projects' && id) goToProject(id);
                 else goToTab(tab);
               }}
+              onViewTaskDetails={(id) => goToTaskDetail(id)}
               activeTimerTaskId={activeTimerTaskId}
               activeTimerSeconds={activeTimerSeconds}
               isTimerRunning={isTimerRunning}

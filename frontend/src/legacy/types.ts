@@ -270,12 +270,6 @@ export interface Goal {
   noteBlocks?: import('../notes/types').Block[];
 }
 
-export interface SubTask {
-  id: string;
-  title: string;
-  completed: boolean;
-}
-
 export interface Task {
   id: string;
   title: string;
@@ -288,7 +282,6 @@ export interface Task {
   scheduledTime?: string; // HH:MM
   priority?: 'low' | 'medium' | 'high' | 'urgent';
   category?: 'work' | 'personal' | 'health' | 'finance' | 'learning' | 'other';
-  subTasks?: SubTask[];
   totalTimeSpent?: number; // Total spent time in seconds (derived from sessions)
   isTracking?: boolean;
   trackingStartTime?: number; // Epoch timestamp in ms when tracker started
