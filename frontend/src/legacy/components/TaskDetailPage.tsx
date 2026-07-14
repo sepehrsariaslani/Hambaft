@@ -353,6 +353,7 @@ interface TaskDetailPageProps {
   projects?: Array<{ id: string; title: string; linkedGoalId?: string; areaId?: string }>
   areas?: Array<{ id: string; title: string }>
   onUpdateTask: (task: Task) => void
+  onAddTask?: (taskOrTitle: string | Task) => void
   onDeleteTask: (id: string) => void
   onBack: () => void
   onNavigate?: (tab: string, id?: string) => void
@@ -375,6 +376,7 @@ export default function TaskDetailPage({
   projects = [],
   areas = [],
   onUpdateTask,
+  onAddTask,
   onDeleteTask,
   onBack,
   onNavigate,
@@ -460,10 +462,14 @@ export default function TaskDetailPage({
         await updateDoc('Task', saved.name, { parent_task: task.id })
         // Refresh children
         await fetchChildren()
-        // Also add to global task list
+        // Also add to global task list so navigation works
         const mapped = mapBackendTaskRecord(saved)
         mapped.parentTaskId = task.id
-        onUpdateTask(mapped)
+        if (onAddTask) {
+          onAddTask(mapped)
+        } else {
+          onUpdateTask(mapped)
+        }
       }
       setNewSubtaskText('')
     } catch (e) {

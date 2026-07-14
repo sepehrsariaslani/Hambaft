@@ -3400,6 +3400,7 @@ export default function App({
               projects={lifeData.goals.flatMap(g => (g.projects || []).map(p => ({ id: p.id, title: p.title, linkedGoalId: p.linkedGoalId, areaId: p.areaId })))}
               areas={lifeData.areas || []}
               onUpdateTask={handleUpdateTask}
+              onAddTask={handleAddTask}
               onDeleteTask={(id) => { handleDeleteTask(id); goToTab('tasks'); }}
               onBack={() => goToTab('tasks')}
               onNavigate={(tab, id) => {

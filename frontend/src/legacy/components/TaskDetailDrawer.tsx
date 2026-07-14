@@ -185,6 +185,7 @@ interface TaskDetailDrawerProps {
   projects?: Array<{ id: string; title: string; linkedGoalId?: string; areaId?: string }>
   areas?: Array<{ id: string; title: string }>
   onUpdateTask: (task: Task) => void
+  onAddTask?: (taskOrTitle: string | Task) => void
   onDeleteTask: (id: string) => void
   onClose: () => void
   onNavigate?: (tab: string, id?: string) => void
@@ -200,7 +201,7 @@ interface TaskDetailDrawerProps {
 
 export default function TaskDetailDrawer({
   task, allTasks = [], goals = [], projects = [], areas = [],
-  onUpdateTask, onDeleteTask, onClose, onNavigate, onOpenFullPage,
+  onUpdateTask, onAddTask, onDeleteTask, onClose, onNavigate, onOpenFullPage,
   activeTimerTaskId, activeTimerSeconds = 0, isTimerRunning = false,
   onStartTimer, onPauseTimer, onStopTimer, onResetTimer,
 }: TaskDetailDrawerProps) {
@@ -274,7 +275,11 @@ export default function TaskDetailDrawer({
         await fetchChildren()
         const mapped = mapBackendTaskRecord(saved)
         mapped.parentTaskId = task.id
-        onUpdateTask(mapped)
+        if (onAddTask) {
+          onAddTask(mapped)
+        } else {
+          onUpdateTask(mapped)
+        }
       }
       setNewSubtaskText('')
     } catch (e) {
