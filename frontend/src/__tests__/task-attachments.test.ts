@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import { getAttachmentColumnCount, isAttachmentImage, mergeAttachmentsWithReorderedImages } from '../legacy/components/task-attachments'
+import {
+  getAttachmentColumnCount,
+  isAttachmentImage,
+  mergeAttachmentsWithReorderedImages,
+  resolveAttachmentAssetUrl,
+} from '../legacy/components/task-attachments'
 
 describe('getAttachmentColumnCount', () => {
   it('returns mobile-first responsive columns', () => {
@@ -42,5 +47,17 @@ describe('isAttachmentImage', () => {
 
   it('rejects non-image attachments', () => {
     expect(isAttachmentImage({ name: 'doc-1', file_type: 'PDF', file_name: 'brief.pdf' })).toBe(false)
+  })
+})
+
+describe('resolveAttachmentAssetUrl', () => {
+  it('converts private file paths to authenticated download urls', () => {
+    expect(resolveAttachmentAssetUrl('/private/files/veederakht.png')).toBe(
+      '/api/method/frappe.utils.file_manager.download_file?file_url=%2Fprivate%2Ffiles%2Fveederakht.png',
+    )
+  })
+
+  it('keeps public file paths unchanged', () => {
+    expect(resolveAttachmentAssetUrl('/files/cover.png')).toBe('/files/cover.png')
   })
 })

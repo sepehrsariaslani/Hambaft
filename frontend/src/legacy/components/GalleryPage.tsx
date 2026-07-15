@@ -47,6 +47,7 @@ import {
   type GalleryPin,
   type GallerySection,
 } from '../../app/hambaft-api'
+import { resolveAttachmentAssetUrl } from './task-attachments'
 
 const GALLERY_FOCUS_KEY = 'hambaft-gallery-focus'
 
@@ -1026,7 +1027,7 @@ export default function GalleryPage({ onBack, onNavigate }: GalleryPageProps) {
               >
                 <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1fr)_360px]">
                   <div className="flex min-h-[320px] items-center justify-center bg-black/30 p-4">
-                    <img src={lightboxPin.image_url} alt="" className="max-h-[72vh] max-w-full rounded-[24px] object-contain" />
+                    <img src={resolveAttachmentAssetUrl(lightboxPin.image_url)} alt="" className="max-h-[72vh] max-w-full rounded-[24px] object-contain" />
                   </div>
                   <div className="flex flex-col gap-5 border-t border-white/10 p-5 text-white lg:border-r lg:border-t-0">
                     <div className="space-y-2">
@@ -1052,7 +1053,7 @@ export default function GalleryPage({ onBack, onNavigate }: GalleryPageProps) {
 
                     <div className="flex flex-wrap gap-2">
                       <a
-                        href={lightboxPin.image_url}
+                        href={resolveAttachmentAssetUrl(lightboxPin.image_url)}
                         download
                         target="_blank"
                         rel="noopener noreferrer"
@@ -1270,7 +1271,7 @@ function BoardPreviewMosaic({ pins, title }: { pins: GalleryPin[]; title: string
           key={pin.name}
           className={`overflow-hidden rounded-[20px] ${index === 0 && preview.length > 2 ? 'row-span-2' : ''}`}
         >
-          <img src={pin.image_url} alt="" className="h-full w-full object-cover" />
+          <img src={resolveAttachmentAssetUrl(pin.image_url)} alt="" className="h-full w-full object-cover" />
         </div>
       ))}
     </div>
@@ -1569,7 +1570,7 @@ function SectionPreviewCard({
         <div className="columns-2 gap-2 md:columns-3">
           {previewPins.map((pin) => (
             <div key={pin.name} className="mb-2 break-inside-avoid overflow-hidden rounded-[20px]">
-              <img src={pin.image_url} alt="" className="h-auto w-full object-cover" />
+              <img src={resolveAttachmentAssetUrl(pin.image_url)} alt="" className="h-auto w-full object-cover" />
             </div>
           ))}
         </div>
@@ -1714,7 +1715,7 @@ function PinMasonry({
                 onClick={() => !reorderMode && onPinClick?.(pin)}
                 className="block w-full text-right"
               >
-                <img src={pin.image_url} alt="" className="h-auto w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]" />
+                <img src={resolveAttachmentAssetUrl(pin.image_url)} alt="" className="h-auto w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]" />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/62 via-black/0 to-transparent opacity-75" />
                 <div className="absolute inset-x-0 bottom-0 px-3 pb-3">
                   <p className="truncate text-[11px] font-black text-white">

@@ -23,6 +23,15 @@ export function isAttachmentImage(item: AttachmentLike): boolean {
   return false
 }
 
+export function resolveAttachmentAssetUrl(fileUrl?: string): string {
+  const value = String(fileUrl || '').trim()
+  if (!value) return ''
+  if (value.startsWith('/private/files/')) {
+    return `/api/method/frappe.utils.file_manager.download_file?file_url=${encodeURIComponent(value)}`
+  }
+  return value
+}
+
 export function getAttachmentColumnCount(width: number): number {
   if (width >= 1280) return 5
   if (width >= 1024) return 4
@@ -34,6 +43,6 @@ export function mergeAttachmentsWithReorderedImages<T extends AttachmentLike>(
   allAttachments: T[],
   reorderedImages: T[],
 ): T[] {
-  const nonImages = allAttachments.filter((item) => !(item.file_type || '').startsWith('image/'))
+  const nonImages = allAttachments.filter((item) => !isAttachmentImage(item))
   return [...reorderedImages, ...nonImages]
 }

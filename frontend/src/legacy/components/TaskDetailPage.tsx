@@ -34,7 +34,12 @@ import {
 } from '../../app/hambaft-api'
 import EntityNoteEditor from '../../notes/components/EntityNoteEditor'
 import PersianDatePicker from './PersianDatePicker'
-import { getAttachmentColumnCount, isAttachmentImage, mergeAttachmentsWithReorderedImages } from './task-attachments'
+import {
+  getAttachmentColumnCount,
+  isAttachmentImage,
+  mergeAttachmentsWithReorderedImages,
+  resolveAttachmentAssetUrl,
+} from './task-attachments'
 
 // ─── Status config with dot colors ───────────────────────────
 const STATUS_CONFIG = [
@@ -1594,7 +1599,7 @@ function FilesSection({ task, onAttachmentChange, onNavigate }: {
                         onDragEnd={() => handleDragEnd(imageAttachments)}
                         className={`group relative rounded-xl overflow-hidden cursor-pointer bg-[#F9F6EE] dark:bg-[#3D4133]/30 transition-all ${reorderMode ? 'ring-1 ring-[#7C8363]/30 dark:ring-[#9ECE9A]/30' : ''}`}
                         onClick={() => !reorderMode && setLightboxAtt(att)}>
-                        <img src={att.file_url} alt={att.file_name}
+                        <img src={resolveAttachmentAssetUrl(att.file_url)} alt={att.file_name}
                           className="w-full object-cover rounded-xl transition-transform group-hover:scale-[1.02]" loading="lazy" />
                         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors rounded-xl" />
                         {/* Caption or filename */}
@@ -1668,7 +1673,7 @@ function FilesSection({ task, onAttachmentChange, onNavigate }: {
                       </div>
                       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         {att.file_url && (
-                          <a href={att.file_url} target="_blank" rel="noopener noreferrer"
+                          <a href={resolveAttachmentAssetUrl(att.file_url)} target="_blank" rel="noopener noreferrer"
                             className="p-1 rounded text-[#8D7F72] dark:text-[#9D978B] hover:text-[#7C8363] dark:hover:text-[#9ECE9A] cursor-pointer">
                             <Download className="w-3 h-3" />
                           </a>
@@ -1724,7 +1729,7 @@ function FilesSection({ task, onAttachmentChange, onNavigate }: {
             onClick={() => setLightboxAtt(null)}>
             <motion.div initial={{ scale: 0.8 }} animate={{ scale: 1 }} exit={{ scale: 0.8 }}
               className="relative max-w-4xl max-h-[90vh] w-full">
-              <img src={lightboxAtt.file_url} alt=""
+              <img src={resolveAttachmentAssetUrl(lightboxAtt.file_url)} alt=""
                 className="max-w-full max-h-[85vh] mx-auto object-contain rounded-lg"
                 onClick={e => e.stopPropagation()} />
               <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/70 to-transparent rounded-b-lg" onClick={e => e.stopPropagation()}>
@@ -1745,7 +1750,7 @@ function FilesSection({ task, onAttachmentChange, onNavigate }: {
                       )}
                     </div>
                   <div className="flex items-center gap-2">
-                    <a href={lightboxAtt.file_url} download target="_blank" rel="noopener noreferrer"
+                    <a href={resolveAttachmentAssetUrl(lightboxAtt.file_url)} download target="_blank" rel="noopener noreferrer"
                       className="p-1.5 rounded-lg bg-white/10 text-white hover:bg-white/20 cursor-pointer"><Download className="w-3.5 h-3.5" /></a>
                     <button onClick={() => { setDeleteConfirm(lightboxAtt.name); setLightboxAtt(null) }}
                       className="p-1.5 rounded-lg bg-white/10 text-white hover:bg-red-500/80 cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>
