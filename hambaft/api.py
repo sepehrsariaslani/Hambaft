@@ -100,6 +100,33 @@ def _unwrap_response(value):
     return value
 
 
+def _get_session_csrf_token():
+    token = str((getattr(frappe.local, "session", None) and frappe.local.session.data or {}).get("csrf_token") or "").strip()
+    if token:
+        return token
+
+    try:
+        token = str(frappe.sessions.get_csrf_token() or "").strip()
+    except Exception:
+        token = ""
+
+    if token:
+        return token
+
+    token = frappe.generate_hash()
+    try:
+        frappe.local.session.data.csrf_token = token
+    except Exception:
+        pass
+
+    try:
+        frappe.local.session_obj.update(force=True)
+    except Exception:
+        pass
+
+    return token
+
+
 def _priority_rank(value):
     order = {"فوری": 0, "urgent": 0, "بالا": 1, "high": 1, "متوسط": 2, "medium": 2, "پایین": 3, "low": 3}
     return order.get(value, 99)
@@ -877,7 +904,11 @@ def check_session():
     This is the safe replacement for frappe.auth.get_logged_user which requires
     internal whitelist configuration.
     """
-    return {"user": frappe.session.user}
+    user = frappe.session.user
+    return {
+        "user": user,
+        "csrf_token": _get_session_csrf_token() if user != "Guest" else "",
+    }
 
 
 @frappe.whitelist()
@@ -906,6 +937,7 @@ def get_profile():
         "full_name": user_doc.full_name,
         "email": user_doc.email,
         "signup_date": signup_date,
+        "csrf_token": _get_session_csrf_token(),
     }
 
 
@@ -1002,6 +1034,7 @@ def login(email, password):
 
     return {
         "status": "success",
+        "csrf_token": _get_session_csrf_token(),
         "data": {
             "user": {
                 "name": user.name,
@@ -1009,6 +1042,7 @@ def login(email, password):
                 "display_name": user.full_name or user.first_name or user.name,
             },
             "onboarding_completed": bool(settings.get("onboarding_completed")) if settings else False,
+            "csrf_token": _get_session_csrf_token(),
         }
     }
 
@@ -1040,6 +1074,7 @@ def signup(email, password, display_name=None):
 
     return {
         "status": "success",
+        "csrf_token": _get_session_csrf_token(),
         "data": {
             "user": {
                 "name": user.name,
@@ -1047,6 +1082,7 @@ def signup(email, password, display_name=None):
                 "display_name": user.full_name or user.first_name,
             },
             "onboarding_completed": False,
+            "csrf_token": _get_session_csrf_token(),
         }
     }
 

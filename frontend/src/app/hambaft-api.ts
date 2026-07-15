@@ -1096,17 +1096,17 @@ export async function finishTaskSession(sessionId: string) {
 }
 
 export async function getTaskSessions(taskId: string, limit = 50) {
-  return call<{ data?: { sessions?: any[] } }>('hambaft.hambaft.api.get_task_sessions', { task: taskId, limit })
+  return callGet<{ data?: { sessions?: any[] } }>('hambaft.hambaft.api.get_task_sessions', { task: taskId, limit })
 }
 
 export async function getActiveTaskSession() {
-  return call<{ data?: { session?: any } }>('hambaft.hambaft.api.get_active_session', {})
+  return callGet<{ data?: { session?: any } }>('hambaft.hambaft.api.get_active_session')
 }
 
 // ─── Task Hierarchy ─────────────────────────────────────────────
 
 export async function getTaskChildren(parentTaskId: string) {
-  return call<{ data?: { tasks?: any[] } }>('hambaft.hambaft.api.get_task_children', { parent_task: parentTaskId })
+  return callGet<{ data?: { tasks?: any[] } }>('hambaft.hambaft.api.get_task_children', { parent_task: parentTaskId })
 }
 
 export async function getTaskHierarchy(taskId: string) {

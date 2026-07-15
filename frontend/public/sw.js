@@ -2,7 +2,7 @@
 // Content-hashed assets (JS/CSS) are inherently cache-busting.
 // Only index.html needs explicit network-first to detect new deploys.
 
-const CACHE_VERSION = 'hambaft-v23'
+const CACHE_VERSION = 'hambaft-v24'
 
 self.addEventListener('install', (event) => {
   // Activate immediately — don't wait for old tabs to close.
@@ -14,7 +14,15 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
       Promise.all(keys.filter((k) => k !== CACHE_VERSION).map((k) => caches.delete(k)))
-    ).then(() => self.clients.claim())
+    ).then(() => self.clients.claim()).then(async () => {
+      const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+      await Promise.all(
+        clients.map((client) => {
+          if (!client.url || !client.url.startsWith(self.location.origin)) return Promise.resolve()
+          return client.navigate(client.url).catch(() => undefined)
+        })
+      )
+    })
   )
 })
 

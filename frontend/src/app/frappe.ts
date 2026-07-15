@@ -6,6 +6,32 @@ type CallOptions = {
   jsonBody?: boolean
 }
 
+function persistCsrfToken(token: unknown) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  const normalized = typeof token === 'string' ? token.trim() : ''
+  if (!normalized) {
+    return
+  }
+
+  const globalWindow = window as Window & {
+    csrf_token?: string
+    frappe?: {
+      csrf_token?: string
+    }
+  }
+
+  globalWindow.csrf_token = normalized
+  globalWindow.frappe = {
+    ...(globalWindow.frappe || {}),
+    csrf_token: normalized,
+  }
+
+  document.cookie = `csrf_token=${encodeURIComponent(normalized)}; path=/; SameSite=Lax`
+}
+
 function getCsrfToken() {
   if (typeof window === 'undefined') {
     return ''
@@ -41,6 +67,18 @@ async function parsePayload(response: Response) {
 
   const text = await response.text()
   return text ? { message: text } : {}
+}
+
+function persistCsrfTokenFromPayload(payload: unknown) {
+  if (!payload || typeof payload !== 'object') {
+    return
+  }
+
+  const record = payload as Record<string, any>
+  persistCsrfToken(record.csrf_token)
+  persistCsrfToken(record.data?.csrf_token)
+  persistCsrfToken(record.message?.csrf_token)
+  persistCsrfToken(record.message?.data?.csrf_token)
 }
 
 /**
@@ -114,6 +152,7 @@ export async function call<T = any>(
       credentials: 'same-origin',
     })
     const payload = await parsePayload(response)
+    persistCsrfTokenFromPayload(payload)
     if (!response.ok) {
       throw new Error(
         payload?._error_message ||
@@ -137,6 +176,7 @@ export async function call<T = any>(
       body: JSON.stringify(args),
     })
     const payload = await parsePayload(response)
+    persistCsrfTokenFromPayload(payload)
     if (!response.ok) {
       throw new Error(
         payload?._error_message ||
@@ -161,6 +201,7 @@ export async function call<T = any>(
   })
 
   const payload = await parsePayload(response)
+  persistCsrfTokenFromPayload(payload)
 
   if (!response.ok) {
     throw new Error(
@@ -279,6 +320,7 @@ export async function uploadFile(file: File, options?: { isPrivate?: boolean; fo
   })
 
   const payload = await parsePayload(response)
+  persistCsrfTokenFromPayload(payload)
 
   if (!response.ok) {
     throw new Error(payload?._error_message || payload?.message || `Upload failed: ${response.status}`)
