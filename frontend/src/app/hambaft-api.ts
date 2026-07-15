@@ -292,6 +292,43 @@ export function toTaskPayload(task: Task): Record<string, unknown> {
   }
 }
 
+export function toTaskUpdatePayload(task: Partial<Task> & { id: string }): Record<string, unknown> {
+  const importanceMap: Record<string, string> = {
+    normal: 'عادی',
+    key: 'کلیدی',
+    milestone: 'نقطه‌عطف',
+  }
+
+  const payload: Record<string, unknown> = {}
+
+  if ('title' in task && task.title !== undefined) payload.title = task.title
+  if ('description' in task) payload.description = task.description || ''
+  if ('dueDate' in task) payload.due_date = task.dueDate ? combineDateTime(task.dueDate, '09:00') : null
+  if ('scheduledDate' in task) payload.scheduled_date = task.scheduledDate || null
+  if ('scheduledTime' in task) payload.scheduled_time = task.scheduledTime || null
+  if ('priority' in task && task.priority !== undefined) payload.priority = taskPriorityToBackend[task.priority || 'medium'] || 'متوسط'
+  if ('category' in task && task.category !== undefined) payload.category = taskCategoryToBackend[task.category || 'other'] || 'شخصی'
+  if ('status' in task || 'completed' in task) {
+    payload.status = task.status || (task.completed ? 'done' : 'inbox')
+  }
+  if ('projectId' in task) payload.project = task.projectId || null
+  if ('parentTaskId' in task) payload.parent_task = task.parentTaskId || null
+  if ('blockedBy' in task) payload.blocked_by_json = JSON.stringify(task.blockedBy || [])
+  if ('importance' in task && task.importance !== undefined) {
+    payload.importance = importanceMap[task.importance || 'normal'] || 'عادی'
+  }
+  if ('isDailyHighlight' in task) payload.is_daily_highlight = task.isDailyHighlight ? 1 : 0
+  if ('estimatedMinutes' in task) payload.estimated_minutes = task.estimatedMinutes || null
+  if ('effortType' in task && task.effortType !== undefined) {
+    payload.effort_type = task.effortType === 'fixed' ? 'ثابت' : 'متغیر'
+  }
+  if ('areaId' in task) payload.area = task.areaId || null
+  if ('goalId' in task) payload.goal = task.goalId || null
+  if ('noteBlocks' in task) payload.noteBlocks = task.noteBlocks || []
+
+  return payload
+}
+
 export function toGoalPayload(goal: Goal): Record<string, unknown> {
   const metric = goal.metric
   const goalTypeMap: Record<string, string> = {
@@ -459,7 +496,7 @@ export async function createTaskRecord(task: Task) {
 }
 
 export async function updateTaskRecord(task: Task) {
-  return call('hambaft.hambaft.api.update_task', { name: task.id, data: toTaskPayload(task) })
+  return call('hambaft.hambaft.api.update_task', { name: task.id, data: toTaskUpdatePayload(task) })
 }
 
 export async function deleteTaskRecord(name: string) {

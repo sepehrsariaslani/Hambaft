@@ -1,4 +1,11 @@
-import { mapBackendTaskCategory, mapBackendTaskPriority, mapEventToScheduleItem, toSchedulePayload, toTaskPayload } from '../app/hambaft-api'
+import {
+  mapBackendTaskCategory,
+  mapBackendTaskPriority,
+  mapEventToScheduleItem,
+  toSchedulePayload,
+  toTaskPayload,
+  toTaskUpdatePayload,
+} from '../app/hambaft-api'
 
 describe('hambaft data mappers', () => {
   it('maps backend task enums to frontend task enums', () => {
@@ -40,6 +47,18 @@ describe('hambaft data mappers', () => {
       status: 'done',
       priority: 'بالا',
       category: 'مالی',
+    })
+  })
+
+  it('serializes partial task updates without clearing unrelated links', () => {
+    expect(
+      toTaskUpdatePayload({
+        id: 'TASK-2',
+        completed: true,
+        status: 'done',
+      }),
+    ).toEqual({
+      status: 'done',
     })
   })
 

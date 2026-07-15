@@ -32,6 +32,7 @@ import {
   createGalleryPin, reorderTaskAttachments,
   type TaskAttachment,
 } from '../../app/hambaft-api'
+import { uploadFile } from '../../app/frappe'
 import EntityNoteEditor from '../../notes/components/EntityNoteEditor'
 import PersianDatePicker from './PersianDatePicker'
 import {
@@ -1173,7 +1174,7 @@ function TimeSection({ task, isActiveSession, activeTimerSeconds, isTimerRunning
       .then(resp => setSessions(resp?.data?.sessions || []))
       .catch(() => setSessions([]))
       .finally(() => setLoading(false))
-  }, [task.id])
+  }, [task.id, isActiveSession, isTimerRunning])
 
   const actualSeconds = trackedTime.total * 60 || task.totalTimeSpent || (task.actualMinutes ? task.actualMinutes * 60 : 0)
   const estimatedSeconds = task.estimatedMinutes ? task.estimatedMinutes * 60 : 0
@@ -1393,24 +1394,14 @@ function FilesSection({ task, onAttachmentChange, onNavigate }: {
     if (!file) return
     setUploading(true)
     try {
-      const formData = new FormData()
-      formData.append('file', file)
-      formData.append('is_private', '1')
-      formData.append('doctype', 'Task')
-      formData.append('docname', task.id)
-      formData.append('fieldname', 'attachments')
-      const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
-      const resp = await fetch('/api/method/upload_file', {
-        method: 'POST',
-        headers: csrfToken ? { 'X-Frappe-CSRF-Token': csrfToken } : {},
-        body: formData,
-        credentials: 'same-origin',
+      const result = await uploadFile(file, {
+        isPrivate: true,
+        doctype: 'Task',
+        docname: task.id,
       })
-      if (!resp.ok) throw new Error('Upload failed')
       // Try to create gallery pin for this new image
       try {
-        const result = await resp.json()
-        const fileName = result?.message?.name || result?.message?.file_name || null
+        const fileName = result?.name || null
         if (fileName) {
           await createGalleryPin(fileName, 'Task', task.id)
         }

@@ -2,7 +2,7 @@
 // Content-hashed assets (JS/CSS) are inherently cache-busting.
 // Only index.html needs explicit network-first to detect new deploys.
 
-const CACHE_VERSION = 'hambaft-v22'
+const CACHE_VERSION = 'hambaft-v23'
 
 self.addEventListener('install', (event) => {
   // Activate immediately — don't wait for old tabs to close.
@@ -20,6 +20,17 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url)
+  const isSameOrigin = url.origin === self.location.origin
+  const acceptHeader = event.request.headers.get('accept') || ''
+  const isAppNavigation =
+    event.request.mode === 'navigate' ||
+    (event.request.method === 'GET' &&
+      isSameOrigin &&
+      acceptHeader.includes('text/html') &&
+      !url.pathname.startsWith('/api/') &&
+      !url.pathname.startsWith('/assets/') &&
+      !url.pathname.startsWith('/files/') &&
+      !url.pathname.startsWith('/private/files/'))
 
   // index.html must always come from network (no hash → stale cache risk).
   // Match both the standalone page and the Frappe-served asset.
@@ -29,7 +40,7 @@ self.addEventListener('fetch', (event) => {
     url.pathname === '/hambaft' ||
     url.pathname === '/hambaft/'
 
-  if (isIndexHtml) {
+  if (isIndexHtml || isAppNavigation) {
     event.respondWith(
       fetch(event.request, { cache: 'no-cache' })
         .then((response) => {
