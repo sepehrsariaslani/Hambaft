@@ -18,6 +18,7 @@ import {
 } from '../../app/hambaft-api';
 import PersianDatePicker from './PersianDatePicker';
 import EntityNoteEditor from '../../notes/components/EntityNoteEditor';
+import GoalProjectSummaryCard from './GoalProjectSummaryCard';
 import { 
   Target, 
   Calendar, 
@@ -84,6 +85,7 @@ import {
 
 interface GoalDetailViewProps {
   goal: Goal;
+  goals: Goal[];
   globalHabits: Habit[];
   bankAccounts: BankAccount[];
   workoutLogs?: WorkoutLog[];
@@ -109,6 +111,8 @@ interface GoalDetailViewProps {
   onLinkBankAccountToGoal: (goalId: string, bankAccountId: string | undefined) => void;
   onLinkHabitToGoal: (goalId: string, habitId: string) => void;
   onAddBankAccount: (bankAccount: Omit<BankAccount, 'id'>) => void;
+  onSelectProject: (projectId: string) => void;
+  onMoveProjectToGoal: (fromGoalId: string, projectId: string, toGoalId: string) => void;
 }
 
 const CATEGORY_COLORS: Record<GoalCategory, string> = {
@@ -289,6 +293,7 @@ function LinkedProjectEditor({ goalId, lp, onUpdate }: {
 
 export default function GoalDetailView({
   goal,
+  goals,
   globalHabits,
   bankAccounts,
   workoutLogs = [],
@@ -311,7 +316,9 @@ export default function GoalDetailView({
   onToggleGoalCompletion,
   onLinkBankAccountToGoal,
   onLinkHabitToGoal,
-  onAddBankAccount
+  onAddBankAccount,
+  onSelectProject,
+  onMoveProjectToGoal,
 }: GoalDetailViewProps) {
   
   const [activeTab, setActiveTab] = useState<'projects' | 'habits' | 'milestones' | 'metrics' | 'vision' | 'notes' | 'config' | 'finance_links'>('projects');
@@ -1581,112 +1588,23 @@ export default function GoalDetailView({
             {goal.projects && goal.projects.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {goal.projects.map((project) => {
-                  const projectTasks = project.tasks || [];
-                  const pDone = projectTasks.filter(t => t.completed).length;
-                  const pTotal = projectTasks.length;
-                  const pPct = pTotal > 0 ? Math.round((pDone / pTotal) * 100) : 0;
-                  // Find matching linked project for contribution data
                   const linkedMatch = (goal.linkedProjects || []).find(lp => lp.project === project.id || lp.title === project.title);
-
+                  const mergedProject = {
+                    ...project,
+                    contributionType: project.contributionType || linkedMatch?.contributionType,
+                    actualMinutes: project.actualMinutes ?? linkedMatch?.actualMinutes,
+                    estimatedHours: project.estimatedHours ?? linkedMatch?.estimatedHours,
+                  };
                   return (
-                    <div key={project.id} className="bg-[#FDFBF7] p-4 rounded-3xl border border-[#E6DFD3] space-y-3 text-right">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <h5 className="text-xs font-extrabold text-[#2D3025] flex items-center gap-1.5">
-                            <span className="w-2 h-2 rounded-full bg-[#7C8363]"></span>
-                            <span>{project.title}</span>
-                            {linkedMatch?.contributionType && (
-                              <span className={`text-[7px] font-bold px-1 py-0.5 rounded border ${getContributionTypeBadge(linkedMatch.contributionType)}`}>
-                                {getContributionTypeLabel(linkedMatch.contributionType)}
-                              </span>
-                            )}
-                          </h5>
-                          {project.description && (
-                            <p className="text-[10px] text-[#8D7F72] mt-0.5 pr-3.5 leading-relaxed">{project.description}</p>
-                          )}
-                        </div>
-
-                        <button 
-                          onClick={() => onDeleteProjectFromGoal(goal.id, project.id)}
-                          className="text-red-400 hover:text-red-600 p-1 rounded-lg hover:bg-red-50 cursor-pointer"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-
-                      {/* Progress Bar */}
-                      <div className="space-y-1 bg-[#F9F6EE] p-2 rounded-xl border border-[#E6DFD3]/40">
-                        <div className="flex justify-between items-center text-[9px] text-[#8D7F72] font-semibold">
-                          <span>میزان تکمیل پروژه: {pPct}%</span>
-                          <span>{pDone} از {pTotal} کار</span>
-                        </div>
-                        <div className="w-full h-1 bg-white rounded-full overflow-hidden">
-                          <div 
-                            className="h-full bg-[#9B6B61] transition-all rounded-full"
-                            style={{ width: `${pPct}%` }}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Tasks Checklist */}
-                      <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-                        {projectTasks.length > 0 ? (
-                          projectTasks.map((task) => (
-                            <div 
-                              key={task.id}
-                              onClick={() => onToggleTaskInProject(goal.id, project.id, task.id)}
-                              className="flex items-center justify-between p-2 bg-white hover:bg-[#E8ECE0]/20 border border-[#E6DFD3]/40 rounded-xl cursor-pointer transition-all"
-                            >
-                              <div className="flex items-center gap-2">
-                                {task.completed ? (
-                                  <CheckSquare className="w-3.5 h-3.5 text-[#7C8363] fill-[#E8ECE0]" />
-                                ) : (
-                                  <Circle className="w-3.5 h-3.5 text-[#8D7F72]" />
-                                )}
-                                <span className={`text-[10px] font-semibold ${task.completed ? 'line-through text-[#8D7F72]' : 'text-[#3D3D3D]'}`}>
-                                  {task.title}
-                                </span>
-                              </div>
-
-                              <button 
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onDeleteTaskFromProject(goal.id, project.id, task.id);
-                                }}
-                                className="text-[#8D7F72] hover:text-red-500 p-0.5 rounded-lg hover:bg-red-50"
-                              >
-                                <X className="w-3 h-3" />
-                              </button>
-                            </div>
-                          ))
-                        ) : (
-                          <div className="text-center py-4 bg-white/40 border border-dashed border-[#D6CFC3] rounded-xl text-[10px] text-[#8D7F72]">
-                            هیچ تسکی برای این پروژه تعریف نشده است.
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Add Task bar */}
-                      <div className="flex gap-1.5 pt-1.5 border-t border-[#E6DFD3]/30">
-                        <input 
-                          type="text"
-                          placeholder="تسک جدید به پروژه..."
-                          value={newTaskTitles[project.id] || ''}
-                          onChange={e => setNewTaskTitles(prev => ({ ...prev, [project.id]: e.target.value }))}
-                          onKeyDown={e => {
-                            if (e.key === 'Enter') handleCreateTask(project.id);
-                          }}
-                          className="flex-1 px-2.5 py-1.5 rounded-xl border border-[#D6CFC3] text-[10px] bg-white text-[#3D3D3D] focus:outline-none focus:border-[#7C8363]"
-                        />
-                        <button 
-                          onClick={() => handleCreateTask(project.id)}
-                          className="px-2.5 py-1.5 bg-[#9B6B61] hover:bg-[#7C5A51] text-white text-[10px] font-bold rounded-xl shrink-0 cursor-pointer"
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-
-                    </div>
+                    <GoalProjectSummaryCard
+                      key={project.id}
+                      goalId={goal.id}
+                      project={mergedProject}
+                      goals={goals}
+                      onSelectProject={onSelectProject}
+                      onMoveProjectToGoal={onMoveProjectToGoal}
+                      onDeleteProject={onDeleteProjectFromGoal}
+                    />
                   );
                 })}
               </div>

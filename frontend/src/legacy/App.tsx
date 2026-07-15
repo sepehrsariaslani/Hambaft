@@ -74,6 +74,7 @@ import {
   updateTaskRecord,
   updateTransactionRecord,
 } from '../app/hambaft-api';
+import { moveProjectBetweenGoals, syncProjectTaskGoalIds } from './project-goal-linking';
 
 // Import Section Components — primary (eager)
 import DashboardOverview from './components/DashboardOverview';
@@ -2049,7 +2050,8 @@ export default function App({
             completed: false,
             tasks: [],
             createdAt: TODAY_DATE,
-            status: 'waiting'
+            status: 'waiting',
+            linkedGoalId: goalId,
           };
           return {
             ...g,
@@ -2354,7 +2356,68 @@ export default function App({
     syncProjectState(goalId, projectId, 'update project');
   };
 
-  const handleUpdateProjectDetails = (goalId: string, projectId: string, updates: { title?: string; description?: string; notes?: string; milestones?: Milestone[]; tasks?: Task[] }) => {
+  const handleMoveProjectToGoal = (fromGoalId: string, projectId: string, toGoalId: string) => {
+    if (fromGoalId === toGoalId) {
+      return;
+    }
+
+    const previousGoals = lifeData.goals;
+    const previousTasks = lifeData.tasks;
+    const moveResult = moveProjectBetweenGoals(previousGoals, { fromGoalId, projectId, toGoalId });
+
+    if (!moveResult.movedProject) {
+      return;
+    }
+
+    setLifeData(prev => ({
+      ...prev,
+      goals: moveResult.goals,
+      tasks: syncProjectTaskGoalIds(prev.tasks, projectId, toGoalId),
+    }));
+
+    const movedProject = moveResult.movedProject;
+    const isTemporaryProject = movedProject.id.startsWith('p-');
+
+    runSync('move project between goals', async () => {
+      try {
+        if (isTemporaryProject) {
+          const response: any = await createProjectRecord(movedProject, toGoalId);
+          const saved = response?.data?.project;
+          if (!saved?.name) return;
+
+          setLifeData(prev => ({
+            ...prev,
+            goals: prev.goals.map(goal => ({
+              ...goal,
+              projects: (goal.projects || []).map(project => (
+                project.id === movedProject.id
+                  ? {
+                      ...project,
+                      id: saved.name,
+                      createdAt: String(saved.creation || project.createdAt).slice(0, 10),
+                    }
+                  : project
+              )),
+            })),
+          }));
+
+          setSelectedProjectId(current => (current === movedProject.id ? saved.name : current));
+          return;
+        }
+
+        await updateProjectRecord(movedProject.id, movedProject, toGoalId);
+      } catch (error) {
+        setLifeData(prev => ({
+          ...prev,
+          goals: previousGoals,
+          tasks: previousTasks,
+        }));
+        throw error;
+      }
+    });
+  };
+
+  const handleUpdateProjectDetails = (goalId: string, projectId: string, updates: { title?: string; description?: string; notes?: string; milestones?: Milestone[]; tasks?: Task[]; noteBlocks?: any[] }) => {
     setLifeData(prev => {
       const updatedGoals = prev.goals.map(g => {
         if (g.id === goalId) {
@@ -3463,6 +3526,7 @@ export default function App({
             return (
               <GoalDetailView 
                 goal={matchedGoal}
+                goals={lifeData.goals}
                 globalHabits={lifeData.habits || []}
                 bankAccounts={lifeData.bankAccounts || []}
                 workoutLogs={lifeData.workoutLogs || []}
@@ -3486,6 +3550,8 @@ export default function App({
                 onLinkBankAccountToGoal={handleLinkBankAccountToGoal}
                 onLinkHabitToGoal={handleLinkHabitToGoal}
                 onAddBankAccount={handleAddBankAccount}
+                onSelectProject={goToProject}
+                onMoveProjectToGoal={handleMoveProjectToGoal}
               />
             );
           }
@@ -3531,6 +3597,7 @@ export default function App({
             return (
               <ProjectDetailView 
                 project={matchedProject}
+                goals={lifeData.goals}
                 transactions={lifeData.transactions}
                 bankAccounts={lifeData.bankAccounts}
                 onAddTransaction={handleAddTransaction}
@@ -3548,6 +3615,7 @@ export default function App({
                   else if (tab === 'projects' && id) goToProject(id)
                   else goToTab(tab)
                 }}
+                onMoveProjectToGoal={handleMoveProjectToGoal}
               />
             );
           }

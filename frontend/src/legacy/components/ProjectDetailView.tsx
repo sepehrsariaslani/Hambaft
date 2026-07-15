@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Goal, Project, Task, GoalCategory, GoalLinkedProject, BankAccount, Transaction, Milestone } from '../types';
 import EntityNoteEditor from '../../notes/components/EntityNoteEditor';
 import ViewSwitcher, { type ViewMode } from './ViewSwitcher';
+import ProjectMetaPanel from './ProjectMetaPanel';
 import { 
   ArrowRight, 
   FolderKanban, 
@@ -81,6 +82,7 @@ const MONTHS_FA = [
 
 interface ProjectDetailViewProps {
   project: Project & { goalId: string; goalTitle: string; goalCategory: GoalCategory };
+  goals: Goal[];
   transactions: Transaction[];
   bankAccounts: BankAccount[];
   onAddTransaction: (tx: Omit<Transaction, 'id'>) => void;
@@ -94,10 +96,12 @@ interface ProjectDetailViewProps {
   onUpdateProjectDetails?: (goalId: string, projectId: string, updates: { title?: string; description?: string; notes?: string; milestones?: Milestone[]; tasks?: Task[]; noteBlocks?: any[] }) => void;
   onNavigateTask?: (taskId: string) => void;
   onNavigateEntity?: (tab: string, id?: string) => void;
+  onMoveProjectToGoal: (fromGoalId: string, projectId: string, toGoalId: string) => void;
 }
 
 export default function ProjectDetailView({
   project,
+  goals,
   transactions,
   bankAccounts,
   onAddTransaction,
@@ -111,6 +115,7 @@ export default function ProjectDetailView({
   onUpdateProjectDetails,
   onNavigateTask,
   onNavigateEntity,
+  onMoveProjectToGoal,
 }: ProjectDetailViewProps) {
   // Views/Tabs State
   const [activeTab, setActiveTab] = useState<'tasks' | 'finance' | 'planning' | 'milestones' | 'report' | 'notes'>('tasks');
@@ -505,6 +510,13 @@ export default function ProjectDetailView({
           </div>
         </div>
       </div>
+
+      <ProjectMetaPanel
+        project={project}
+        goals={goals}
+        onMoveProjectToGoal={onMoveProjectToGoal}
+        onOpenGoal={(goalId) => onNavigateEntity?.('goals', goalId)}
+      />
 
       {/* GOAL CONTRIBUTION CONTEXT with Health State */}
       {project.goalId && project.goalTitle && (() => {
