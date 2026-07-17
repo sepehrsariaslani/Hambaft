@@ -1,14 +1,15 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Contact, ContactInteractionLog, ContactRelation, ContactRelationType, ContactRelationDirection, Occasion } from '../types';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Contact, ContactInteractionLog, ContactRelation, ContactRelationType, ContactRelationDirection, ContactSummary, RelationshipHealth, Occasion } from '../types';
 import { 
   User, Users, Phone, Mail, Plus, Trash2, Calendar, MessageCircle, 
   Check, Search, Sparkles, Upload, Heart, Clock, MapPin, Activity, 
   Award, AlertCircle, Filter, Tag, MessageSquare, Briefcase, PlusCircle, X, CheckCircle, Edit2,
-  Link2, ChevronDown, GripVertical
+  Link2, ChevronDown, GripVertical, ArrowUpDown, Zap, Wifi, WifiOff, TrendingUp, ArrowRight
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   getContactRelations, createContactRelation, updateContactRelation, deleteContactRelation,
+  getContactsSummary,
 } from '../../app/hambaft-api';
 
 interface ContactsSectionProps {
@@ -54,6 +55,27 @@ const DIRECTION_LABELS: Record<string, string> = {
   incoming: 'ورودی',
 };
 
+const HEALTH_LABELS: Record<RelationshipHealth, { label: string; emoji: string; color: string; bg: string }> = {
+  healthy: { label: 'سالم', emoji: '💚', color: 'text-emerald-600 dark:text-emerald-300', bg: 'bg-emerald-50 dark:bg-emerald-950/20' },
+  needs_attention: { label: 'نیاز به توجه', emoji: '🟡', color: 'text-amber-600 dark:text-amber-300', bg: 'bg-amber-50 dark:bg-amber-950/20' },
+  cold: { label: 'سرد شده', emoji: '🔴', color: 'text-red-500 dark:text-red-300', bg: 'bg-red-50 dark:bg-red-950/20' },
+  new: { label: 'جدید', emoji: '🔵', color: 'text-blue-500 dark:text-blue-300', bg: 'bg-blue-50 dark:bg-blue-950/20' },
+};
+
+const SORT_OPTIONS = [
+  { value: 'default', label: 'پیش‌فرض' },
+  { value: 'strongest_network', label: 'قوی‌ترین شبکه' },
+  { value: 'recently_contacted', label: 'آخرین تماس' },
+  { value: 'highest_score', label: 'بالاترین امتیاز' },
+  { value: 'at_risk', label: 'در معرض خطر' },
+] as const;
+
+const DETAIL_TABS = [
+  { key: 'overview', label: 'خلاصه', emoji: '📋' },
+  { key: 'relations', label: 'افراد مرتبط', emoji: '🔗' },
+  { key: 'history', label: 'تاریخچه تعامل', emoji: '💬' },
+] as const;
+
 export default function ContactsSection({
   contacts = [],
   onAddContact,
@@ -66,7 +88,16 @@ export default function ContactsSection({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedCloseness, setSelectedCloseness] = useState<string>('all');
+  const [selectedRelationType, setSelectedRelationType] = useState<string>('all');
+  const [selectedHealth, setSelectedHealth] = useState<string>('all');
+  const [selectedRelationFilter, setSelectedRelationFilter] = useState<string>('all'); // all/has_relations/no_relations/needs_follow_up
+  const [sortBy, setSortBy] = useState<string>('default');
   const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
+  const [activeDetailTab, setActiveDetailTab] = useState<'overview' | 'relations' | 'history'>('overview');
+
+  // Contact summaries from backend (relation counts + health)
+  const [contactSummaries, setContactSummaries] = useState<Record<string, ContactSummary>>({});
+  const [summariesLoaded, setSummariesLoaded] = useState(false);
 
   // Modal forms states
   const [addModalOpen, setAddModalOpen] = useState(false);
@@ -137,6 +168,37 @@ export default function ContactsSection({
       setContactRelations([]);
     }
   }, [selectedContactId, fetchRelations]);
+
+  // Fetch contact summaries (relation counts + health)
+  const fetchSummaries = useCallback(async () => {
+    try {
+      const resp = await getContactsSummary();
+      const raw = resp?.data?.contacts || [];
+      const map: Record<string, ContactSummary> = {};
+      for (const c of raw) {
+        map[c.name] = {
+          name: c.name,
+          fullName: c.full_name || c.name,
+          contactCategory: c.contact_category || 'other',
+          closenessTier: c.closeness_tier || 'acquaintance',
+          lastInteractionDate: c.last_interaction_date || undefined,
+          relationshipScore: c.relationship_score || 0,
+          photoUrl: c.photo_url || undefined,
+          relationCount: c.relation_count || 0,
+          relationTypes: c.relation_types || {},
+          health: c.health || 'new',
+        };
+      }
+      setContactSummaries(map);
+      setSummariesLoaded(true);
+    } catch {
+      setContactSummaries({});
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchSummaries();
+  }, [fetchSummaries, contacts.length]);
 
   const activeContact = contacts.find(c => c.id === selectedContactId) || null;
 
@@ -294,6 +356,44 @@ export default function ContactsSection({
     setDeleteRelationConfirm(null);
   };
 
+  // Quick action: mark as reached today
+  const handleMarkReachedToday = () => {
+    if (!activeContact) return;
+    onUpdateContact({
+      ...activeContact,
+      lastInteractionDate: todayDate,
+      lastInteractionType: 'chat',
+    });
+  };
+
+  // Quick action: create follow-up occasion
+  const handleCreateFollowUp = () => {
+    if (!activeContact || !onAddOccasion) return;
+    const followUpDate = new Date(todayDate);
+    followUpDate.setDate(followUpDate.getDate() + 7); // 7 days from now
+    onAddOccasion({
+      title: `پیگیری با ${activeContact.name}`,
+      type: 'reminder',
+      date: followUpDate.toISOString().slice(0, 10),
+      person: activeContact.name,
+      recurrenceType: 'once',
+      reminderDaysBefore: 1,
+      notes: `پیگیری ارتباط با ${activeContact.name}`,
+    });
+  };
+
+  // Upkeep status for a contact
+  const getUpkeepStatus = useCallback((contact: Contact): { status: 'reached' | 'due_soon' | 'overdue'; label: string } => {
+    if (!contact.lastInteractionDate) return { status: 'overdue', label: 'بدون تعامل' };
+    const lastDate = new Date(contact.lastInteractionDate);
+    const currDate = new Date(todayDate);
+    const diffDays = Math.ceil(Math.abs(currDate.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24));
+    const threshold = contact.closenessTier === 'inner' ? 14 : contact.closenessTier === 'outer' ? 45 : 90;
+    if (diffDays <= threshold * 0.5) return { status: 'reached', label: 'اخیراً تماس گرفته‌شده' };
+    if (diffDays <= threshold) return { status: 'due_soon', label: 'به‌زودی نیاز به پیگیری' };
+    return { status: 'overdue', label: 'سررسید پیگیری' };
+  }, [todayDate]);
+
   const handleSaveContact = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
@@ -413,15 +513,93 @@ export default function ContactsSection({
     setInteractionModalOpen(false);
   };
 
+  // Compute derived health on frontend (mirrors backend logic for when summaries not yet loaded)
+  const computeHealthLocal = useCallback((contact: Contact): RelationshipHealth => {
+    const summary = contactSummaries[contact.id];
+    if (summary?.health) return summary.health;
+
+    if (!contact.lastInteractionDate) {
+      return 'new';
+    }
+    const lastDate = new Date(contact.lastInteractionDate);
+    const currDate = new Date(todayDate);
+    const diffDays = Math.ceil(Math.abs(currDate.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24));
+    const threshold = contact.closenessTier === 'inner' ? 14 : contact.closenessTier === 'outer' ? 45 : 90;
+    if (diffDays <= threshold) return 'healthy';
+    if (diffDays <= threshold * 2) return 'needs_attention';
+    return 'cold';
+  }, [contactSummaries, todayDate]);
+
+  // Enriched contacts with relation count, health, and sort
+  const enrichedContacts = useMemo(() => {
+    return contacts.map(c => ({
+      ...c,
+      relationCount: contactSummaries[c.id]?.relationCount ?? (c.relations?.length ?? 0),
+      health: computeHealthLocal(c),
+      summary: contactSummaries[c.id],
+    }));
+  }, [contacts, contactSummaries, computeHealthLocal]);
+
   // Filter contacts
-  const filteredContacts = contacts.filter(c => {
-    const matchesSearch = c.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          (c.phone && c.phone.includes(searchQuery)) ||
-                          (c.traits && c.traits.some(t => t.toLowerCase().includes(searchQuery.toLowerCase())));
-    const matchesCategory = selectedCategory === 'all' || c.category === selectedCategory;
-    const matchesCloseness = selectedCloseness === 'all' || c.closenessTier === selectedCloseness;
-    return matchesSearch && matchesCategory && matchesCloseness;
-  });
+  const filteredContacts = useMemo(() => {
+    let result = enrichedContacts.filter(c => {
+      const matchesSearch = c.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                            (c.phone && c.phone.includes(searchQuery)) ||
+                            (c.traits && c.traits.some(t => t.toLowerCase().includes(searchQuery.toLowerCase())));
+      const matchesCategory = selectedCategory === 'all' || c.category === selectedCategory;
+      const matchesCloseness = selectedCloseness === 'all' || c.closenessTier === selectedCloseness;
+      const matchesHealth = selectedHealth === 'all' || c.health === selectedHealth;
+
+      // Relation type filter
+      let matchesRelationType = true;
+      if (selectedRelationType !== 'all') {
+        const rt = contactSummaries[c.id]?.relationTypes || {};
+        matchesRelationType = !!rt[selectedRelationType];
+      }
+
+      // Relation status filter
+      let matchesRelationFilter = true;
+      if (selectedRelationFilter === 'has_relations') {
+        matchesRelationFilter = c.relationCount > 0;
+      } else if (selectedRelationFilter === 'no_relations') {
+        matchesRelationFilter = c.relationCount === 0;
+      } else if (selectedRelationFilter === 'needs_follow_up') {
+        matchesRelationFilter = c.health === 'needs_attention' || c.health === 'cold';
+      }
+
+      return matchesSearch && matchesCategory && matchesCloseness && matchesHealth && matchesRelationType && matchesRelationFilter;
+    });
+
+    // Sort
+    if (sortBy === 'strongest_network') {
+      result.sort((a, b) => b.relationCount - a.relationCount);
+    } else if (sortBy === 'recently_contacted') {
+      result.sort((a, b) => {
+        const aDate = a.lastInteractionDate || '';
+        const bDate = b.lastInteractionDate || '';
+        return bDate.localeCompare(aDate);
+      });
+    } else if (sortBy === 'highest_score') {
+      result.sort((a, b) => (b.relationshipScore || 0) - (a.relationshipScore || 0));
+    } else if (sortBy === 'at_risk') {
+      const healthOrder: Record<RelationshipHealth, number> = { cold: 0, needs_attention: 1, new: 2, healthy: 3 };
+      result.sort((a, b) => (healthOrder[a.health] ?? 9) - (healthOrder[b.health] ?? 9));
+    }
+
+    return result;
+  }, [enrichedContacts, searchQuery, selectedCategory, selectedCloseness, selectedHealth, selectedRelationType, selectedRelationFilter, sortBy, contactSummaries]);
+
+  // Summary strip data
+  const summaryData = useMemo(() => {
+    const total = enrichedContacts.length;
+    const connected = enrichedContacts.filter(c => c.relationCount > 0).length;
+    const isolated = enrichedContacts.filter(c => c.relationCount === 0).length;
+    const innerCircle = enrichedContacts.filter(c => c.closenessTier === 'inner').length;
+    const atRisk = enrichedContacts.filter(c => c.health === 'cold' || c.health === 'needs_attention').length;
+    const healthy = enrichedContacts.filter(c => c.health === 'healthy').length;
+    const newContacts = enrichedContacts.filter(c => c.health === 'new').length;
+    return { total, connected, isolated, innerCircle, atRisk, healthy, newContacts };
+  }, [enrichedContacts]);
 
   // Birthday Countdown calculator helper
   const getBirthdayCountdown = (bdayStr?: string): { daysLeft: number, age: number } | null => {
@@ -471,6 +649,34 @@ export default function ContactsSection({
           <Plus className="w-4 h-4 stroke-[3]" />
           <span>افزودن مخاطب جدید</span>
         </button>
+      </div>
+
+      {/* Summary Strip */}
+      <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+        <div className="bg-[#FDFBF7] dark:bg-[#1B1D16] border border-[#E6DFD3] dark:border-[#3D4133]/30 rounded-xl p-2.5 text-center">
+          <span className="text-lg font-black text-[#2D3025] dark:text-[#E8ECE0] block">{getPersianNumber(summaryData.total)}</span>
+          <span className="text-[8px] font-black text-[#8D7F72] dark:text-[#9D978B] block">کل مخاطبین</span>
+        </div>
+        <div className="bg-[#FDFBF7] dark:bg-[#1B1D16] border border-[#E6DFD3] dark:border-[#3D4133]/30 rounded-xl p-2.5 text-center">
+          <span className="text-lg font-black text-[#7C8363] dark:text-[#9ECE9A] block">{getPersianNumber(summaryData.connected)}</span>
+          <span className="text-[8px] font-black text-[#8D7F72] dark:text-[#9D978B] block">متصل</span>
+        </div>
+        <div className="bg-[#FDFBF7] dark:bg-[#1B1D16] border border-[#E6DFD3] dark:border-[#3D4133]/30 rounded-xl p-2.5 text-center">
+          <span className="text-lg font-black text-amber-600 dark:text-amber-300 block">{getPersianNumber(summaryData.isolated)}</span>
+          <span className="text-[8px] font-black text-[#8D7F72] dark:text-[#9D978B] block">منزوی</span>
+        </div>
+        <div className="bg-[#FDFBF7] dark:bg-[#1B1D16] border border-[#E6DFD3] dark:border-[#3D4133]/30 rounded-xl p-2.5 text-center">
+          <span className="text-lg font-black text-[#9B6B61] block">{getPersianNumber(summaryData.innerCircle)}</span>
+          <span className="text-[8px] font-black text-[#8D7F72] dark:text-[#9D978B] block">حلقه طلایی</span>
+        </div>
+        <div className="bg-[#FDFBF7] dark:bg-[#1B1D16] border border-[#E6DFD3] dark:border-[#3D4133]/30 rounded-xl p-2.5 text-center">
+          <span className="text-lg font-black text-red-500 dark:text-red-300 block">{getPersianNumber(summaryData.atRisk)}</span>
+          <span className="text-[8px] font-black text-[#8D7F72] dark:text-[#9D978B] block">در خطر</span>
+        </div>
+        <div className="bg-[#FDFBF7] dark:bg-[#1B1D16] border border-[#E6DFD3] dark:border-[#3D4133]/30 rounded-xl p-2.5 text-center">
+          <span className="text-lg font-black text-emerald-600 dark:text-emerald-300 block">{getPersianNumber(summaryData.healthy)}</span>
+          <span className="text-[8px] font-black text-[#8D7F72] dark:text-[#9D978B] block">سالم</span>
+        </div>
       </div>
 
       {/* Grid: Left column list, Right column detail view */}
@@ -524,6 +730,64 @@ export default function ContactsSection({
                   <option value="acquaintance">آشنایان</option>
                 </select>
               </div>
+
+              <div>
+                <label className="text-[9px] font-black text-[#8D7F72] dark:text-[#9D978B] block mb-1">سلامت رابطه</label>
+                <select
+                  value={selectedHealth}
+                  onChange={(e) => setSelectedHealth(e.target.value)}
+                  className="w-full text-[10px] font-black p-2 rounded-lg border border-[#E6DFD3] dark:border-[#3D4133]/40 bg-white dark:bg-[#20241A]"
+                >
+                  <option value="all">همه</option>
+                  <option value="healthy">💚 سالم</option>
+                  <option value="needs_attention">🟡 نیاز به توجه</option>
+                  <option value="cold">🔴 سرد شده</option>
+                  <option value="new">🔵 جدید</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[9px] font-black text-[#8D7F72] dark:text-[#9D978B] block mb-1">وضعیت ارتباط</label>
+                <select
+                  value={selectedRelationFilter}
+                  onChange={(e) => setSelectedRelationFilter(e.target.value)}
+                  className="w-full text-[10px] font-black p-2 rounded-lg border border-[#E6DFD3] dark:border-[#3D4133]/40 bg-white dark:bg-[#20241A]"
+                >
+                  <option value="all">همه</option>
+                  <option value="has_relations">🔗 دارای ارتباط</option>
+                  <option value="no_relations">📵 بدون ارتباط</option>
+                  <option value="needs_follow_up">⏰ نیاز به پیگیری</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Secondary filter row: relation type + sort */}
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-[9px] font-black text-[#8D7F72] dark:text-[#9D978B] block mb-1">نوع رابطه</label>
+                <select
+                  value={selectedRelationType}
+                  onChange={(e) => setSelectedRelationType(e.target.value)}
+                  className="w-full text-[10px] font-black p-2 rounded-lg border border-[#E6DFD3] dark:border-[#3D4133]/40 bg-white dark:bg-[#20241A]"
+                >
+                  <option value="all">همه انواع</option>
+                  {Object.entries(RELATION_TYPE_LABELS).map(([k, v]) => (
+                    <option key={k} value={k}>{v}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-[9px] font-black text-[#8D7F72] dark:text-[#9D978B] block mb-1 flex items-center gap-1"><ArrowUpDown className="w-2.5 h-2.5" /> مرتب‌سازی</label>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                  className="w-full text-[10px] font-black p-2 rounded-lg border border-[#E6DFD3] dark:border-[#3D4133]/40 bg-white dark:bg-[#20241A]"
+                >
+                  {SORT_OPTIONS.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
 
@@ -533,11 +797,15 @@ export default function ContactsSection({
               filteredContacts.map(contact => {
                 const score = calculateUpkeepScore(contact);
                 const isSelected = selectedContactId === contact.id;
+                const health = contact.health;
+                const healthInfo = HEALTH_LABELS[health];
+                const relCount = contact.relationCount;
+                const upkeep = getUpkeepStatus(contact);
                 
                 return (
                   <div
                     key={contact.id}
-                    onClick={() => setSelectedContactId(contact.id)}
+                    onClick={() => { setSelectedContactId(contact.id); setActiveDetailTab('overview'); }}
                     className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex justify-between items-center ${
                       isSelected 
                         ? 'bg-rose-500/5 border-rose-500/50 shadow-md scale-[1.01]' 
@@ -546,36 +814,45 @@ export default function ContactsSection({
                   >
                     <div className="flex items-center gap-3">
                       {/* Avatar */}
-                      <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-[#E6DFD3]/60 dark:border-[#3D4133]/20 overflow-hidden shrink-0 flex items-center justify-center">
-                        {contact.photoUrl ? (
-                          <img src={contact.photoUrl} alt={contact.name} className="w-full h-full object-cover" />
-                        ) : (
-                          <span className="text-xl">👤</span>
+                      <div className="relative">
+                        <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-[#E6DFD3]/60 dark:border-[#3D4133]/20 overflow-hidden shrink-0 flex items-center justify-center">
+                          {contact.photoUrl ? (
+                            <img src={contact.photoUrl} alt={contact.name} className="w-full h-full object-cover" />
+                          ) : (
+                            <span className="text-xl">👤</span>
+                          )}
+                        </div>
+                        {/* Relation count badge */}
+                        {relCount > 0 && (
+                          <span className="absolute -top-1 -left-1 text-[7px] font-black bg-[#7C8363] dark:bg-[#9ECE9A] text-white dark:text-[#121411] rounded-full w-4 h-4 flex items-center justify-center">{relCount}</span>
                         )}
                       </div>
 
                       <div className="text-right">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           <h4 className="text-xs font-black text-[#2D3025] dark:text-[#E8ECE0]">{contact.name}</h4>
-                          <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-md ${
+                          <span className={`text-[7px] font-black px-1.5 py-0.5 rounded-md ${
                             contact.closenessTier === 'inner' ? 'bg-[#F9F1D8] text-[#5A5A40] dark:bg-[#201D13]' :
                             contact.closenessTier === 'outer' ? 'bg-slate-100 text-slate-700 dark:bg-slate-800' :
                             'bg-blue-50 text-blue-700 dark:bg-blue-950/20'
                           }`}>
-                            {contact.closenessTier === 'inner' ? '🥇 طلایی' : contact.closenessTier === 'outer' ? '🥈 نقره‌ای' : '🥉 معمولی'}
+                            {contact.closenessTier === 'inner' ? '🥇' : contact.closenessTier === 'outer' ? '🥈' : '🥉'}
+                          </span>
+                          <span className={`text-[7px] font-bold px-1.5 py-0.5 rounded-md ${healthInfo.bg} ${healthInfo.color}`}>
+                            {healthInfo.emoji}
                           </span>
                         </div>
-                        <span className="text-[9px] text-[#8D7F72] dark:text-[#9D978B] font-bold block mt-1">
+                        <span className="text-[9px] text-[#8D7F72] dark:text-[#9D978B] font-bold block mt-0.5">
                           {CATEGORY_LABELS[contact.category]}
                         </span>
                         
                         {contact.lastInteractionDate ? (
-                          <span className="text-[9px] text-[#8D7F72] dark:text-[#9D978B] font-semibold block mt-0.5 flex items-center gap-1">
-                            <Clock className="w-2.5 h-2.5 text-rose-500" />
-                            آخرین تماس: {getPersianNumber(contact.lastInteractionDate)}
+                          <span className={`text-[8px] font-semibold block mt-0.5 flex items-center gap-1 ${upkeep.status === 'overdue' ? 'text-red-500' : upkeep.status === 'due_soon' ? 'text-amber-600' : 'text-[#8D7F72] dark:text-[#9D978B]'}`}>
+                            <Clock className="w-2.5 h-2.5" />
+                            {upkeep.status === 'reached' ? '✓ اخیراً تماس' : upkeep.status === 'due_soon' ? '⏰ پیگیری نزدیک' : '⚠ سررسید'}
                           </span>
                         ) : (
-                          <span className="text-[9px] text-rose-500 font-bold block mt-0.5">بدون گفتگو! هم‌اکنون تعامل کنید.</span>
+                          <span className="text-[8px] text-rose-500 font-bold block mt-0.5">بدون گفتگو!</span>
                         )}
                       </div>
                     </div>
@@ -589,7 +866,7 @@ export default function ContactsSection({
                       }`}>
                         {getPersianNumber(score)}٪
                       </span>
-                      <span className="text-[7px] text-[#8D7F72] dark:text-[#9D978B] font-black mt-0.5 block">پایداری ارتباط</span>
+                      <span className="text-[7px] text-[#8D7F72] dark:text-[#9D978B] font-black mt-0.5 block">پایداری</span>
                     </div>
                   </div>
                 );
@@ -637,13 +914,42 @@ export default function ContactsSection({
                 </div>
 
                 {/* Quick Interactive Upkeep Actions */}
-                <div className="flex gap-2 w-full sm:w-auto items-center">
+                <div className="flex gap-2 w-full sm:w-auto items-center flex-wrap">
                   <button
                     onClick={() => setInteractionModalOpen(true)}
                     className="flex-1 sm:flex-none px-3 py-2 bg-[#7C8363] hover:bg-[#5A5A40] text-white text-[10px] font-black rounded-xl cursor-pointer shadow-xs flex items-center justify-center gap-1.5 transition-colors"
                   >
                     <PlusCircle className="w-3.5 h-3.5" />
-                    <span>ثبت گفتگوی جدید</span>
+                    <span>ثبت گفتگو</span>
+                  </button>
+
+                  <button
+                    onClick={handleMarkReachedToday}
+                    className="px-3 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 text-[10px] font-black rounded-xl cursor-pointer flex items-center justify-center gap-1.5 transition-colors border border-emerald-200/30 dark:border-emerald-800/30"
+                    title="علامت‌گذاری به عنوان تماس‌گرفته‌شده امروز"
+                  >
+                    <CheckCircle className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">تماس امروز</span>
+                  </button>
+
+                  {onAddOccasion && (
+                    <button
+                      onClick={handleCreateFollowUp}
+                      className="px-3 py-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-300 text-[10px] font-black rounded-xl cursor-pointer flex items-center justify-center gap-1.5 transition-colors border border-amber-200/30 dark:border-amber-800/30"
+                      title="ایجاد یادآور پیگیری"
+                    >
+                      <Calendar className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">پیگیری</span>
+                    </button>
+                  )}
+
+                  <button
+                    onClick={() => { setActiveDetailTab('relations'); handleOpenRelationModal(); }}
+                    className="px-3 py-2 bg-[#7C8363]/10 dark:bg-[#9ECE9A]/10 text-[#7C8363] dark:text-[#9ECE9A] text-[10px] font-black rounded-xl cursor-pointer flex items-center justify-center gap-1.5 transition-colors border border-[#7C8363]/20 dark:border-[#9ECE9A]/20"
+                    title="افزودن رابطه جدید"
+                  >
+                    <Link2 className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">رابطه</span>
                   </button>
 
                   <button
@@ -664,6 +970,49 @@ export default function ContactsSection({
                 </div>
               </div>
 
+              {/* Health & Upkeep Status Bar */}
+              {(() => {
+                const health = computeHealthLocal(activeContact);
+                const hInfo = HEALTH_LABELS[health];
+                const upkeep = getUpkeepStatus(activeContact);
+                const summary = contactSummaries[activeContact.id];
+                const relCount = summary?.relationCount ?? (activeContact.relations?.length ?? 0);
+                return (
+                  <div className="flex flex-wrap gap-2 items-center p-3 rounded-2xl bg-white dark:bg-[#20241A] border border-[#E6DFD3]/40 dark:border-[#3D4133]/20">
+                    <span className={`text-[9px] font-black px-2 py-1 rounded-lg ${hInfo.bg} ${hInfo.color}`}>{hInfo.emoji} {hInfo.label}</span>
+                    <span className={`text-[9px] font-bold px-2 py-1 rounded-lg ${
+                      upkeep.status === 'reached' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-300' :
+                      upkeep.status === 'due_soon' ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/20 dark:text-amber-300' :
+                      'bg-red-50 text-red-600 dark:bg-red-950/20 dark:text-red-300'
+                    }`}>{upkeep.label}</span>
+                    {relCount > 0 && (
+                      <span className="text-[9px] font-bold px-2 py-1 rounded-lg bg-[#7C8363]/10 dark:bg-[#9ECE9A]/10 text-[#7C8363] dark:text-[#9ECE9A]">🔗 {getPersianNumber(relCount)} رابطه</span>
+                    )}
+                    <span className="text-[9px] font-bold px-2 py-1 rounded-lg bg-[#F9F1D8] text-[#9B6B61] dark:bg-[#201D13]">💪 {getPersianNumber(calculateUpkeepScore(activeContact))}٪ پایداری</span>
+                  </div>
+                );
+              })()}
+
+              {/* Detail Tabs */}
+              <div className="flex gap-1 border-b border-[#E6DFD3]/60 dark:border-[#3D4133]/20 pb-0">
+                {DETAIL_TABS.map(tab => (
+                  <button
+                    key={tab.key}
+                    onClick={() => setActiveDetailTab(tab.key as 'overview' | 'relations' | 'history')}
+                    className={`px-3 py-2 text-[10px] font-black rounded-t-lg cursor-pointer transition-colors ${
+                      activeDetailTab === tab.key
+                        ? 'bg-[#7C8363]/10 dark:bg-[#9ECE9A]/10 text-[#7C8363] dark:text-[#9ECE9A] border-b-2 border-[#7C8363] dark:border-[#9ECE9A]'
+                        : 'text-[#8D7F72] dark:text-[#9D978B] hover:text-[#2D3025] dark:hover:text-[#E8ECE0]'
+                    }`}
+                  >
+                    {tab.emoji} {tab.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Tab Content: Overview */}
+              {activeDetailTab === 'overview' && (
+              <>
               {/* Personal details grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5 text-xs">
                 
@@ -760,9 +1109,106 @@ export default function ContactsSection({
                 </div>
 
               </div>
+              </> )}
 
-              {/* Interaction Logs / Meeting logs (Timeline block) */}
-              <div className="space-y-4 pt-4 border-t border-dashed border-[#E6DFD3]/80 dark:border-[#3D4133]/20">
+              {/* Tab Content: Related People */}
+              {activeDetailTab === 'relations' && (
+              <div className="space-y-4">
+                {(() => {
+                  const summary = contactSummaries[activeContact.id];
+                  const relCount = summary?.relationCount ?? (activeContact.relations?.length ?? 0);
+                  const relTypes = summary?.relationTypes ?? {};
+                  return (
+                    <>
+                      {/* Relation statistics */}
+                      <div className="flex flex-wrap gap-2 items-center">
+                        <span className="text-[9px] font-black text-[#2D3025] dark:text-[#E8ECE0]">📊 آمار ارتباطات:</span>
+                        <span className="text-[8px] font-bold px-2 py-1 rounded-lg bg-[#7C8363]/10 dark:bg-[#9ECE9A]/10 text-[#7C8363] dark:text-[#9ECE9A]">{getPersianNumber(relCount)} رابطه</span>
+                        {Object.entries(relTypes).map(([type, count]) => (
+                          <span key={type} className="text-[8px] font-bold px-2 py-1 rounded-lg bg-white dark:bg-[#20241A] border border-[#E6DFD3]/40 dark:border-[#3D4133]/20 text-[#8D7F72] dark:text-[#9D978B]">
+                            {RELATION_TYPE_LABELS[type] || type}: {getPersianNumber(count)}
+                          </span>
+                        ))}
+                      </div>
+
+                      {/* Grouped relations by type */}
+                      {contactRelations.length > 0 && (
+                        <div className="space-y-3">
+                          {Object.entries(
+                            contactRelations.reduce((acc, rel) => {
+                              const key = rel.relationType;
+                              if (!acc[key]) acc[key] = [];
+                              acc[key].push(rel);
+                              return acc;
+                            }, {} as Record<string, ContactRelation[]>)
+                          ).map(([type, rels]) => (
+                            <div key={type}>
+                              <h5 className="text-[10px] font-black text-[#7C8363] dark:text-[#9ECE9A] mb-2 flex items-center gap-1">
+                                {RELATION_TYPE_LABELS[type] || type}
+                                <span className="text-[8px] bg-[#7C8363]/10 dark:bg-[#9ECE9A]/10 px-1.5 py-0.5 rounded-full">{getPersianNumber(rels.length)}</span>
+                              </h5>
+                              <div className="space-y-2">
+                                {rels.map(rel => (
+                                  <div key={rel.name} className="group flex items-center gap-3 p-2.5 bg-white dark:bg-[#20241A] border border-[#E6DFD3]/40 dark:border-[#3D4133]/20 rounded-xl text-right transition-all hover:shadow-sm">
+                                    <button
+                                      onClick={() => { setSelectedContactId(rel.otherContactId); if (onSelectContact) onSelectContact(rel.otherContactId); }}
+                                      className="w-9 h-9 rounded-lg bg-slate-100 dark:bg-slate-800 border border-[#E6DFD3]/40 overflow-hidden shrink-0 flex items-center justify-center cursor-pointer hover:opacity-80"
+                                    >
+                                      {rel.otherContactPhoto ? <img src={rel.otherContactPhoto} alt="" className="w-full h-full object-cover" /> : <span className="text-sm">👤</span>}
+                                    </button>
+                                    <div className="flex-1 min-w-0">
+                                      <button
+                                        onClick={() => { setSelectedContactId(rel.otherContactId); if (onSelectContact) onSelectContact(rel.otherContactId); }}
+                                        className="text-[10px] font-black text-[#2D3025] dark:text-[#E8ECE0] block truncate text-right hover:text-[#7C8363] dark:hover:text-[#9ECE9A] cursor-pointer"
+                                      >
+                                        {rel.otherContactName}
+                                      </button>
+                                      <div className="flex items-center gap-1 mt-0.5">
+                                        <span className={`text-[7px] font-bold px-1.5 py-0.5 rounded-md ${
+                                          rel.directionLabel === 'mutual' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300' :
+                                          rel.directionLabel === 'outgoing' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300' :
+                                          'bg-amber-100 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300'
+                                        }`}>
+                                          {DIRECTION_LABELS[rel.directionLabel] || rel.directionLabel}
+                                        </span>
+                                        {rel.strengthScore > 0 && <span className="text-[7px] text-[#8D7F72]">💪 {rel.strengthScore}</span>}
+                                      </div>
+                                      {rel.notes && <p className="text-[8px] text-[#8D7F72] mt-0.5 truncate">{rel.notes}</p>}
+                                    </div>
+                                    <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                      <button onClick={() => handleOpenRelationModal(rel)} className="p-1 rounded text-[#8D7F72] hover:text-[#7C8363] cursor-pointer"><Edit2 className="w-3 h-3" /></button>
+                                      <button onClick={() => setDeleteRelationConfirm(rel.name)} className="p-1 rounded text-[#8D7F72] hover:text-red-400 cursor-pointer"><Trash2 className="w-3 h-3" /></button>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {contactRelations.length === 0 && !loadingRelations && (
+                        <div className="text-center py-5 text-[10px] text-[#8D7F72] dark:text-[#9D978B] border border-[#E6DFD3]/40 dark:border-[#3D4133]/20 rounded-2xl bg-white dark:bg-[#20241A] p-4">
+                          هنوز ارتباطی ثبت نشده. با افزودن رابطه، شبکه ارتباطات خود را بسازید.
+                        </div>
+                      )}
+
+                      <button
+                        onClick={() => handleOpenRelationModal()}
+                        className="w-full py-2.5 bg-[#7C8363]/10 dark:bg-[#9ECE9A]/10 text-[#7C8363] dark:text-[#9ECE9A] text-[10px] font-black rounded-xl cursor-pointer hover:bg-[#7C8363]/20 flex items-center justify-center gap-1.5"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        افزودن رابطه جدید
+                      </button>
+                    </>
+                  );
+                })()}
+              </div>
+              )}
+
+              {/* Tab Content: Interaction History */}
+              {activeDetailTab === 'history' && (
+              <div className="space-y-4">
                 <h4 className="text-xs font-black text-[#2D3025] dark:text-[#E8ECE0] flex items-center gap-1.5">
                   <Activity className="w-3.5 h-3.5 text-[#E26645]" />
                   <span>تاریخچه ملاقات‌ها، تماس‌ها و کارهای بیرون صمیمی</span>
@@ -817,87 +1263,67 @@ export default function ContactsSection({
                   )}
                 </div>
               </div>
+              )}
 
-              {/* Relations Network Section */}
-              <div className="space-y-4 pt-4 border-t border-dashed border-[#E6DFD3]/80 dark:border-[#3D4133]/20">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-black text-[#2D3025] dark:text-[#E8ECE0] flex items-center gap-1.5">
-                    <Link2 className="w-3.5 h-3.5 text-[#7C8363] dark:text-[#9ECE9A]" />
-                    <span>شبکه ارتباطات</span>
-                    {contactRelations.length > 0 && (
-                      <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full bg-[#7C8363]/10 dark:bg-[#9ECE9A]/10 text-[#7C8363] dark:text-[#9ECE9A]">{contactRelations.length}</span>
-                    )}
-                  </h4>
-                  <button
-                    onClick={() => handleOpenRelationModal()}
-                    className="px-2.5 py-1.5 bg-[#7C8363]/10 dark:bg-[#9ECE9A]/10 text-[#7C8363] dark:text-[#9ECE9A] text-[9px] font-black rounded-lg cursor-pointer hover:bg-[#7C8363]/20 transition-colors flex items-center gap-1"
-                  >
-                    <Plus className="w-3 h-3" />
-                    افزودن رابطه
-                  </button>
-                </div>
+              {/* Insights mini-section at bottom of any tab */}
+              {(() => {
+                const summary = contactSummaries[activeContact.id];
+                const relCount = summary?.relationCount ?? 0;
+                // Find connectors and isolated contacts from summaries
+                const connectors = Object.values(contactSummaries).filter(s => s.relationCount >= 3).sort((a, b) => b.relationCount - a.relationCount).slice(0, 5);
+                const isolatedContacts = enrichedContacts.filter(c => c.relationCount === 0 && c.health !== 'new').slice(0, 5);
+                const needsAttention = enrichedContacts.filter(c => c.health === 'needs_attention' || c.health === 'cold').slice(0, 5);
+                return (
+                  <div className="space-y-3 pt-4 border-t border-dashed border-[#E6DFD3]/80 dark:border-[#3D4133]/20">
+                    <h4 className="text-[10px] font-black text-[#7C8363] dark:text-[#9ECE9A] flex items-center gap-1.5">
+                      <TrendingUp className="w-3.5 h-3.5" />
+                      <span>دستاوردهای شبکه ارتباطات</span>
+                    </h4>
 
-                {loadingRelations ? (
-                  <div className="flex items-center justify-center py-6 gap-2">
-                    <div className="w-4 h-4 border-2 border-[#7C8363]/30 dark:border-[#9ECE9A]/30 border-t-[#7C8363] dark:border-t-[#9ECE9A] rounded-full animate-spin" />
-                    <span className="text-[10px] text-[#8D7F72] dark:text-[#9D978B]">در حال بارگذاری...</span>
-                  </div>
-                ) : contactRelations.length > 0 ? (
-                  <div className="space-y-2">
-                    {contactRelations.map(rel => (
-                      <div key={rel.name} className="group flex items-center gap-3 p-3 bg-white dark:bg-[#20241A] border border-[#E6DFD3]/40 dark:border-[#3D4133]/20 rounded-2xl text-right transition-all hover:shadow-sm">
-                        {/* Other contact avatar */}
-                        <button
-                          onClick={() => { setSelectedContactId(rel.otherContactId); if (onSelectContact) onSelectContact(rel.otherContactId); }}
-                          className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 border border-[#E6DFD3]/40 dark:border-[#3D4133]/30 overflow-hidden shrink-0 flex items-center justify-center cursor-pointer hover:opacity-80 transition-opacity"
-                        >
-                          {rel.otherContactPhoto ? (
-                            <img src={rel.otherContactPhoto} alt="" className="w-full h-full object-cover" />
-                          ) : (
-                            <span className="text-lg">👤</span>
-                          )}
-                        </button>
-
-                        <div className="flex-1 min-w-0">
-                          <button
-                            onClick={() => { setSelectedContactId(rel.otherContactId); if (onSelectContact) onSelectContact(rel.otherContactId); }}
-                            className="text-[11px] font-black text-[#2D3025] dark:text-[#E8ECE0] block truncate text-right hover:text-[#7C8363] dark:hover:text-[#9ECE9A] cursor-pointer transition-colors"
-                          >
-                            {rel.otherContactName}
-                          </button>
-                          <div className="flex items-center gap-1.5 mt-0.5">
-                            <span className="text-[8px] font-bold text-[#7C8363] dark:text-[#9ECE9A] bg-[#7C8363]/10 dark:bg-[#9ECE9A]/10 px-1.5 py-0.5 rounded-md">
-                              {RELATION_TYPE_LABELS[rel.relationType] || rel.relationType}
-                            </span>
-                            <span className={`text-[7px] font-bold px-1.5 py-0.5 rounded-md ${
-                              rel.directionLabel === 'mutual' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300' :
-                              rel.directionLabel === 'outgoing' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300' :
-                              'bg-amber-100 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300'
-                            }`}>
-                              {DIRECTION_LABELS[rel.directionLabel] || rel.directionLabel}
-                            </span>
-                            {rel.strengthScore > 0 && (
-                              <span className="text-[7px] text-[#8D7F72] dark:text-[#9D978B]">💪 {rel.strengthScore}</span>
-                            )}
-                          </div>
-                          {rel.notes && (
-                            <p className="text-[9px] text-[#8D7F72] dark:text-[#9D978B] mt-1 truncate">{rel.notes}</p>
-                          )}
-                        </div>
-
-                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                          <button onClick={() => handleOpenRelationModal(rel)} className="p-1 rounded text-[#8D7F72] dark:text-[#9D978B] hover:text-[#7C8363] dark:hover:text-[#9ECE9A] cursor-pointer"><Edit2 className="w-3 h-3" /></button>
-                          <button onClick={() => setDeleteRelationConfirm(rel.name)} className="p-1 rounded text-[#8D7F72] dark:text-[#9D978B] hover:text-red-400 cursor-pointer"><Trash2 className="w-3 h-3" /></button>
+                    {connectors.length > 0 && (
+                      <div className="p-3 rounded-xl bg-white dark:bg-[#20241A] border border-[#E6DFD3]/40 dark:border-[#3D4133]/20">
+                        <span className="text-[9px] font-black text-[#7C8363] dark:text-[#9ECE9A] block mb-1.5">🌐 مراکز ارتباطی قوی (بیشترین رابطه)</span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {connectors.map(s => (
+                            <button key={s.name} onClick={() => { setSelectedContactId(s.name); setActiveDetailTab('relations'); }}
+                              className="text-[8px] font-bold px-2 py-1 rounded-lg bg-[#7C8363]/10 dark:bg-[#9ECE9A]/10 text-[#7C8363] dark:text-[#9ECE9A] cursor-pointer hover:opacity-80 flex items-center gap-1">
+                              {s.fullName} <span className="text-[7px]">({getPersianNumber(s.relationCount)})</span>
+                            </button>
+                          ))}
                         </div>
                       </div>
-                    ))}
+                    )}
+
+                    {isolatedContacts.length > 0 && (
+                      <div className="p-3 rounded-xl bg-white dark:bg-[#20241A] border border-[#E6DFD3]/40 dark:border-[#3D4133]/20">
+                        <span className="text-[9px] font-black text-amber-600 dark:text-amber-300 block mb-1.5">📵 مخاطبین منزوی (بدون ارتباط ثبت‌شده)</span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {isolatedContacts.map(c => (
+                            <button key={c.id} onClick={() => { setSelectedContactId(c.id); setActiveDetailTab('relations'); }}
+                              className="text-[8px] font-bold px-2 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-300 cursor-pointer hover:opacity-80">
+                              {c.name}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {needsAttention.length > 0 && (
+                      <div className="p-3 rounded-xl bg-white dark:bg-[#20241A] border border-[#E6DFD3]/40 dark:border-[#3D4133]/20">
+                        <span className="text-[9px] font-black text-red-500 dark:text-red-300 block mb-1.5">⚠️ نیاز به پیگیری فوری</span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {needsAttention.map(c => (
+                            <button key={c.id} onClick={() => setSelectedContactId(c.id)}
+                              className="text-[8px] font-bold px-2 py-1 rounded-lg bg-red-50 dark:bg-red-950/20 text-red-600 dark:text-red-300 cursor-pointer hover:opacity-80 flex items-center gap-1">
+                              {c.name} {c.health === 'cold' ? '🔴' : '🟡'}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                ) : (
-                  <div className="text-center py-5 text-[10px] text-[#8D7F72] dark:text-[#9D978B] border border-[#E6DFD3]/40 dark:border-[#3D4133]/20 rounded-2xl bg-white dark:bg-[#20241A] p-4">
-                    هنوز ارتباطی ثبت نشده. با افزودن رابطه، شبکه ارتباطات خود را بسازید.
-                  </div>
-                )}
-              </div>
+                );
+              })()}
             </motion.div>
           ) : (
             <div className="bg-[#FDFBF7] dark:bg-[#1B1D16] border border-[#E6DFD3] dark:border-[#3D4133]/30 rounded-[28px] p-12 text-center text-xs text-[#8D7F72] transition-colors flex flex-col items-center justify-center h-full min-h-[350px]">

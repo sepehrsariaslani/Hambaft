@@ -621,6 +621,7 @@ export interface Contact {
 export type ContactRelationType = 'family' | 'spouse_partner' | 'friend' | 'colleague' | 'manager' | 'mentor' | 'client' | 'introduced_by' | 'custom';
 export type ContactRelationDirection = 'mutual' | 'directed';
 export type ContactDirectionLabel = 'mutual' | 'outgoing' | 'incoming';
+export type RelationshipHealth = 'healthy' | 'needs_attention' | 'cold' | 'new';
 
 export interface ContactRelation {
   name: string;
@@ -637,6 +638,19 @@ export interface ContactRelation {
   sinceDate?: string;
   notes: string;
   sortOrder: number;
+}
+
+export interface ContactSummary {
+  name: string;
+  fullName: string;
+  contactCategory: string;
+  closenessTier: string;
+  lastInteractionDate?: string;
+  relationshipScore: number;
+  photoUrl?: string;
+  relationCount: number;
+  relationTypes: Record<string, number>;
+  health: RelationshipHealth;
 }
 
 export interface MoodLog {

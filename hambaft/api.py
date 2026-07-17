@@ -2600,6 +2600,102 @@ def _contact_relations_table_exists():
         return False
 
 
+def _compute_relationship_health(contact, relation_count=0, today_str=None):
+    """Derive a lightweight relationship health state from existing data.
+
+    Returns one of: "healthy", "needs_attention", "cold", "new"
+    No fake AI — purely rule-based from last_interaction_date, closeness_tier,
+    relation_count, and interaction frequency.
+    """
+    if not today_str:
+        today_str = frappe.utils.today()
+
+    last_date = contact.get("last_interaction_date")
+    closeness = contact.get("closeness_tier") or "acquaintance"
+    score = cint(contact.get("relationship_score") or 0)
+
+    # Thresholds by closeness (days since last contact)
+    thresholds = {"inner": 14, "outer": 45, "acquaintance": 90}
+    threshold = thresholds.get(closeness, 90)
+
+    if not last_date:
+        # Never contacted
+        if relation_count > 0:
+            return "needs_attention"  # connected but never logged
+        return "new"
+
+    try:
+        days_since = (frappe.utils.getdate(today_str) - frappe.utils.getdate(last_date)).days
+    except Exception:
+        days_since = 999
+
+    if days_since <= threshold:
+        return "healthy"
+    elif days_since <= threshold * 2:
+        return "needs_attention"
+    else:
+        return "cold"
+
+
+@frappe.whitelist()
+def get_contacts_summary():
+    """Return enriched contact list with relation counts and derived health.
+
+    Used by the Contacts UI for summary strip, badges, and filtering.
+    """
+    _check_auth()
+    user = frappe.session.user
+
+    contacts = frappe.get_all(
+        "Hambaft Contact",
+        filters={"user": user},
+        fields=["name", "full_name", "contact_category", "closeness_tier",
+                 "last_interaction_date", "relationship_score", "photo_url"],
+        limit_page_length=500,
+    )
+
+    # Build relation counts per contact
+    relation_counts = {}  # contact_id -> count
+    relation_types_map = {}  # contact_id -> {type: count}
+    if _contact_relations_table_exists():
+        try:
+            rels = frappe.get_all(
+                "Hambaft Contact Relation",
+                filters={"user": user, "status": "active"},
+                fields=["from_contact", "to_contact", "relation_type"],
+            )
+            for rel in rels:
+                for cid in (rel.from_contact, rel.to_contact):
+                    relation_counts[cid] = relation_counts.get(cid, 0) + 1
+                    if cid not in relation_types_map:
+                        relation_types_map[cid] = {}
+                    rtype = rel.relation_type or "custom"
+                    relation_types_map[cid][rtype] = relation_types_map[cid].get(rtype, 0) + 1
+        except Exception:
+            pass
+
+    today_str = frappe.utils.today()
+    result = []
+    for c in contacts:
+        rc = relation_counts.get(c.name, 0)
+        rt = relation_types_map.get(c.name, {})
+        health = _compute_relationship_health(c, rc, today_str)
+        result.append({
+            "name": c.name,
+            "full_name": c.full_name,
+            "contact_category": c.contact_category,
+            "closeness_tier": c.closeness_tier,
+            "last_interaction_date": c.last_interaction_date,
+            "relationship_score": c.relationship_score or 0,
+            "photo_url": c.photo_url or None,
+            "relation_count": rc,
+            "relation_types": rt,
+            "health": health,
+        })
+
+    return _api_response({"contacts": result})
+
+
 @frappe.whitelist()
 def get_contact_relations(contact_id):
     """Get all relations for a contact. Returns both outgoing and incoming relations.

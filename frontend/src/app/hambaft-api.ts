@@ -864,6 +864,12 @@ export async function deleteContactRecord(id: string) {
 
 // ─── Contact Relations ─────────────────────────────────────
 
+export async function getContactsSummary() {
+  return callGet<{ data?: { contacts?: any[] } }>(
+    'hambaft.hambaft.api.get_contacts_summary'
+  )
+}
+
 export async function getContactRelations(contactId: string) {
   return callGet<{ data?: { relations?: any[]; contact_not_ready?: boolean } }>(
     `hambaft.hambaft.api.get_contact_relations?contact_id=${encodeURIComponent(contactId)}`
