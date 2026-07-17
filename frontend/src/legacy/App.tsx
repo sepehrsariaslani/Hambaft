@@ -255,6 +255,7 @@ type AppProps = {
   initialTaskId?: string | null;
   initialGoalId?: string | null;
   initialProjectId?: string | null;
+  initialContactId?: string | null;
   onNavigate?: (path: string) => void;
   seedLifeData?: LifeData | null;
   seedScheduleItems?: ScheduleItem[] | null;
@@ -262,10 +263,10 @@ type AppProps = {
   seedSettings?: Record<string, any> | null;
 }
 
-function tabToPath(tab: string, ids: { taskId?: string | null; goalId?: string | null; projectId?: string | null } = {}) {
+function tabToPath(tab: string, ids: { taskId?: string | null; goalId?: string | null; projectId?: string | null; contactId?: string | null } = {}) {
   switch (tab) {
     case 'coach': return '/coach';
-    case 'contacts': return '/contacts';
+    case 'contacts': return ids.contactId ? `/contacts/${ids.contactId}` : '/contacts';
     case 'inbox': return '/planner';
     case 'journal': return '/journal';
     case 'tasks': return '/tasks';
@@ -305,6 +306,7 @@ export default function App({
   initialTaskId = null,
   initialGoalId = null,
   initialProjectId = null,
+  initialContactId = null,
   onNavigate,
   seedLifeData = null,
   seedScheduleItems = null,
@@ -320,6 +322,7 @@ export default function App({
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(initialTaskId);
   const [selectedGoalId, setSelectedGoalId] = useState<string | null>(initialGoalId);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(initialProjectId);
+  const [selectedContactId, setSelectedContactId] = useState<string | null>(initialContactId);
 
   // Version marker — remove after deploy verification
   useEffect(() => { console.log('[hambaft] version 2025-07-13-v12 — Notion-style task detail redesign'); }, []);
@@ -543,6 +546,7 @@ export default function App({
     if (tab !== 'task-detail') setSelectedTaskId(null);
     if (tab !== 'goals') setSelectedGoalId(null);
     if (tab !== 'projects') setSelectedProjectId(null);
+    if (tab !== 'contacts') setSelectedContactId(null);
     onNavigate?.(tabToPath(tab));
   };
 
@@ -568,6 +572,15 @@ export default function App({
     setSelectedProjectId(projectId || null);
     setActiveTab('projects');
     onNavigate?.(tabToPath('projects', { projectId }));
+  };
+
+  const goToContact = (contactId?: string | null) => {
+    setSelectedContactId(contactId || null);
+    setActiveTab('contacts');
+    setSelectedTaskId(null);
+    setSelectedGoalId(null);
+    setSelectedProjectId(null);
+    onNavigate?.(tabToPath('contacts', { contactId }));
   };
 
   // Sync dark mode class to root element
@@ -3412,7 +3425,7 @@ export default function App({
             initialQuickTemplates={financeQuickTemplates}
             onQuickTemplatesChange={(templates) => patchSettings({ finance_quick_templates_json: JSON.stringify(templates) })}
             contacts={(lifeData.contacts || []).map(c => ({ id: c.id, name: c.name, photoUrl: c.photoUrl, category: c.category }))}
-            onNavigateContact={() => goToTab('contacts')}
+            onNavigateContact={(contactId) => goToContact(contactId)}
           />
         );
       case 'habits':
@@ -3508,7 +3521,7 @@ export default function App({
               onNavigate={(tab, id) => {
                 if (tab === 'goals' && id) goToGoal(id);
                 else if (tab === 'projects' && id) goToProject(id);
-                else if (tab === 'contacts') goToTab('contacts');
+                else if (tab === 'contacts') goToContact(id);
                 else goToTab(tab);
               }}
               onViewTaskDetails={(id) => goToTaskDetail(id)}
@@ -3560,7 +3573,7 @@ export default function App({
                 onNavigateEntity={(tab, id) => {
                   if (tab === 'goals' && id) goToGoal(id)
                   else if (tab === 'projects' && id) goToProject(id)
-                  else if (tab === 'contacts') goToTab('contacts')
+                  else if (tab === 'contacts') goToContact(id)
                   else goToTab(tab)
                 }}
               />
@@ -3624,7 +3637,7 @@ export default function App({
                 onNavigateEntity={(tab, id) => {
                   if (tab === 'goals' && id) goToGoal(id)
                   else if (tab === 'projects' && id) goToProject(id)
-                  else if (tab === 'contacts') goToTab('contacts')
+                  else if (tab === 'contacts') goToContact(id)
                   else goToTab(tab)
                 }}
                 onMoveProjectToGoal={handleMoveProjectToGoal}
@@ -3671,7 +3684,7 @@ export default function App({
             bankAccounts={lifeData.bankAccounts || []}
             assets={lifeData.assets || []}
             contacts={(lifeData.contacts || []).map(c => ({ id: c.id, name: c.name, photoUrl: c.photoUrl, category: c.category }))}
-            onNavigateContact={() => goToTab('contacts')}
+            onNavigateContact={(contactId) => goToContact(contactId)}
           />
         );
       case 'occasions':
@@ -3684,7 +3697,7 @@ export default function App({
             onAddTransaction={handleAddTransaction}
             bankAccounts={lifeData.bankAccounts || []}
             contacts={(lifeData.contacts || []).map(c => ({ id: c.id, name: c.name, photoUrl: c.photoUrl, category: c.category }))}
-            onNavigateContact={() => goToTab('contacts')}
+            onNavigateContact={(contactId) => goToContact(contactId)}
           />
         );
       case 'mindfulness':
@@ -3769,6 +3782,7 @@ export default function App({
             tasks={lifeData.tasks}
             occasions={lifeData.occasions}
             todayDate={TODAY_DATE}
+            initialContactId={selectedContactId}
           />
         );
 

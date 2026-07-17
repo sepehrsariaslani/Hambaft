@@ -26,6 +26,8 @@ interface ContactsSectionProps {
   tasks?: Task[];
   occasions?: Occasion[];
   todayDate: string;
+  initialContactId?: string | null;
+  initialDetailTab?: 'overview' | 'relations' | 'history' | 'linked';
 }
 
 const CATEGORY_LABELS = {
@@ -117,7 +119,9 @@ export default function ContactsSection({
   projects = [],
   tasks = [],
   occasions = [],
-  todayDate
+  todayDate,
+  initialContactId,
+  initialDetailTab,
 }: ContactsSectionProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -128,6 +132,20 @@ export default function ContactsSection({
   const [sortBy, setSortBy] = useState<string>('default');
   const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
   const [activeDetailTab, setActiveDetailTab] = useState<'overview' | 'relations' | 'history' | 'linked'>('overview');
+
+  // External navigation: when initialContactId changes, select that contact
+  useEffect(() => {
+    if (initialContactId) {
+      const exists = contacts.some(c => c.id === initialContactId);
+      if (exists) {
+        setSelectedContactId(initialContactId);
+        setActiveDetailTab(initialDetailTab || 'overview');
+      } else {
+        // Invalid id — clear selection, show list
+        setSelectedContactId(null);
+      }
+    }
+  }, [initialContactId, contacts, initialDetailTab]);
 
   // Contact-entity links state
   const [contactLinks, setContactLinks] = useState<ContactLink[]>([]);

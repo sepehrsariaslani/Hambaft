@@ -43,6 +43,7 @@ export const workspaceRouteConfigs: WorkspaceRouteConfig[] = [
   { path: '', tab: 'dashboard' },
   { path: 'coach', tab: 'coach' },
   { path: 'contacts', tab: 'contacts' },
+  { path: 'contacts/:contactId', tab: 'contacts' },
   { path: 'journal', tab: 'journal' },
   { path: 'tasks', tab: 'tasks' },
   { path: 'mood', tab: 'mood' },
