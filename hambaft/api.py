@@ -8938,3 +8938,361 @@ def get_unread_notification_count():
 
     count = frappe.db.count("Hambaft Notification", filters={"user": user, "read": 0, "dismissed": 0})
     return _api_response({"unread_count": count})
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Phase 12: Admin & Moderation — Reports, Blocks, Admin Panel
+# ═══════════════════════════════════════════════════════════════════
+
+_REASON_LABELS = {
+    "spam": "هرزنامه",
+    "harassment": "آزار و اذیت",
+    "inappropriate_content": "محتوای نامناسب",
+    "misinformation": "اطلاعات نادرست",
+    "other": "سایر",
+}
+
+# ─── User-to-User: Block ────────────────────────────────────
+
+@frappe.whitelist()
+def block_user(data=None):
+    """Block another user. Removes partner connection if exists."""
+    _check_auth()
+    user = frappe.session.user
+
+    if isinstance(data, str):
+        data = json.loads(data)
+    data = data or {}
+
+    blocked_user = data.get("blocked_user")
+    reason = data.get("reason") or "personal"
+    notes = data.get("notes") or ""
+
+    if not blocked_user:
+        frappe.throw("blocked_user is required.")
+
+    if blocked_user == user:
+        frappe.throw("You cannot block yourself.")
+
+    # Check if already blocked
+    if frappe.db.exists("Hambaft User Block", {"blocked_by": user, "blocked_user": blocked_user}):
+        frappe.throw("این کاربر قبلاً مسدود شده است.")
+
+    # Create block
+    block = frappe.new_doc("Hambaft User Block")
+    block.blocked_by = user
+    block.blocked_user = blocked_user
+    block.reason = reason
+    block.notes = notes
+    block.insert(ignore_permissions=True)
+
+    # Remove partner connection if exists
+    conn = frappe.db.sql(
+        """SELECT name FROM `tabHambaft Partner Connection`
+        WHERE status = 'فعال'
+        AND ((user_a = %s AND user_b = %s) OR (user_a = %s AND user_b = %s))
+        LIMIT 1""",
+        (user, blocked_user, blocked_user, user),
+    )
+    if conn:
+        frappe.db.set_value("Hambaft Partner Connection", conn[0][0], "status", "حذف‌شده")
+
+    frappe.db.commit()
+
+    return _api_response({"status": "blocked", "block_id": block.name})
+
+
+@frappe.whitelist()
+def unblock_user(data=None):
+    """Unblock a previously blocked user."""
+    _check_auth()
+    user = frappe.session.user
+
+    if isinstance(data, str):
+        data = json.loads(data)
+    data = data or {}
+
+    blocked_user = data.get("blocked_user")
+    if not blocked_user:
+        frappe.throw("blocked_user is required.")
+
+    existing = frappe.db.exists("Hambaft User Block", {"blocked_by": user, "blocked_user": blocked_user})
+    if not existing:
+        frappe.throw("این کاربر مسدود نیست.")
+
+    frappe.delete_doc("Hambaft User Block", existing, ignore_permissions=True, force=True)
+    frappe.db.commit()
+
+    return _api_response({"status": "unblocked"})
+
+
+@frappe.whitelist()
+def get_blocked_users():
+    """Get list of users blocked by the current user."""
+    _check_auth()
+    user = frappe.session.user
+
+    blocks = frappe.get_all(
+        "Hambaft User Block",
+        filters={"blocked_by": user},
+        fields=["name", "blocked_user", "reason", "created_at"],
+        order_by="creation desc",
+    )
+
+    result = []
+    for b in blocks:
+        info = _user_display_info(b.blocked_user)
+        result.append({
+            "block_id": b.name,
+            "user_info": info,
+            "reason": b.reason,
+            "created_at": str(b.created_at),
+        })
+
+    return _api_response({"blocked_users": result})
+
+
+@frappe.whitelist()
+def check_user_blocked(other_user=None):
+    """Check if the current user has blocked or been blocked by another user."""
+    _check_auth()
+    user = frappe.session.user
+
+    if not other_user:
+        frappe.throw("other_user is required.")
+
+    i_blocked = frappe.db.exists("Hambaft User Block", {"blocked_by": user, "blocked_user": other_user})
+    they_blocked = frappe.db.exists("Hambaft User Block", {"blocked_by": other_user, "blocked_user": user})
+
+    return _api_response({
+        "i_blocked_them": bool(i_blocked),
+        "they_blocked_me": bool(they_blocked),
+        "is_blocked": bool(i_blocked or they_blocked),
+    })
+
+
+# ─── Reports ────────────────────────────────────────────────
+
+@frappe.whitelist()
+def report_content(data=None):
+    """Report a comment, proof, or user for policy violation."""
+    _check_auth()
+    user = frappe.session.user
+
+    if isinstance(data, str):
+        data = json.loads(data)
+    data = data or {}
+
+    reported_user = data.get("reported_user")
+    entity_type = data.get("entity_type") or "other"
+    entity = data.get("entity") or ""
+    reason = data.get("reason") or "other"
+    description = data.get("description") or ""
+
+    if not reported_user:
+        frappe.throw("reported_user is required.")
+
+    if reported_user == user:
+        frappe.throw("You cannot report yourself.")
+
+    # Rate limit: max 5 reports per user per day
+    today_reports = frappe.db.count("Hambaft Report", {
+        "reporter": user,
+        "created_at": ["between", [today(), str(now_datetime())]],
+    })
+    if today_reports >= 5:
+        frappe.throw("حداکثر ۵ گزارش در روز مجاز است.")
+
+    report = frappe.new_doc("Hambaft Report")
+    report.reporter = user
+    report.reported_user = reported_user
+    report.entity_type = entity_type
+    report.entity = entity
+    report.reason = reason
+    report.description = description
+    report.status = "در_انتظار"
+    report.insert(ignore_permissions=True)
+    frappe.db.commit()
+
+    return _api_response({
+        "status": "reported",
+        "report_id": report.name,
+        "message": "گزارش شما ثبت شد و بررسی خواهد شد.",
+    })
+
+
+@frappe.whitelist()
+def get_my_reports(limit=50, offset=0):
+    """Get reports submitted by the current user."""
+    _check_auth()
+    user = frappe.session.user
+
+    reports = frappe.get_all(
+        "Hambaft Report",
+        filters={"reporter": user},
+        fields=["name", "reported_user", "entity_type", "entity", "reason", "status", "created_at"],
+        order_by="creation desc",
+        limit_page_length=cint(limit),
+        start=cint(offset),
+    )
+
+    result = []
+    for r in reports:
+        result.append({
+            "id": r.name,
+            "reported_user_info": _user_display_info(r.reported_user),
+            "entity_type": r.entity_type,
+            "entity": r.entity,
+            "reason": r.reason,
+            "reason_label": _REASON_LABELS.get(r.reason, r.reason),
+            "status": r.status,
+            "created_at": str(r.created_at),
+        })
+
+    return _api_response({"reports": result})
+
+
+# ─── Admin Panel (System Manager only) ──────────────────────
+
+@frappe.whitelist()
+def admin_get_reports(status=None, limit=50, offset=0):
+    """Get all reports for admin review. System Manager only."""
+    _check_auth()
+    if "System Manager" not in frappe.get_roles(frappe.session.user):
+        frappe.throw("فقط مدیر سیستم دسترسی دارد.", frappe.PermissionError)
+
+    filters = {}
+    if status:
+        filters["status"] = status
+
+    reports = frappe.get_all(
+        "Hambaft Report",
+        filters=filters,
+        fields=["name", "reporter", "reported_user", "entity_type", "entity",
+                 "reason", "description", "status", "reviewed_by", "action_taken", "created_at"],
+        order_by="creation desc",
+        limit_page_length=cint(limit),
+        start=cint(offset),
+    )
+
+    result = []
+    for r in reports:
+        result.append({
+            "id": r.name,
+            "reporter_info": _user_display_info(r.reporter),
+            "reported_user_info": _user_display_info(r.reported_user),
+            "entity_type": r.entity_type,
+            "entity": r.entity,
+            "reason": _REASON_LABELS.get(r.reason, r.reason),
+            "description": r.description or "",
+            "status": r.status,
+            "reviewed_by": r.reviewed_by or "",
+            "action_taken": r.action_taken or "",
+            "created_at": str(r.created_at),
+        })
+
+    total = frappe.db.count("Hambaft Report", filters=filters)
+    pending = frappe.db.count("Hambaft Report", filters={"status": "در_انتظار"})
+
+    return _api_response({"reports": result, "total": total, "pending": pending})
+
+
+@frappe.whitelist()
+def admin_review_report(data=None):
+    """Review a report. System Manager only."""
+    _check_auth()
+    user = frappe.session.user
+    if "System Manager" not in frappe.get_roles(user):
+        frappe.throw("فقط مدیر سیستم دسترسی دارد.", frappe.PermissionError)
+
+    if isinstance(data, str):
+        data = json.loads(data)
+    data = data or {}
+
+    report_id = data.get("report_id")
+    action = data.get("action")  # تأییدشده / ردشده / بسته‌شده
+    action_taken = data.get("action_taken")  # هیچ / هشدار / حذف_محتوا / مسدود_کاربر
+    admin_notes = data.get("admin_notes") or ""
+
+    if not report_id or not action:
+        frappe.throw("report_id and action are required.")
+
+    report = frappe.get_doc("Hambaft Report", report_id)
+    report.status = action
+    report.reviewed_by = user
+    report.reviewed_at = now_datetime()
+    if action_taken:
+        report.action_taken = action_taken
+    if admin_notes:
+        report.admin_notes = admin_notes
+    report.save(ignore_permissions=True)
+
+    # If action is to block user, create admin-initiated block
+    if action_taken == "مسدود_کاربر" and report.reported_user:
+        if not frappe.db.exists("Hambaft User Block", {"blocked_by": user, "blocked_user": report.reported_user}):
+            block = frappe.new_doc("Hambaft User Block")
+            block.blocked_by = user
+            block.blocked_user = report.reported_user
+            block.reason = "admin_action"
+            block.notes = f"گزارش {report_id}: {admin_notes or action}"
+            block.insert(ignore_permissions=True)
+
+        # Notify the blocked user
+        try:
+            _create_notification(
+                report.reported_user, "system",
+                title_fa="حساب شما مسدود شد",
+                body_fa="به دلیل نقض قوانین، حساب شما توسط مدیر مسدود شده است.",
+                icon="🚫",
+            )
+        except Exception:
+            pass
+
+    # If action is to delete content
+    if action_taken == "حذف_محتوا" and report.entity:
+        try:
+            if report.entity_type == "comment":
+                frappe.db.set_value("Hambaft Comment", report.entity, "status", "گزارش‌شده")
+            elif report.entity_type == "proof":
+                frappe.db.set_value("Hambaft Proof Upload", report.entity, "status", "حذف‌شده")
+            elif report.entity_type == "reaction":
+                frappe.delete_doc("Hambaft Reaction", report.entity, ignore_permissions=True, force=True)
+        except Exception:
+            pass
+
+    frappe.db.commit()
+
+    return _api_response({
+        "status": "reviewed",
+        "report_id": report_id,
+        "action": action,
+        "action_taken": action_taken,
+    })
+
+
+@frappe.whitelist()
+def admin_get_stats():
+    """Get moderation stats for admin dashboard. System Manager only."""
+    _check_auth()
+    if "System Manager" not in frappe.get_roles(frappe.session.user):
+        frappe.throw("فقط مدیر سیستم دسترسی دارد.", frappe.PermissionError)
+
+    total_users = frappe.db.count("Hambaft Profile")
+    total_reports = frappe.db.count("Hambaft Report")
+    pending_reports = frappe.db.count("Hambaft Report", filters={"status": "در_انتظار"})
+    total_blocks = frappe.db.count("Hambaft User Block")
+    total_badges = frappe.db.count("Hambaft Badge", filters={"active": 1})
+    total_challenges_today = frappe.db.count("Hambaft Daily Challenge", filters={"challenge_date": today()})
+    completed_challenges_today = frappe.db.count("Hambaft Daily Challenge", filters={
+        "challenge_date": today(), "status": "تکمیل‌شده"
+    })
+
+    return _api_response({
+        "users": total_users,
+        "reports_total": total_reports,
+        "reports_pending": pending_reports,
+        "blocks_total": total_blocks,
+        "badges_active": total_badges,
+        "challenges_today": total_challenges_today,
+        "challenges_completed_today": completed_challenges_today,
+    })

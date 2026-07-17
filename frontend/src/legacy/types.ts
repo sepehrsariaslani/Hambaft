@@ -939,3 +939,36 @@ export type NotificationType =
   | 'streak_milestone'
   | 'goal_deadline'
   | 'system';
+
+// Phase 12: Admin & Moderation
+export interface BlockedUser {
+  blockId: string;
+  userInfo: { email: string; fullName: string; avatarUrl: string | null };
+  reason: string;
+  createdAt: string;
+}
+
+export interface ReportItem {
+  id: string;
+  reportedUserInfo: { email: string; fullName: string; avatarUrl: string | null };
+  entityType: string;
+  entity: string;
+  reason: string;
+  reasonLabel: string;
+  status: string;
+  createdAt: string;
+}
+
+export interface AdminReportItem {
+  id: string;
+  reporterInfo: { email: string; fullName: string; avatarUrl: string | null };
+  reportedUserInfo: { email: string; fullName: string; avatarUrl: string | null };
+  entityType: string;
+  entity: string;
+  reason: string;
+  description: string;
+  status: string;
+  reviewedBy: string;
+  actionTaken: string;
+  createdAt: string;
+}

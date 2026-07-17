@@ -2051,3 +2051,59 @@ export async function getUnreadNotificationCount() {
     'hambaft.hambaft.api.get_unread_notification_count'
   )
 }
+
+
+// ═══════════════════════════════════════════════════════════════
+// Phase 12: Admin & Moderation — Reports, Blocks, Admin Panel
+// ═══════════════════════════════════════════════════════════════
+
+export async function blockUser(data: { blocked_user: string; reason?: string; notes?: string }) {
+  return call<{ data?: any }>('hambaft.hambaft.api.block_user', { data })
+}
+
+export async function unblockUser(blockedUser: string) {
+  return call<{ data?: any }>('hambaft.hambaft.api.unblock_user', { blocked_user: blockedUser })
+}
+
+export async function getBlockedUsers() {
+  return callGet<{ data?: { blocked_users: any[] } }>(
+    'hambaft.hambaft.api.get_blocked_users'
+  )
+}
+
+export async function checkUserBlocked(otherUser: string) {
+  return callGet<{ data?: { i_blocked_them: boolean; they_blocked_me: boolean; is_blocked: boolean } }>(
+    `hambaft.hambaft.api.check_user_blocked?other_user=${encodeURIComponent(otherUser)}`
+  )
+}
+
+export async function reportContent(data: {
+  reported_user: string; entity_type?: string; entity?: string; reason?: string; description?: string
+}) {
+  return call<{ data?: any }>('hambaft.hambaft.api.report_content', { data })
+}
+
+export async function getMyReports(limit = 50, offset = 0) {
+  return callGet<{ data?: { reports: any[] } }>(
+    `hambaft.hambaft.api.get_my_reports?limit=${limit}&offset=${offset}`
+  )
+}
+
+export async function adminGetReports(status?: string, limit = 50, offset = 0) {
+  const statusParam = status ? `&status=${encodeURIComponent(status)}` : ''
+  return callGet<{ data?: { reports: any[]; total: number; pending: number } }>(
+    `hambaft.hambaft.api.admin_get_reports?limit=${limit}&offset=${offset}${statusParam}`
+  )
+}
+
+export async function adminReviewReport(data: {
+  report_id: string; action: string; action_taken?: string; admin_notes?: string
+}) {
+  return call<{ data?: any }>('hambaft.hambaft.api.admin_review_report', { data })
+}
+
+export async function adminGetStats() {
+  return callGet<{ data?: Record<string, number> }>(
+    'hambaft.hambaft.api.admin_get_stats'
+  )
+}
