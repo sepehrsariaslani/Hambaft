@@ -17,6 +17,7 @@ interface DocumentsSectionProps {
   bankAccounts: BankAccount[];
   assets: AssetInvestment[];
   contacts?: { id: string; name: string; photoUrl?: string; category?: string }[];
+  onNavigateContact?: (contactId: string) => void;
 }
 
 const DOC_TYPES: Record<DocumentType, { label: string; icon: React.ReactNode; color: string; bg: string }> = {
@@ -37,7 +38,7 @@ function getDaysUntilExpiry(expiryDate?: string): number | null {
   return Math.ceil(diff);
 }
 
-export default function DocumentsSection({ documents, onAddDocument, onDeleteDocument, bankAccounts = [], assets = [], contacts = [] }: DocumentsSectionProps) {
+export default function DocumentsSection({ documents, onAddDocument, onDeleteDocument, bankAccounts = [], assets = [], contacts = [], onNavigateContact }: DocumentsSectionProps) {
   const [showForm, setShowForm] = useState(false);
   const [filterType, setFilterType] = useState<DocumentType | 'all'>('all');
   const [title, setTitle] = useState('');
@@ -646,7 +647,7 @@ export default function DocumentsSection({ documents, onAddDocument, onDeleteDoc
                   {/* Linked Contacts */}
                   {selectedDoc.id && (
                     <div className="border-t border-[#E6DFD3]/60 dark:border-[#3D4133]/40 pt-3">
-                      <LinkedContacts entityType="document" entityId={selectedDoc.id} contacts={contacts} />
+                      <LinkedContacts entityType="document" entityId={selectedDoc.id} contacts={contacts} onNavigateContact={onNavigateContact} />
                     </div>
                   )}
 

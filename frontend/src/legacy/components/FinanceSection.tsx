@@ -107,6 +107,7 @@ interface FinanceSectionProps {
     iconName?: string;
   }>) => void;
   contacts?: { id: string; name: string; photoUrl?: string; category?: string }[];
+  onNavigateContact?: (contactId: string) => void;
 }
 
 type FinanceTab = 'records' | 'accounts' | 'subscriptions' | 'budget' | 'report' | 'categories' | 'debts' | 'assets';
@@ -215,7 +216,8 @@ export default function FinanceSection({
   onPayInstallment,
   initialQuickTemplates,
   onQuickTemplatesChange,
-  contacts = []
+  contacts = [],
+  onNavigateContact,
 }: FinanceSectionProps) {
 
   // ── Tab ──────────────────────────────────────────────────────────────────
@@ -3694,7 +3696,7 @@ export default function FinanceSection({
               {/* Linked Contacts */}
               {detailTx.id && !txEditMode && (
                 <div className="border-t border-[#E6DFD3]/60 pt-3 mt-2">
-                  <LinkedContacts entityType="finance" entityId={detailTx.id} contacts={contacts} />
+                  <LinkedContacts entityType="finance" entityId={detailTx.id} contacts={contacts} onNavigateContact={onNavigateContact} />
                 </div>
               )}
             </motion.div>

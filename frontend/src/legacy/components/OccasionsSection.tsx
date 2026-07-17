@@ -16,6 +16,7 @@ interface OccasionsSectionProps {
   onAddTransaction?: (newT: Omit<Transaction, 'id'>) => void;
   bankAccounts?: BankAccount[];
   contacts?: { id: string; name: string; photoUrl?: string; category?: string }[];
+  onNavigateContact?: (contactId: string) => void;
 }
 
 const TODAY = '2026-07-04';
@@ -64,7 +65,8 @@ export default function OccasionsSection({
   onUpdateOccasion,
   onAddTransaction,
   bankAccounts = [],
-  contacts = []
+  contacts = [],
+  onNavigateContact,
 }: OccasionsSectionProps) {
   const [showForm, setShowForm] = useState(false);
   const [filterType, setFilterType] = useState<OccasionType | 'all'>('all');
@@ -345,7 +347,7 @@ export default function OccasionsSection({
                     {/* Linked Contacts */}
                     {o.id && (
                       <div className="mt-2 pt-2 border-t border-[#E6DFD3]/40">
-                        <LinkedContacts entityType="occasion" entityId={o.id} contacts={contacts} />
+                        <LinkedContacts entityType="occasion" entityId={o.id} contacts={contacts} onNavigateContact={onNavigateContact} />
                       </div>
                     )}
 

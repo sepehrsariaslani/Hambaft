@@ -846,7 +846,7 @@ export default function TaskDetailPage({
               {/* Linked Contacts */}
               {task.id && (
                 <div className="px-4 py-2.5 border-t border-[#E6DFD3]/30 dark:border-[#3D4133]/20">
-                  <LinkedContacts entityType="task" entityId={task.id} contacts={contacts} onNavigateContact={(_contactId: string) => { /* navigation via contacts tab */ }} />
+                  <LinkedContacts entityType="task" entityId={task.id} contacts={contacts} onNavigateContact={(contactId) => onNavigate?.('contacts', contactId)} />
                 </div>
               )}
             </div>

@@ -3412,6 +3412,7 @@ export default function App({
             initialQuickTemplates={financeQuickTemplates}
             onQuickTemplatesChange={(templates) => patchSettings({ finance_quick_templates_json: JSON.stringify(templates) })}
             contacts={(lifeData.contacts || []).map(c => ({ id: c.id, name: c.name, photoUrl: c.photoUrl, category: c.category }))}
+            onNavigateContact={() => goToTab('contacts')}
           />
         );
       case 'habits':
@@ -3507,6 +3508,7 @@ export default function App({
               onNavigate={(tab, id) => {
                 if (tab === 'goals' && id) goToGoal(id);
                 else if (tab === 'projects' && id) goToProject(id);
+                else if (tab === 'contacts') goToTab('contacts');
                 else goToTab(tab);
               }}
               onViewTaskDetails={(id) => goToTaskDetail(id)}
@@ -3555,6 +3557,12 @@ export default function App({
                 onAddBankAccount={handleAddBankAccount}
                 onSelectProject={goToProject}
                 onMoveProjectToGoal={handleMoveProjectToGoal}
+                onNavigateEntity={(tab, id) => {
+                  if (tab === 'goals' && id) goToGoal(id)
+                  else if (tab === 'projects' && id) goToProject(id)
+                  else if (tab === 'contacts') goToTab('contacts')
+                  else goToTab(tab)
+                }}
               />
             );
           }
@@ -3616,6 +3624,7 @@ export default function App({
                 onNavigateEntity={(tab, id) => {
                   if (tab === 'goals' && id) goToGoal(id)
                   else if (tab === 'projects' && id) goToProject(id)
+                  else if (tab === 'contacts') goToTab('contacts')
                   else goToTab(tab)
                 }}
                 onMoveProjectToGoal={handleMoveProjectToGoal}
@@ -3662,6 +3671,7 @@ export default function App({
             bankAccounts={lifeData.bankAccounts || []}
             assets={lifeData.assets || []}
             contacts={(lifeData.contacts || []).map(c => ({ id: c.id, name: c.name, photoUrl: c.photoUrl, category: c.category }))}
+            onNavigateContact={() => goToTab('contacts')}
           />
         );
       case 'occasions':
@@ -3674,6 +3684,7 @@ export default function App({
             onAddTransaction={handleAddTransaction}
             bankAccounts={lifeData.bankAccounts || []}
             contacts={(lifeData.contacts || []).map(c => ({ id: c.id, name: c.name, photoUrl: c.photoUrl, category: c.category }))}
+            onNavigateContact={() => goToTab('contacts')}
           />
         );
       case 'mindfulness':
