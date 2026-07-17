@@ -2,7 +2,44 @@
 // Content-hashed assets (JS/CSS) are inherently cache-busting.
 // Only index.html needs explicit network-first to detect new deploys.
 
-const CACHE_VERSION = 'hambaft-v36'
+const CACHE_VERSION = 'hambaft-v37'
+
+// Push notification event listeners
+self.addEventListener('push', (event) => {
+  let data = { title: 'همبافت', body: 'اعلان جدیدی دارید!', icon: '🔔', url: '/hambaft' }
+  if (event.data) {
+    try {
+      data = event.data.json()
+    } catch (e) {
+      data.body = event.data.text()
+    }
+  }
+  event.waitUntil(
+    self.registration.showNotification(data.title, {
+      body: data.body,
+      icon: '/assets/hambaft/hambaft-icon.svg',
+      badge: '/assets/hambaft/hambaft-icon.svg',
+      data: { url: data.url || '/hambaft' },
+      dir: 'rtl',
+      lang: 'fa',
+    })
+  )
+})
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close()
+  const url = event.notification.data?.url || '/hambaft'
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+      for (const client of clients) {
+        if (client.url.includes(url) && 'focus' in client) {
+          return client.focus()
+        }
+      }
+      return self.clients.openWindow(url)
+    })
+  )
+})
 
 self.addEventListener('install', (event) => {
   // Activate immediately — don't wait for old tabs to close.

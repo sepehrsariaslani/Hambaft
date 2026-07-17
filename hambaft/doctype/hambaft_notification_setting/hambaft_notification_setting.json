@@ -1,0 +1,114 @@
+{
+ "name": "Hambaft Notification Setting",
+ "creation": "2026-01-01 00:00:00",
+ "modified": "2026-01-01 00:00:00",
+ "modified_by": "Administrator",
+ "owner": "Administrator",
+ "docstatus": 0,
+ "module": "Hambaft",
+ "autoname": "hash",
+ "fields": [
+  {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "label": "کاربر",
+   "options": "User",
+   "reqd": 1,
+   "unique": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "push_enabled",
+   "fieldtype": "Check",
+   "label": "پوش نوتیف فعال",
+   "default": 0
+  },
+  {
+   "fieldname": "level_up",
+   "fieldtype": "Check",
+   "label": "ارتقای سطح",
+   "default": 1
+  },
+  {
+   "fieldname": "badge_earned",
+   "fieldtype": "Check",
+   "label": "کسب نشان",
+   "default": 1
+  },
+  {
+   "fieldname": "challenge_completed",
+   "fieldtype": "Check",
+   "label": "تکمیل چالش",
+   "default": 1
+  },
+  {
+   "fieldname": "partner_invite",
+   "fieldtype": "Check",
+   "label": "دعوت پارتنر",
+   "default": 1
+  },
+  {
+   "fieldname": "partner_accepted",
+   "fieldtype": "Check",
+   "label": "پذیرش پارتنر",
+   "default": 1
+  },
+  {
+   "fieldname": "reaction_received",
+   "fieldtype": "Check",
+   "label": "واکنش دریافت‌شده",
+   "default": 1
+  },
+  {
+   "fieldname": "nudge_received",
+   "fieldtype": "Check",
+   "label": "ناج تشویقی",
+   "default": 1
+  },
+  {
+   "fieldname": "daily_reminder",
+   "fieldtype": "Check",
+   "label": "یادآوری روزانه",
+   "default": 1
+  },
+  {
+   "fieldname": "streak_milestone",
+   "fieldtype": "Check",
+   "label": "استریک ویژه",
+   "default": 1
+  },
+  {
+   "fieldname": "goal_deadline",
+   "fieldtype": "Check",
+   "label": "مهلت هدف",
+   "default": 1
+  },
+  {
+   "fieldname": "system",
+   "fieldtype": "Check",
+   "label": "اعلان سیستمی",
+   "default": 1
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1
+  },
+  {
+   "role": "Hambaft User",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 0
+  }
+ ],
+ "doctype": "DocType",
+ "custom": 0,
+ "istable": 0,
+ "issingle": 0
+}

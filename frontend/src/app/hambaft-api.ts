@@ -2107,3 +2107,120 @@ export async function adminGetStats() {
     'hambaft.hambaft.api.admin_get_stats'
   )
 }
+
+
+// ═══════════════════════════════════════════════════════════════
+// Completion: Push, Notification Settings, Nudge, Comparison,
+//            RLS, Enhanced Admin, More Challenges
+// ═══════════════════════════════════════════════════════════════
+
+// --- Notification Settings ---
+export async function getNotificationSettings() {
+  return callGet<{ data?: Record<string, number> }>(
+    'hambaft.hambaft.api.get_notification_settings'
+  )
+}
+
+export async function updateNotificationSettings(data: Record<string, number>) {
+  return call<{ data?: any }>('hambaft.hambaft.api.update_notification_settings', { data })
+}
+
+// --- Push Subscription ---
+export async function savePushSubscription(subscription: PushSubscriptionJSON) {
+  return call<{ data?: any }>('hambaft.hambaft.api.save_push_subscription', { ...subscription })
+}
+
+export async function removePushSubscription() {
+  return call<{ data?: any }>('hambaft.hambaft.api.remove_push_subscription', {})
+}
+
+// --- Nudge ---
+export interface NudgeTemplate {
+  index: number
+  icon: string
+  message_fa: string
+}
+
+export async function getNudgeTemplates() {
+  return callGet<{ data?: { templates: NudgeTemplate[] } }>(
+    'hambaft.hambaft.api.get_nudge_templates'
+  )
+}
+
+export async function sendNudge(data: { partner_email: string; message?: string; template_index?: number }) {
+  return call<{ data?: any }>('hambaft.hambaft.api.send_nudge', { data })
+}
+
+// --- Partner Comparison ---
+export interface PartnerComparison {
+  me: {
+    user_info: any
+    total_points: number
+    level: number
+    current_streak: number
+    best_streak: number
+    tasks_completed: number
+    tasks_this_week: number
+    proofs_uploaded: number
+    comments_posted: number
+    habits_active: number
+    goals_active: number
+    goals_completed: number
+    badges_earned: number
+    challenges_completed: number
+  }
+  partner: {
+    user_info: any
+    total_points: number
+    level: number
+    current_streak: number
+    best_streak: number
+    tasks_completed: number
+    tasks_this_week: number
+    proofs_uploaded: number
+    comments_posted: number
+    habits_active: number
+    goals_active: number
+    goals_completed: number
+    badges_earned: number
+    challenges_completed: number
+  }
+  comparison: Array<{
+    field: string
+    label: string
+    icon: string
+    me: number
+    partner: number
+    ahead: 'me' | 'partner' | 'tie'
+  }>
+}
+
+export async function getPartnerComparison(partnerEmail: string) {
+  return callGet<{ data?: PartnerComparison }>(
+    `hambaft.hambaft.api.get_partner_comparison?partner_email=${encodeURIComponent(partnerEmail)}`
+  )
+}
+
+// --- Enhanced Admin ---
+export async function adminGetUsers(limit = 50, offset = 0, search?: string) {
+  const searchParam = search ? `&search=${encodeURIComponent(search)}` : ''
+  return callGet<{ data?: { users: any[]; total: number } }>(
+    `hambaft.hambaft.api.admin_get_users?limit=${limit}&offset=${offset}${searchParam}`
+  )
+}
+
+export async function adminManageBadge(data: { action: string; badge_id?: string; [key: string]: any }) {
+  return call<{ data?: any }>('hambaft.hambaft.api.admin_manage_badge', { data })
+}
+
+export async function adminManageChallengeTemplate(data: { action: string; template_id?: string; [key: string]: any }) {
+  return call<{ data?: any }>('hambaft.hambaft.api.admin_manage_challenge_template', { data })
+}
+
+export async function adminAwardBadge(data: { user_email: string; badge_id: string }) {
+  return call<{ data?: any }>('hambaft.hambaft.api.admin_award_badge', { data })
+}
+
+export async function seedMoreChallenges() {
+  return call<{ data?: any }>('hambaft.hambaft.api.seed_more_challenges', {})
+}

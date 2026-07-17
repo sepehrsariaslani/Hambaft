@@ -4,9 +4,11 @@ import {
   getGamificationProfile,
   getAllBadges,
   getPointHistory,
+  getPartners,
   GamificationProfileResponse,
   AllBadgesResponse,
 } from '../../app/hambaft-api';
+import PartnerComparisonDisplay from './PartnerComparisonDisplay';
 import {
   GamificationProfile,
   UserBadge,
@@ -274,8 +276,62 @@ interface GamificationDisplayProps {
   onBadgeEarned?: (badge: any) => void;
 }
 
+function PartnerCompareSection() {
+  const [partners, setPartners] = useState<any[]>([]);
+  const [selectedPartner, setSelectedPartner] = useState<{ email: string; name: string } | null>(null);
+
+  useEffect(() => {
+    getPartners()
+      .then(res => {
+        const pList = res?.data?.data?.partners || res?.data?.partners || [];
+        setPartners(pList);
+        if (pList.length > 0 && !selectedPartner) {
+          setSelectedPartner({ email: pList[0].partner?.email, name: pList[0].partner?.fullName });
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  if (partners.length === 0) {
+    return (
+      <div className="text-center py-10">
+        <div className="text-3xl mb-2">🤝</div>
+        <h3 className="text-sm font-black text-[#2D3025] mb-1">پارتنری نداری</h3>
+        <p className="text-[10px] text-[#8D7F72]">ابتدا یک پارتنر اضافه کن تا مقایسه کنی!</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {/* Partner selector */}
+      <div className="flex gap-1.5 overflow-x-auto pb-1">
+        {partners.map((p: any) => (
+          <button
+            key={p.id}
+            onClick={() => setSelectedPartner({ email: p.partner?.email, name: p.partner?.fullName })}
+            className={`flex-shrink-0 px-3 py-1.5 rounded-xl text-[9px] font-bold cursor-pointer transition-all ${
+              selectedPartner?.email === p.partner?.email
+                ? 'bg-[#4A6741] text-white'
+                : 'bg-[#F9F6EE] text-[#8D7F72] border border-[#E6DFD3]'
+            }`}
+          >
+            {p.partner?.fullName}
+          </button>
+        ))}
+      </div>
+
+      {/* Comparison display */}
+      {selectedPartner && (
+        <PartnerComparisonDisplay partnerEmail={selectedPartner.email} partnerName={selectedPartner.name} />
+      )}
+    </div>
+  );
+}
+
+
 export default function GamificationDisplay({ onClose, onLevelUp, onBadgeEarned }: GamificationDisplayProps) {
-  const [activeSubTab, setActiveSubTab] = useState<'overview' | 'badges' | 'history'>('overview');
+  const [activeSubTab, setActiveSubTab] = useState<'overview' | 'badges' | 'history' | 'compare'>('overview');
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<GamificationProfile | null>(null);
   const [allBadges, setAllBadges] = useState<BadgeDefinition[]>([]);
@@ -429,6 +485,7 @@ export default function GamificationDisplay({ onClose, onLevelUp, onBadgeEarned 
           { id: 'overview' as const, label: 'خلاصه', icon: '⭐' },
           { id: 'badges' as const, label: 'نشان‌ها', icon: '🏆' },
           { id: 'history' as const, label: 'تاریخچه', icon: '📋' },
+          { id: 'compare' as const, label: 'مقایسه', icon: '⚔️' },
         ].map(tab => (
           <button
             key={tab.id}
@@ -504,6 +561,17 @@ export default function GamificationDisplay({ onClose, onLevelUp, onBadgeEarned 
           >
             <h3 className="text-xs font-black text-[#2D3025] mb-2">تاریخچه امتیازها</h3>
             <PointsHistory transactions={profile.recentPoints} />
+          </motion.div>
+        )}
+
+        {activeSubTab === 'compare' && (
+          <motion.div
+            key="compare"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+          >
+            <PartnerCompareSection />
           </motion.div>
         )}
       </AnimatePresence>

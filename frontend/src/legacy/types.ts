@@ -972,3 +972,70 @@ export interface AdminReportItem {
   actionTaken: string;
   createdAt: string;
 }
+
+// Completion types
+export interface NotificationSettings {
+  pushEnabled: boolean;
+  levelUp: boolean;
+  badgeEarned: boolean;
+  challengeCompleted: boolean;
+  partnerInvite: boolean;
+  partnerAccepted: boolean;
+  reactionReceived: boolean;
+  nudgeReceived: boolean;
+  dailyReminder: boolean;
+  streakMilestone: boolean;
+  goalDeadline: boolean;
+  system: boolean;
+}
+
+export interface NudgeTemplate {
+  index: number;
+  icon: string;
+  messageFa: string;
+}
+
+export interface ComparisonRow {
+  field: string;
+  label: string;
+  icon: string;
+  me: number;
+  partner: number;
+  ahead: 'me' | 'partner' | 'tie';
+}
+
+export interface PartnerComparisonData {
+  me: {
+    userInfo: any;
+    totalPoints: number;
+    level: number;
+    currentStreak: number;
+    bestStreak: number;
+    tasksCompleted: number;
+    tasksThisWeek: number;
+    proofsUploaded: number;
+    commentsPosted: number;
+    habitsActive: number;
+    goalsActive: number;
+    goalsCompleted: number;
+    badgesEarned: number;
+    challengesCompleted: number;
+  };
+  partner: {
+    userInfo: any;
+    totalPoints: number;
+    level: number;
+    currentStreak: number;
+    bestStreak: number;
+    tasksCompleted: number;
+    tasksThisWeek: number;
+    proofsUploaded: number;
+    commentsPosted: number;
+    habitsActive: number;
+    goalsActive: number;
+    goalsCompleted: number;
+    badgesEarned: number;
+    challengesCompleted: number;
+  };
+  comparison: ComparisonRow[];
+}

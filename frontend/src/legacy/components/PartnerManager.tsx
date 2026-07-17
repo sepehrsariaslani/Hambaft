@@ -4,6 +4,7 @@ import {
   cancelPartnerInvite, getPartnerInvites, getPartners,
   removePartner, shareGoalWithPartner, type PartnerInfo, type PartnerConnection, type PartnerInviteItem
 } from '../../app/hambaft-api';
+import NudgeSender from './NudgeSender';
 import { UserPlus, Users, X, Check, Trash2, Link2, Mail, User, Copy, Send, ChevronDown, ChevronUp } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -166,6 +167,7 @@ export default function PartnerManager({ goalId, onPartnerAdded }: { goalId?: st
                       <p className="text-[9px] font-black text-[#2D3025] dark:text-[#E8ECE0] truncate">{p.partner.fullName}</p>
                       <p className="text-[7px] text-[#8D7F72]">{p.sharedGoalsCount > 0 ? `${p.sharedGoalsCount} هدف مشترک` : 'بدون هدف مشترک'}</p>
                     </div>
+                    <NudgeSender partnerEmail={p.partner.email} partnerName={p.partner.fullName} />
                     <button onClick={() => handleRemovePartner(p.id)} className="p-1 rounded text-[#8D7F72] hover:text-red-400 cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity">
                       <Trash2 className="w-2.5 h-2.5" />
                     </button>

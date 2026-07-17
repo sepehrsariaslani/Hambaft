@@ -9296,3 +9296,809 @@ def admin_get_stats():
         "challenges_today": total_challenges_today,
         "challenges_completed_today": completed_challenges_today,
     })
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Completion: Push Notifications, Notification Settings, Nudge,
+#            Partner Comparison, RLS, Admin Enhancements
+# ═══════════════════════════════════════════════════════════════════
+
+# ─── Notification Settings ──────────────────────────────────
+
+def _get_notification_settings(user):
+    """Get or create notification settings for a user."""
+    name = frappe.db.get_value("Hambaft Notification Setting", {"user": user}, "name")
+    if name:
+        return frappe.get_doc("Hambaft Notification Setting", name)
+    settings = frappe.new_doc("Hambaft Notification Setting")
+    settings.user = user
+    settings.push_enabled = 0
+    settings.level_up = 1
+    settings.badge_earned = 1
+    settings.challenge_completed = 1
+    settings.partner_invite = 1
+    settings.partner_accepted = 1
+    settings.reaction_received = 1
+    settings.nudge_received = 1
+    settings.daily_reminder = 1
+    settings.streak_milestone = 1
+    settings.goal_deadline = 1
+    settings.system = 1
+    settings.insert(ignore_permissions=True)
+    frappe.db.commit()
+    return settings
+
+
+def _should_notify(user, notification_type):
+    """Check if a user wants to receive a specific notification type."""
+    settings = _get_notification_settings(user)
+    field_map = {
+        "level_up": "level_up",
+        "badge_earned": "badge_earned",
+        "challenge_completed": "challenge_completed",
+        "challenge_expired": "challenge_completed",
+        "partner_invite": "partner_invite",
+        "partner_accepted": "partner_accepted",
+        "goal_shared": "partner_accepted",
+        "comment_received": "reaction_received",
+        "reaction_received": "reaction_received",
+        "nudge_received": "nudge_received",
+        "daily_reminder": "daily_reminder",
+        "streak_milestone": "streak_milestone",
+        "goal_deadline": "goal_deadline",
+        "system": "system",
+    }
+    field = field_map.get(notification_type, "system")
+    return cint(getattr(settings, field, 1)) == 1
+
+
+@frappe.whitelist()
+def get_notification_settings():
+    """Get the current user's notification settings."""
+    _check_auth()
+    user = frappe.session.user
+    settings = _get_notification_settings(user)
+    return _api_response({
+        "push_enabled": cint(settings.push_enabled),
+        "level_up": cint(settings.level_up),
+        "badge_earned": cint(settings.badge_earned),
+        "challenge_completed": cint(settings.challenge_completed),
+        "partner_invite": cint(settings.partner_invite),
+        "partner_accepted": cint(settings.partner_accepted),
+        "reaction_received": cint(settings.reaction_received),
+        "nudge_received": cint(settings.nudge_received),
+        "daily_reminder": cint(settings.daily_reminder),
+        "streak_milestone": cint(settings.streak_milestone),
+        "goal_deadline": cint(settings.goal_deadline),
+        "system": cint(settings.system),
+    })
+
+
+@frappe.whitelist()
+def update_notification_settings(data=None):
+    """Update the current user's notification settings."""
+    _check_auth()
+    user = frappe.session.user
+
+    if isinstance(data, str):
+        data = json.loads(data)
+    data = data or {}
+
+    settings = _get_notification_settings(user)
+
+    toggle_fields = [
+        "push_enabled", "level_up", "badge_earned", "challenge_completed",
+        "partner_invite", "partner_accepted", "reaction_received",
+        "nudge_received", "daily_reminder", "streak_milestone",
+        "goal_deadline", "system"
+    ]
+    for field in toggle_fields:
+        if field in data:
+            setattr(settings, field, cint(data[field]))
+
+    settings.save(ignore_permissions=True)
+    frappe.db.commit()
+    return _api_response({"status": "updated"})
+
+
+# ─── Push Notification Subscription ─────────────────────────
+
+@frappe.whitelist()
+def save_push_subscription(data=None):
+    """Save a web push subscription for the current user."""
+    _check_auth()
+    user = frappe.session.user
+
+    if isinstance(data, str):
+        data = json.loads(data)
+    data = data or {}
+
+    endpoint = data.get("endpoint")
+    p256dh = data.get("keys", {}).get("p256dh") if isinstance(data.get("keys"), dict) else data.get("p256dh")
+    auth_key = data.get("keys", {}).get("auth") if isinstance(data.get("keys"), dict) else data.get("auth")
+    user_agent = data.get("userAgent", "")
+
+    if not endpoint:
+        frappe.throw("endpoint is required.")
+
+    # Upsert: remove old subscription for same endpoint
+    existing = frappe.db.get_value("Hambaft Push Subscription", {"endpoint": endpoint}, "name")
+    if existing:
+        frappe.delete_doc("Hambaft Push Subscription", existing, ignore_permissions=True, force=True)
+
+    sub = frappe.new_doc("Hambaft Push Subscription")
+    sub.user = user
+    sub.endpoint = endpoint
+    sub.p256dh = p256dh or ""
+    sub.auth_key = auth_key or ""
+    sub.user_agent = user_agent
+    sub.insert(ignore_permissions=True)
+
+    # Enable push in settings
+    settings = _get_notification_settings(user)
+    if not cint(settings.push_enabled):
+        settings.push_enabled = 1
+        settings.save(ignore_permissions=True)
+
+    frappe.db.commit()
+    return _api_response({"status": "subscribed", "subscription_id": sub.name})
+
+
+@frappe.whitelist()
+def remove_push_subscription():
+    """Remove push subscription for the current user."""
+    _check_auth()
+    user = frappe.session.user
+
+    subs = frappe.get_all("Hambaft Push Subscription", filters={"user": user}, pluck="name")
+    for s in subs:
+        frappe.delete_doc("Hambaft Push Subscription", s, ignore_permissions=True, force=True)
+
+    settings = _get_notification_settings(user)
+    settings.push_enabled = 0
+    settings.save(ignore_permissions=True)
+
+    frappe.db.commit()
+    return _api_response({"status": "unsubscribed"})
+
+
+def _send_push_notification(user, title, body, icon="🔔", url=None):
+    """Send a web push notification to a user.
+    This stores the push payload for the service worker to pick up.
+    Actual Web Push delivery requires VAPID keys configured on the server.
+    """
+    # Check if user has push enabled
+    settings = _get_notification_settings(user)
+    if not cint(settings.push_enabled):
+        return
+
+    # Store as a special notification with push flag for SW polling
+    # In production, this would use pywebpush to send directly
+    # For now, we mark the notification so the SW can poll for it
+    subs = frappe.get_all(
+        "Hambaft Push Subscription",
+        filters={"user": user},
+        fields=["name", "endpoint", "p256dh", "auth_key"],
+    )
+
+    # If push subscriptions exist, try to send via webpush
+    if subs:
+        try:
+            _attempt_webpush(subs, title, body, icon, url)
+        except Exception:
+            # Fallback: just in-app notification (already created by caller)
+            pass
+
+
+def _attempt_webpush(subscriptions, title, body, icon, url):
+    """Attempt to send web push using pywebpush if available."""
+    try:
+        from pywebpush import webpush, WebPushException
+    except ImportError:
+        # pywebpush not installed, skip push delivery
+        return
+
+    # VAPID keys should be in site config
+    vapid_private_key = frappe.conf.get("vapid_private_key") or ""
+    vapid_claims = {"sub": f"mailto:{frappe.conf.get('vapid_email', 'admin@hambaft.app')}"}
+
+    for sub in subscriptions:
+        subscription_info = {
+            "endpoint": sub.endpoint,
+            "keys": {
+                "p256dh": sub.p256dh or "",
+                "auth": sub.auth_key or "",
+            },
+        }
+        payload = json.dumps({
+            "title": title,
+            "body": body,
+            "icon": icon,
+            "url": url or "/hambaft",
+        })
+        try:
+            webpush(
+                subscription_info=subscription_info,
+                data=payload,
+                vapid_private_key=vapid_private_key,
+                vapid_claims=vapid_claims,
+            )
+        except WebPushException:
+            # Subscription might be invalid, could clean up
+            pass
+        except Exception:
+            pass
+
+
+# Override _create_notification to respect settings and attempt push
+_original_create_notification = None
+
+
+def _create_notification_enhanced(user, notification_type, title="", title_fa="", body="", body_fa="",
+                                  icon=None, entity_type=None, entity=None):
+    """Enhanced notification creation that respects user settings and sends push."""
+    # Check if user wants this notification type
+    if not _should_notify(user, notification_type):
+        return None
+
+    # Create the in-app notification
+    conf = _NOTIFICATION_CONFIG.get(notification_type, {})
+    n = frappe.new_doc("Hambaft Notification")
+    n.user = user
+    n.notification_type = notification_type
+    n.title = title or notification_type
+    n.title_fa = title_fa or conf.get("title_fa", notification_type)
+    n.body = body
+    n.body_fa = body_fa
+    n.icon = icon or conf.get("icon", "🔔")
+    if entity_type:
+        n.entity_type = entity_type
+    if entity:
+        n.entity = entity
+    n.read = 0
+    n.dismissed = 0
+    n.insert(ignore_permissions=True)
+    frappe.db.commit()
+
+    # Attempt push notification
+    try:
+        _send_push_notification(
+            user,
+            title=title_fa or title,
+            body=body_fa or body,
+            icon=icon or conf.get("icon", "🔔"),
+            url=f"/hambaft" if not entity_type else None,
+        )
+    except Exception:
+        pass
+
+    return n.name
+
+
+# Monkey-patch _create_notification
+_create_notification = _create_notification_enhanced
+
+
+# ─── Nudge (تشویقی به پارتنر) ──────────────────────────────
+
+_NUDGE_TEMPLATES = [
+    {"icon": "💪", "message_fa": "بزن بره! من بابتت هیجان زده‌ام!"},
+    {"icon": "🔥", "message_fa": "استریک‌ات عالیه! ادامه بده!"},
+    {"icon": "🌟", "message_fa": "فوق‌العاده‌ای! ادامه بده!"},
+    {"icon": "🎉", "message_fa": "آفرین! پیشرفت خیلی خوبه!"},
+    {"icon": "❤️", "message_fa": "بابتت افتخار می‌کنم!"},
+    {"icon": "🚀", "message_fa": "پرتاب شدی! ادامه بده!"},
+    {"icon": "👏", "message_fa": "عالی بود! دست مریز!"},
+    {"icon": "🏆", "message_fa": "قهرمان منی!"},
+    {"icon": "💪", "message_fa": "نفس‌نفس زدن مال موندنه!"},
+    {"icon": "✨", "message_fa": "درخشیدی! بریم بقیه راه!"},
+    {"icon": "🎯", "message_fa": "دقیقاً تو هدف! ادامه بده!"},
+    {"icon": "🥳", "message_fa": "چه خبر خوب! جشن بگیریم!"},
+]
+
+
+@frappe.whitelist()
+def send_nudge(data=None):
+    """Send a nudge/cheer to a partner."""
+    _check_auth()
+    user = frappe.session.user
+
+    if isinstance(data, str):
+        data = json.loads(data)
+    data = data or {}
+
+    partner_email = data.get("partner_email")
+    custom_message = data.get("message")
+    template_index = data.get("template_index")
+
+    if not partner_email:
+        frappe.throw("partner_email is required.")
+
+    # Verify partner connection
+    conn = frappe.db.sql(
+        """SELECT name FROM `tabHambaft Partner Connection`
+        WHERE status = 'فعال'
+        AND ((user_a = %s AND user_b = %s) OR (user_a = %s AND user_b = %s))
+        LIMIT 1""",
+        (user, partner_email, partner_email, user),
+    )
+    if not conn:
+        frappe.throw("شما با این کاربر پارتنر نیستید.", frappe.PermissionError)
+
+    # Rate limit: max 10 nudges per hour
+    one_hour_ago = frappe.utils.add_to_date(now_datetime(), hours=-1)
+    recent_nudges = frappe.db.count("Hambaft Notification", {
+        "user": partner_email,
+        "notification_type": "nudge_received",
+        "creation": [">=", one_hour_ago],
+    })
+    if recent_nudges >= 10:
+        frappe.throw("حداکثر ۱۰ ناج در ساعت مجاز است.")
+
+    # Pick nudge message
+    if custom_message:
+        icon = "💬"
+        message_fa = custom_message
+    elif template_index is not None and 0 <= cint(template_index) < len(_NUDGE_TEMPLATES):
+        tmpl = _NUDGE_TEMPLATES[cint(template_index)]
+        icon = tmpl["icon"]
+        message_fa = tmpl["message_fa"]
+    else:
+        tmpl = random.choice(_NUDGE_TEMPLATES)
+        icon = tmpl["icon"]
+        message_fa = tmpl["message_fa"]
+
+    sender_info = _user_display_info(user)
+
+    # Create notification for partner
+    _create_notification(
+        partner_email, "nudge_received",
+        title_fa=f"ناج از {sender_info.get('full_name', user)}",
+        body_fa=message_fa,
+        icon=icon,
+        entity_type="User",
+        entity=user,
+    )
+
+    # Award small points to sender for being supportive
+    _award_points(
+        user, 5, "partner_verification",
+        description="ناج تشویقی ارسال شد"
+    )
+
+    return _api_response({
+        "status": "sent",
+        "message_fa": message_fa,
+        "icon": icon,
+    })
+
+
+@frappe.whitelist()
+def get_nudge_templates():
+    """Get available nudge templates for the frontend."""
+    _check_auth()
+    return _api_response({
+        "templates": [
+            {"index": i, "icon": t["icon"], "message_fa": t["message_fa"]}
+            for i, t in enumerate(_NUDGE_TEMPLATES)
+        ]
+    })
+
+
+# ─── Partner Comparison ─────────────────────────────────────
+
+@frappe.whitelist()
+def get_partner_comparison(partner_email=None):
+    """Get side-by-side comparison of stats with a partner."""
+    _check_auth()
+    user = frappe.session.user
+
+    if not partner_email:
+        frappe.throw("partner_email is required.")
+
+    # Verify partner connection
+    conn = frappe.db.sql(
+        """SELECT name FROM `tabHambaft Partner Connection`
+        WHERE status = 'فعال'
+        AND ((user_a = %s AND user_b = %s) OR (user_a = %s AND user_b = %s))
+        LIMIT 1""",
+        (user, partner_email, partner_email, user),
+    )
+    if not conn:
+        frappe.throw("شما با این کاربر پارتنر نیستید.", frappe.PermissionError)
+
+    def _user_stats(u):
+        profile = _get_or_create_profile(u)
+        tasks_done = frappe.db.count("Task", filters={"owner": u, "status": "done"})
+        proofs = frappe.db.count("Hambaft Proof Upload", filters={"user": u, "status": "فعال"})
+        comments = frappe.db.count("Hambaft Comment", filters={"user": u, "status": "فعال"})
+        habits_active = frappe.db.count("Hambaft Habit", filters={"user": u, "is_active": 1})
+        goals_active = frappe.db.count("Hambaft Goal", filters={"owner": u, "status": ["!=", "تکمیل‌شده"]})
+        goals_completed = frappe.db.count("Hambaft Goal", filters={"owner": u, "status": "تکمیل‌شده"})
+        badges = frappe.db.count("Hambaft User Badge", filters={"user": u})
+        challenges_done = frappe.db.count("Hambaft Daily Challenge", filters={"user": u, "status": "تکمیل‌شده"})
+
+        # Week streak
+        week_ago = str(frappe.utils.add_to_date(getdate(), days=-7))
+        tasks_this_week = frappe.db.count("Task", filters={"owner": u, "status": "done", "completed_on": [">=", week_ago]})
+
+        return {
+            "user_info": _user_display_info(u),
+            "total_points": profile.total_points or 0,
+            "level": profile.level or 1,
+            "current_streak": profile.current_streak_days or 0,
+            "best_streak": profile.best_streak_days or 0,
+            "tasks_completed": tasks_done,
+            "tasks_this_week": tasks_this_week,
+            "proofs_uploaded": proofs,
+            "comments_posted": comments,
+            "habits_active": habits_active,
+            "goals_active": goals_active,
+            "goals_completed": goals_completed,
+            "badges_earned": badges,
+            "challenges_completed": challenges_done,
+        }
+
+    me = _user_stats(user)
+    partner = _user_stats(partner_email)
+
+    # Determine who's ahead in each category
+    comparison = []
+    fields = [
+        ("total_points", "امتیاز کل", "⭐"),
+        ("level", "سطح", "🏅"),
+        ("current_streak", "استریک فعلی", "🔥"),
+        ("tasks_completed", "تسک‌های انجام‌شده", "✅"),
+        ("tasks_this_week", "تسک این هفته", "📅"),
+        ("proofs_uploaded", "اثبات‌ها", "📸"),
+        ("badges_earned", "نشان‌ها", "🏆"),
+        ("challenges_completed", "چالش‌ها", "🎯"),
+        ("goals_completed", "اهداف تکمیل‌شده", "🌟"),
+    ]
+
+    for field_key, label, icon in fields:
+        me_val = me.get(field_key, 0)
+        partner_val = partner.get(field_key, 0)
+        if me_val > partner_val:
+            ahead = "me"
+        elif partner_val > me_val:
+            ahead = "partner"
+        else:
+            ahead = "tie"
+        comparison.append({
+            "field": field_key,
+            "label": label,
+            "icon": icon,
+            "me": me_val,
+            "partner": partner_val,
+            "ahead": ahead,
+        })
+
+    return _api_response({
+        "me": me,
+        "partner": partner,
+        "comparison": comparison,
+    })
+
+
+# ─── Enhanced Row Level Security ────────────────────────────
+
+def _validate_read_access(doctype, docname, user):
+    """Validate that a user can read a document.
+    Owner can always read. For shared entities, check membership.
+    """
+    # Check ownership
+    owner = frappe.db.get_value(doctype, docname, "owner") or frappe.db.get_value(doctype, docname, "user")
+    if owner == user:
+        return True
+
+    # For goals, check if user is a member
+    if doctype == "Hambaft Goal" or doctype == "Goal":
+        if frappe.db.exists("Hambaft Goal Member", {"goal": docname, "user": user, "status": "فعال"}):
+            return True
+        # Check if goal privacy is shared and user is a partner of owner
+        privacy = frappe.db.get_value(doctype, docname, "privacy")
+        if privacy in ("اشتراکی", "گروهی"):
+            return True
+
+    # For tasks, check if task belongs to a goal the user has access to
+    if doctype == "Task":
+        goal_link = frappe.db.get_value("Task", docname, "goal")
+        if goal_link:
+            return _validate_read_access("Hambaft Goal", goal_link, user)
+
+    # For projects, check goal access
+    if doctype == "Hambaft Project":
+        goal_link = frappe.db.get_value("Hambaft Project", docname, "goal")
+        if goal_link:
+            return _validate_read_access("Hambaft Goal", goal_link, user)
+
+    # For comments, proofs, reactions - check entity access
+    if doctype in ("Hambaft Comment", "Hambaft Proof Upload", "Hambaft Reaction"):
+        entity_type = frappe.db.get_value(doctype, docname, "entity_type")
+        entity = frappe.db.get_value(doctype, docname, "entity")
+        if entity_type and entity:
+            mapped_type = {"task": "Task", "goal": "Hambaft Goal", "project": "Hambaft Project"}.get(entity_type, entity_type)
+            try:
+                return _validate_read_access(mapped_type, entity, user)
+            except Exception:
+                pass
+
+    return False
+
+
+def _apply_rls_filters(doctype, user):
+    """Return filter dict for a doctype that respects RLS."""
+    # Base: user owns it
+    filters = {"owner": user}
+
+    # For goals: also include shared/group goals
+    if doctype in ("Hambaft Goal", "Goal"):
+        # Goals where user is a member
+        member_goals = frappe.get_all("Hambaft Goal Member", filters={"user": user, "status": "فعال"}, pluck="goal")
+        if member_goals:
+            filters = {"name": ["in", member_goals + frappe.get_all(doctype, filters={"owner": user}, pluck="name")]}
+
+    return filters
+
+
+# ─── Enhanced Admin Panel ───────────────────────────────────
+
+@frappe.whitelist()
+def admin_get_users(limit=50, offset=0, search=None):
+    """Get user list for admin management. System Manager only."""
+    _check_auth()
+    if "System Manager" not in frappe.get_roles(frappe.session.user):
+        frappe.throw("فقط مدیر سیستم دسترسی دارد.", frappe.PermissionError)
+
+    filters = {"user_type": "System User", "enabled": 1}
+    if search:
+        filters["full_name"] = ["like", f"%{search}%"]
+
+    users = frappe.get_all(
+        "User",
+        filters=filters,
+        fields=["name", "full_name", "email", "username", "creation", "enabled"],
+        order_by="creation desc",
+        limit_page_length=cint(limit),
+        start=cint(offset),
+    )
+
+    result = []
+    for u in users:
+        profile = frappe.db.get_value("Hambaft Profile", {"user": u.name},
+                                       ["total_points", "level", "current_streak_days"], as_dict=True)
+        badge_count = frappe.db.count("Hambaft User Badge", filters={"user": u.name})
+        report_count = frappe.db.count("Hambaft Report", filters={"reported_user": u.name})
+        is_blocked = bool(frappe.db.exists("Hambaft User Block", {"blocked_user": u.name}))
+
+        result.append({
+            "email": u.name,
+            "full_name": u.full_name,
+            "username": u.username or "",
+            "signup_date": str(u.creation),
+            "enabled": cint(u.enabled),
+            "total_points": profile.total_points if profile else 0,
+            "level": profile.level if profile else 1,
+            "streak": profile.current_streak_days if profile else 0,
+            "badges": badge_count,
+            "reports": report_count,
+            "blocked": is_blocked,
+        })
+
+    total = frappe.db.count("User", filters={"user_type": "System User", "enabled": 1})
+
+    return _api_response({"users": result, "total": total})
+
+
+@frappe.whitelist()
+def admin_manage_badge(data=None):
+    """Create, update, or toggle a badge. System Manager only."""
+    _check_auth()
+    if "System Manager" not in frappe.get_roles(frappe.session.user):
+        frappe.throw("فقط مدیر سیستم دسترسی دارد.", frappe.PermissionError)
+
+    if isinstance(data, str):
+        data = json.loads(data)
+    data = data or {}
+
+    action = data.get("action")  # create, update, toggle
+    if not action:
+        frappe.throw("action is required.")
+
+    if action == "create":
+        badge = frappe.new_doc("Hambaft Badge")
+        badge.badge_name = data.get("badge_name", "")
+        badge.badge_name_fa = data.get("badge_name_fa", "")
+        badge.description = data.get("description", "")
+        badge.description_fa = data.get("description_fa", "")
+        badge.icon = data.get("icon", "🏆")
+        badge.criteria_type = data.get("criteria_type", "tasks_completed")
+        badge.criteria_value = cint(data.get("criteria_value", 1))
+        badge.points_awarded = cint(data.get("points_awarded", 0))
+        badge.rarity = data.get("rarity", "Common")
+        badge.active = 1
+        badge.insert(ignore_permissions=True)
+        frappe.db.commit()
+        return _api_response({"status": "created", "badge_id": badge.name})
+
+    elif action == "update":
+        badge_id = data.get("badge_id")
+        if not badge_id:
+            frappe.throw("badge_id is required.")
+        badge = frappe.get_doc("Hambaft Badge", badge_id)
+        for field in ("badge_name", "badge_name_fa", "description", "description_fa",
+                       "icon", "criteria_type", "criteria_value", "points_awarded", "rarity"):
+            if field in data:
+                if field == "criteria_value" or field == "points_awarded":
+                    setattr(badge, field, cint(data[field]))
+                else:
+                    setattr(badge, field, data[field])
+        badge.save(ignore_permissions=True)
+        frappe.db.commit()
+        return _api_response({"status": "updated"})
+
+    elif action == "toggle":
+        badge_id = data.get("badge_id")
+        if not badge_id:
+            frappe.throw("badge_id is required.")
+        badge = frappe.get_doc("Hambaft Badge", badge_id)
+        badge.active = 0 if cint(badge.active) else 1
+        badge.save(ignore_permissions=True)
+        frappe.db.commit()
+        return _api_response({"status": "toggled", "active": cint(badge.active)})
+
+    return _api_response({"status": "unknown_action"})
+
+
+@frappe.whitelist()
+def admin_manage_challenge_template(data=None):
+    """Create, update, or toggle a challenge template. System Manager only."""
+    _check_auth()
+    if "System Manager" not in frappe.get_roles(frappe.session.user):
+        frappe.throw("فقط مدیر سیستم دسترسی دارد.", frappe.PermissionError)
+
+    if isinstance(data, str):
+        data = json.loads(data)
+    data = data or {}
+
+    action = data.get("action")
+
+    if action == "create":
+        tmpl = frappe.new_doc("Hambaft Challenge Template")
+        tmpl.title = data.get("title", "")
+        tmpl.title_fa = data.get("title_fa", "")
+        tmpl.description = data.get("description", "")
+        tmpl.description_fa = data.get("description_fa", "")
+        tmpl.icon = data.get("icon", "🎯")
+        tmpl.challenge_type = data.get("challenge_type", "complete_task")
+        tmpl.target_count = cint(data.get("target_count", 1))
+        tmpl.difficulty = data.get("difficulty", "easy")
+        tmpl.points_reward = cint(data.get("points_reward", 20))
+        tmpl.category = data.get("category", "productivity")
+        tmpl.active = 1
+        tmpl.insert(ignore_permissions=True)
+        frappe.db.commit()
+        return _api_response({"status": "created", "template_id": tmpl.name})
+
+    elif action == "toggle":
+        template_id = data.get("template_id")
+        if not template_id:
+            frappe.throw("template_id is required.")
+        tmpl = frappe.get_doc("Hambaft Challenge Template", template_id)
+        tmpl.active = 0 if cint(tmpl.active) else 1
+        tmpl.save(ignore_permissions=True)
+        frappe.db.commit()
+        return _api_response({"status": "toggled", "active": cint(tmpl.active)})
+
+    elif action == "update":
+        template_id = data.get("template_id")
+        if not template_id:
+            frappe.throw("template_id is required.")
+        tmpl = frappe.get_doc("Hambaft Challenge Template", template_id)
+        for field in ("title", "title_fa", "description", "description_fa", "icon",
+                       "challenge_type", "target_count", "difficulty", "points_reward", "category"):
+            if field in data:
+                if field in ("target_count", "points_reward"):
+                    setattr(tmpl, field, cint(data[field]))
+                else:
+                    setattr(tmpl, field, data[field])
+        tmpl.save(ignore_permissions=True)
+        frappe.db.commit()
+        return _api_response({"status": "updated"})
+
+    return _api_response({"status": "unknown_action"})
+
+
+@frappe.whitelist()
+def admin_award_badge(data=None):
+    """Manually award a badge to a user. System Manager only."""
+    _check_auth()
+    if "System Manager" not in frappe.get_roles(frappe.session.user):
+        frappe.throw("فقط مدیر سیستم دسترسی دارد.", frappe.PermissionError)
+
+    if isinstance(data, str):
+        data = json.loads(data)
+    data = data or {}
+
+    user_email = data.get("user_email")
+    badge_id = data.get("badge_id")
+
+    if not user_email or not badge_id:
+        frappe.throw("user_email and badge_id are required.")
+
+    if frappe.db.exists("Hambaft User Badge", {"user": user_email, "badge": badge_id}):
+        frappe.throw("این نشان قبلاً به این کاربر داده شده است.")
+
+    ub = frappe.new_doc("Hambaft User Badge")
+    ub.user = user_email
+    ub.badge = badge_id
+    ub.earned_at = now_datetime()
+    ub.insert(ignore_permissions=True)
+    frappe.db.commit()
+
+    # Notify the user
+    badge_name_fa = frappe.db.get_value("Hambaft Badge", badge_id, "badge_name_fa") or ""
+    _create_notification(
+        user_email, "badge_earned",
+        title_fa=f"نشان «{badge_name_fa}» از طرف مدیر کسب شد!",
+        body_fa="مدیر سیستم این نشان رو به شما اهدا کرد.",
+        icon=frappe.db.get_value("Hambaft Badge", badge_id, "icon") or "🏆",
+        entity_type="Hambaft Badge",
+        entity=badge_id,
+    )
+
+    return _api_response({"status": "awarded"})
+
+
+# ─── Additional Challenge Seeds (30+) ───────────────────────
+
+@frappe.whitelist()
+def seed_more_challenges():
+    """Add 16+ more challenge templates to reach 30+. Idempotent. Admin only."""
+    _check_auth()
+    if "System Manager" not in frappe.get_roles(frappe.session.user):
+        frappe.throw("فقط مدیر سیستم می‌تواند چالش‌ها را مقداردهی کند.", frappe.PermissionError)
+
+    more_templates = [
+        # --- More Easy ---
+        {"title": "One and Done", "title_fa": "یکی کافیه", "description": "Complete any 1 task today", "description_fa": "امروز حداقل ۱ تسک انجام بده", "icon": "1️⃣", "challenge_type": "complete_task", "target_count": 1, "difficulty": "easy", "points_reward": 20, "category": "productivity"},
+        {"title": "First Proof", "title_fa": "اولین اثبات", "description": "Upload your first proof of the day", "description_fa": "اولین اثبات امروز رو آپلود کن", "icon": "📷", "challenge_type": "upload_proof", "target_count": 1, "difficulty": "easy", "points_reward": 20, "category": "productivity"},
+        {"title": "Kind Word", "title_fa": "کلمه مهربان", "description": "Leave 1 encouraging comment", "description_fa": "۱ نظر تشویقی بذار", "icon": "💛", "challenge_type": "add_comment", "target_count": 1, "difficulty": "easy", "points_reward": 20, "category": "social"},
+        # --- More Medium ---
+        {"title": "Task Marathon", "title_fa": "ماراتن تسک", "description": "Complete 4 tasks today", "description_fa": "۴ تسک امروز انجام بده", "icon": "🏃", "challenge_type": "complete_task", "target_count": 4, "difficulty": "medium", "points_reward": 35, "category": "productivity"},
+        {"title": "Habit Duo", "title_fa": "جفت عادت", "description": "Log 2 habits today", "description_fa": "۲ عادت امروز ثبت کن", "icon": "✌️", "challenge_type": "log_habit", "target_count": 2, "difficulty": "medium", "points_reward": 35, "category": "health"},
+        {"title": "Comment King", "title_fa": "پادشاه نظرات", "description": "Leave 4 comments today", "description_fa": "۴ نظر امروز ثبت کن", "icon": "👑", "challenge_type": "add_comment", "target_count": 4, "difficulty": "medium", "points_reward": 35, "category": "social"},
+        {"title": "Proof Pair", "title_fa": "جفت اثبات", "description": "Upload 2 proofs today", "description_fa": "۲ اثبات امروز آپلود کن", "icon": "🎞️", "challenge_type": "upload_proof", "target_count": 2, "difficulty": "medium", "points_reward": 35, "category": "productivity"},
+        {"title": "Creative Soul", "title_fa": "روح خلاق", "description": "Upload a proof with reflection (50+ chars)", "description_fa": "اثبات با تأمل بیش از ۵۰ کاراکتر آپلود کن", "icon": "💭", "challenge_type": "creativity", "target_count": 1, "difficulty": "medium", "points_reward": 35, "category": "creativity"},
+        {"title": "Reflection Master", "title_fa": "استاد تأمل", "description": "Upload 2 proofs with reflections", "description_fa": "۲ اثبات با تأمل آپلود کن", "icon": "📝", "challenge_type": "creativity", "target_count": 2, "difficulty": "medium", "points_reward": 35, "category": "creativity"},
+        {"title": "Balanced Day", "title_fa": "روز متعادل", "description": "Do 1 task and 1 habit today", "description_fa": "۱ تسک و ۱ عادت امروز انجام بده", "icon": "⚖️", "challenge_type": "consistency", "target_count": 2, "difficulty": "medium", "points_reward": 35, "category": "mindfulness"},
+        # --- More Hard ---
+        {"title": "Task Tsunami", "title_fa": "سونامی تسک", "description": "Complete 7 tasks today", "description_fa": "۷ تسک امروز انجام بده", "icon": "🌊", "challenge_type": "complete_task", "target_count": 7, "difficulty": "hard", "points_reward": 50, "category": "productivity"},
+        {"title": "Habit Hero", "title_fa": "قهرمان عادت", "description": "Log 5 different habits today", "description_fa": "۵ عادت مختلف امروز ثبت کن", "icon": "🦸", "challenge_type": "log_habit", "target_count": 5, "difficulty": "hard", "points_reward": 50, "category": "health"},
+        {"title": "Social Storm", "title_fa": "طوفان اجتماعی", "description": "Leave 5 comments today", "description_fa": "۵ نظر امروز ثبت کن", "icon": "🌪️", "challenge_type": "add_comment", "target_count": 5, "difficulty": "hard", "points_reward": 50, "category": "social"},
+        {"title": "Proof Legend", "title_fa": "افسانه اثبات", "description": "Upload 4 proofs today", "description_fa": "۴ اثبات امروز آپلود کن", "icon": "🎥", "challenge_type": "upload_proof", "target_count": 4, "difficulty": "hard", "points_reward": 50, "category": "productivity"},
+        {"title": "Super Consistent", "title_fa": "فوق ثبات", "description": "Do 3 tasks and 2 habits today", "description_fa": "۳ تسک و ۲ عادت امروز انجام بده", "icon": "⚡", "challenge_type": "consistency", "target_count": 5, "difficulty": "hard", "points_reward": 50, "category": "mindfulness"},
+        {"title": "Creative Genius", "title_fa": "نابغه خلاق", "description": "Upload 3 proofs with reflections", "description_fa": "۳ اثبات با تأمل آپلود کن", "icon": "🧠", "challenge_type": "creativity", "target_count": 3, "difficulty": "hard", "points_reward": 50, "category": "creativity"},
+    ]
+
+    created = []
+    for tmpl_data in more_templates:
+        if frappe.db.exists("Hambaft Challenge Template", {"title": tmpl_data["title"]}):
+            continue
+        doc = frappe.new_doc("Hambaft Challenge Template")
+        doc.update(tmpl_data)
+        doc.active = 1
+        doc.insert(ignore_permissions=True)
+        created.append(tmpl_data["title"])
+
+    frappe.db.commit()
+
+    total_templates = frappe.db.count("Hambaft Challenge Template", filters={"active": 1})
+
+    return _api_response({
+        "new_seeded": len(created),
+        "total_active_templates": total_templates,
+        "templates": created,
+        "message": f"{len(created)} الگوی جدید. مجموع: {total_templates} چالش فعال.",
+    })

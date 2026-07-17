@@ -15,12 +15,14 @@ import {
   Download,
   Check,
   MessageSquareCode,
-  Trophy
+  Trophy,
+  Bell
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import AiCoachSection from './AiCoachSection';
 
 const GamificationDisplay = lazy(() => import('./GamificationDisplay'));
+const NotificationSettingsDisplay = lazy(() => import('./NotificationSettingsDisplay'));
 
 interface ProfileSectionProps {
   lifeData: LifeData;
@@ -29,7 +31,7 @@ interface ProfileSectionProps {
 }
 
 export default function ProfileSection({ lifeData, onUpdateProfile, onImportData }: ProfileSectionProps) {
-  const [activeSubTab, setActiveSubTab] = useState<'info' | 'gamification' | 'coach'>('info');
+  const [activeSubTab, setActiveSubTab] = useState<'info' | 'gamification' | 'notif' | 'coach'>('info');
   const [isEditing, setIsEditing] = useState(false);
 
   // Default fallback profile values
@@ -126,6 +128,18 @@ export default function ProfileSection({ lifeData, onUpdateProfile, onImportData
         >
           <Sparkles className="w-3.5 h-3.5" />
           <span>مربی توازن</span>
+        </button>
+
+        <button
+          onClick={() => setActiveSubTab('notif')}
+          className={`flex-1 py-2 text-[10px] font-black rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1 ${
+            activeSubTab === 'notif'
+              ? 'bg-[#7C8363] text-white shadow-sm'
+              : 'text-[#8D7F72] hover:text-[#7C8363]'
+          }`}
+        >
+          <Bell className="w-3.5 h-3.5" />
+          <span>نوتیف</span>
         </button>
       </div>
 
@@ -389,6 +403,21 @@ export default function ProfileSection({ lifeData, onUpdateProfile, onImportData
               </div>
             }>
               <GamificationDisplay />
+            </Suspense>
+          </motion.div>
+        ) : activeSubTab === 'notif' ? (
+          <motion.div
+            key="notif-settings"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+          >
+            <Suspense fallback={
+              <div className="flex items-center justify-center py-20">
+                <div className="w-6 h-6 border-2 border-[#7C8363] border-t-transparent rounded-full animate-spin" />
+              </div>
+            }>
+              <NotificationSettingsDisplay />
             </Suspense>
           </motion.div>
         ) : (
