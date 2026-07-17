@@ -1877,3 +1877,80 @@ export async function getProofs(entityType: string, entity: string) {
 export async function deleteProof(proofId: string) {
   return call<{ data?: any }>('hambaft.hambaft.api.delete_proof', { proof_id: proofId })
 }
+
+
+// ═══════════════════════════════════════════════════════════════
+// Phase 9: Gamification — Points, Levels, Badges
+// ═══════════════════════════════════════════════════════════════
+
+export interface GamificationProfileResponse {
+  total_points: number
+  level: number
+  points_to_next_level: number
+  current_streak_days: number
+  best_streak_days: number
+  badges: Array<{
+    id: string
+    badge_id: string
+    badge_name: string
+    badge_name_fa: string
+    icon: string
+    description: string
+    description_fa: string
+    rarity: string
+    points_awarded: number
+    earned_at: string
+  }>
+  recent_points: Array<{
+    id: string
+    points: number
+    reason: string
+    description: string
+    created_at: string
+  }>
+  stats: {
+    tasks_completed: number
+    proofs_uploaded: number
+    comments_posted: number
+  }
+}
+
+export interface AllBadgesResponse {
+  badges: Array<{
+    badge_id: string
+    badge_name: string
+    badge_name_fa: string
+    icon: string
+    description: string
+    description_fa: string
+    criteria_type: string
+    criteria_value: number
+    points_awarded: number
+    rarity: string
+    earned: boolean
+  }>
+  total: number
+  earned_count: number
+}
+
+export async function getGamificationProfile() {
+  return callGet<{ data?: GamificationProfileResponse }>(
+    'hambaft.hambaft.api.get_gamification_profile'
+  )
+}
+
+export async function getAllBadges() {
+  return callGet<{ data?: AllBadgesResponse }>(
+    'hambaft.hambaft.api.get_all_badges'
+  )
+}
+
+export async function getPointHistory(limit = 50, offset = 0) {
+  return callGet<{ data?: { transactions: any[]; total: number } }>(
+    `hambaft.hambaft.api.get_point_history?limit=${limit}&offset=${offset}`
+  )
+}
+
+export async function seedBadges() {
+  return call<{ data?: any }>('hambaft.hambaft.api.seed_badges', {})
+}

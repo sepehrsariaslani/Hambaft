@@ -765,6 +765,12 @@ export function useBootstrapLifeData() {
           categories: mappedCategories,
           bankAccounts: safe(() => mapBankAccounts(accountRows), [], 'bankAccounts'),
           profile: safe(() => mapProfile(profile, settings), emptyData.profile, 'profile'),
+          gamification: safe(() => ({
+            totalPoints: profile?.gamification?.total_points || 0,
+            level: profile?.gamification?.level || 1,
+            currentStreakDays: profile?.gamification?.current_streak_days || 0,
+            bestStreakDays: profile?.gamification?.best_streak_days || 0,
+          }), { totalPoints: 0, level: 1, currentStreakDays: 0, bestStreakDays: 0 }, 'gamification'),
           sleepLogs: safe(() => mapSleepLogs(sleepLogs), [], 'sleepLogs'),
           budgetSettings: budgetSettingsOverride && typeof budgetSettingsOverride === 'object'
             ? budgetSettingsOverride

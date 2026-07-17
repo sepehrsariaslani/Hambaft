@@ -1,0 +1,62 @@
+{
+ "name": "Hambaft User Badge",
+ "creation": "2026-01-01 00:00:00",
+ "modified": "2026-01-01 00:00:00",
+ "modified_by": "Administrator",
+ "owner": "Administrator",
+ "docstatus": 0,
+ "module": "Hambaft",
+ "autoname": "format:UB-{#####}",
+ "fields": [
+  {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "label": "کاربر",
+   "options": "User",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "badge",
+   "fieldtype": "Link",
+   "label": "نشان",
+   "options": "Hambaft Badge",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "earned_at",
+   "fieldtype": "Datetime",
+   "label": "تاریخ کسب",
+   "read_only": 1,
+   "in_list_view": 1
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1
+  },
+  {
+   "role": "Hambaft User",
+   "read": 1,
+   "write": 0,
+   "create": 0,
+   "delete": 0
+  }
+ ],
+ "doctype": "DocType",
+ "custom": 0,
+ "istable": 0,
+ "issingle": 0,
+ "unique_constraints": [
+  {
+   "fields": "user, badge"
+  }
+ ]
+}

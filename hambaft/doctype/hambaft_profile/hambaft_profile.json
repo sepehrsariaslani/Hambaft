@@ -30,6 +30,51 @@
    "fieldtype": "Check",
    "label": "آنبوردینگ شده",
    "default": 0
+  },
+  {
+   "fieldname": "gamification_section",
+   "fieldtype": "Section Break",
+   "label": "گیمیفیکیشن"
+  },
+  {
+   "fieldname": "total_points",
+   "fieldtype": "Int",
+   "label": "امتیاز کل",
+   "default": 0,
+   "read_only": 1,
+   "in_list_view": 1,
+   "non_negative": 1
+  },
+  {
+   "fieldname": "level",
+   "fieldtype": "Int",
+   "label": "سطح",
+   "default": 1,
+   "read_only": 1,
+   "in_list_view": 1,
+   "non_negative": 1
+  },
+  {
+   "fieldname": "current_streak_days",
+   "fieldtype": "Int",
+   "label": "روز استریک فعلی",
+   "default": 0,
+   "read_only": 1,
+   "non_negative": 1
+  },
+  {
+   "fieldname": "best_streak_days",
+   "fieldtype": "Int",
+   "label": "بهترین استریک",
+   "default": 0,
+   "read_only": 1,
+   "non_negative": 1
+  },
+  {
+   "fieldname": "last_active_date",
+   "fieldtype": "Date",
+   "label": "آخرین روز فعال",
+   "read_only": 1
   }
  ],
  "permissions": [

@@ -948,10 +948,17 @@ def get_profile():
     signup_date = str(user_doc.creation) if getattr(user_doc, "creation", None) else None
 
     profile_name = frappe.db.get_value("Hambaft Profile", {"user": user}, "name")
+    gamification = {"total_points": 0, "level": 1, "current_streak_days": 0, "best_streak_days": 0}
     if profile_name:
         profile = frappe.get_doc("Hambaft Profile", profile_name)
         if profile.signup_date:
             signup_date = str(profile.signup_date)
+        gamification = {
+            "total_points": profile.total_points or 0,
+            "level": profile.level or 1,
+            "current_streak_days": profile.current_streak_days or 0,
+            "best_streak_days": profile.best_streak_days or 0,
+        }
 
     return {
         "name": user_doc.name,
@@ -959,6 +966,7 @@ def get_profile():
         "email": user_doc.email,
         "signup_date": signup_date,
         "csrf_token": _get_session_csrf_token(),
+        "gamification": gamification,
     }
 
 
@@ -1374,6 +1382,10 @@ def complete_task(name, actual_minutes=None):
     if frappe.session.user == "Guest":
         frappe.throw("Authentication required", frappe.AuthenticationError)
     doc = frappe.get_doc("Task", name)
+
+    # Check if task was already done (avoid double-awarding points)
+    was_already_done = doc.status == "done"
+
     doc.status = "done"
     doc.completed_on = now_datetime()
     if actual_minutes:
@@ -1384,7 +1396,20 @@ def complete_task(name, actual_minutes=None):
     for child in children:
         complete_task(child)
     frappe.db.commit()
-    return _api_response({"task": doc.as_dict()})
+
+    # Phase 9: Award points for task completion
+    gamification_result = {}
+    if not was_already_done:
+        try:
+            gamification_result = _award_points(
+                frappe.session.user, 10, "task_completed",
+                entity_type="Task", entity=name,
+                description="تسک تکمیل شد"
+            )
+        except Exception:
+            gamification_result = {}
+
+    return _api_response({"task": doc.as_dict(), "gamification": gamification_result})
 
 
 @frappe.whitelist()
@@ -7272,6 +7297,7 @@ def add_comment(data=None):
         "user_info": _user_display_info(user),
         "body": body,
         "created_at": str(doc.creation),
+        "gamification": {"points_added": 0},  # Comments don't award points directly; badge check happens periodically
     })
 
 
@@ -7560,6 +7586,17 @@ def upload_proof(data=None):
     proof.insert(ignore_permissions=True)
     frappe.db.commit()
 
+    # Phase 9: Award points for proof upload
+    gamification_result = {}
+    try:
+        gamification_result = _award_points(
+            user, 15, "proof_uploaded",
+            entity_type="Hambaft Proof Upload", entity=proof.name,
+            description="اثبات آپلود شد"
+        )
+    except Exception:
+        gamification_result = {}
+
     return _api_response({
         "proof_id": proof.name,
         "media_type": media_type,
@@ -7567,6 +7604,7 @@ def upload_proof(data=None):
         "caption": caption,
         "reflection": reflection,
         "created_at": str(proof.creation),
+        "gamification": gamification_result,
     })
 
 
@@ -7645,3 +7683,579 @@ def delete_proof(proof_id=None):
     frappe.db.commit()
 
     return _api_response({"status": "deleted"})
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Phase 9: Gamification — Points, Levels, Badges
+# ═══════════════════════════════════════════════════════════════════
+
+# --- Internal helpers (not whitelisted) ---
+
+_LEVEL_THRESHOLDS = [0, 100, 250, 500, 1000]
+# From Level 5 onwards: next = prev * 1.5 rounded
+def _level_for_points(total_points):
+    """Calculate the level for a given total points value."""
+    if total_points < _LEVEL_THRESHOLDS[1]:
+        return 1
+    for i in range(1, len(_LEVEL_THRESHOLDS)):
+        if total_points < _LEVEL_THRESHOLDS[i]:
+            return i
+    # Beyond pre-defined thresholds — use formula
+    level = len(_LEVEL_THRESHOLDS)
+    threshold = _LEVEL_THRESHOLDS[-1]
+    while total_points >= threshold:
+        threshold = round(threshold * 1.5)
+        level += 1
+    return level - 1
+
+
+def _points_for_next_level(current_level):
+    """Return the points needed to reach the next level."""
+    if current_level < len(_LEVEL_THRESHOLDS):
+        return _LEVEL_THRESHOLDS[current_level]
+    threshold = _LEVEL_THRESHOLDS[-1]
+    lvl = len(_LEVEL_THRESHOLDS)
+    while lvl <= current_level:
+        threshold = round(threshold * 1.5)
+        lvl += 1
+    return threshold
+
+
+def _get_or_create_profile(user):
+    """Get or create the Hambaft Profile for a user."""
+    profile_name = frappe.db.get_value("Hambaft Profile", {"user": user}, "name")
+    if profile_name:
+        return frappe.get_doc("Hambaft Profile", profile_name)
+    profile = frappe.new_doc("Hambaft Profile")
+    profile.user = user
+    profile.signup_date = now_datetime()
+    profile.total_points = 0
+    profile.level = 1
+    profile.current_streak_days = 0
+    profile.best_streak_days = 0
+    profile.insert(ignore_permissions=True)
+    frappe.db.commit()
+    return profile
+
+
+def _award_points(user, amount, reason, entity_type=None, entity=None, description=None):
+    """Award points to a user. Updates profile and checks level-up + badge conditions.
+
+    Returns dict with points_added, total_points, level, level_up, new_badges.
+    """
+    if amount <= 0:
+        return {"points_added": 0, "total_points": 0, "level": 1, "level_up": False, "new_badges": []}
+
+    profile = _get_or_create_profile(user)
+    old_level = profile.level or 1
+
+    # Create point transaction
+    pt = frappe.new_doc("Hambaft Point Transaction")
+    pt.user = user
+    pt.points = amount
+    pt.reason = reason
+    if entity_type:
+        pt.entity_type = entity_type
+    if entity:
+        pt.entity = entity
+    if description:
+        pt.description = description
+    pt.insert(ignore_permissions=True)
+
+    # Update profile
+    profile.total_points = (profile.total_points or 0) + amount
+    new_level = _level_for_points(profile.total_points)
+    profile.level = new_level
+    profile.save(ignore_permissions=True)
+    frappe.db.commit()
+
+    level_up = new_level > old_level
+
+    # Check badges
+    new_badges = _check_and_award_badges(user)
+
+    # Update daily streak
+    _update_daily_streak(user)
+
+    return {
+        "points_added": amount,
+        "total_points": profile.total_points,
+        "level": new_level,
+        "level_up": level_up,
+        "new_badges": new_badges,
+    }
+
+
+def _update_daily_streak(user):
+    """Update the daily activity streak for a user based on point transactions."""
+    profile = _get_or_create_profile(user)
+    today_dt = getdate()
+
+    # Check last active date
+    last_active = getdate(profile.last_active_date) if profile.last_active_date else None
+
+    if last_active is None:
+        # First activity ever
+        profile.current_streak_days = 1
+    elif last_active == today_dt:
+        # Already active today, no streak change
+        pass
+    elif (today_dt - last_active).days == 1:
+        # Consecutive day
+        profile.current_streak_days = (profile.current_streak_days or 0) + 1
+    else:
+        # Streak broken
+        profile.current_streak_days = 1
+
+    profile.last_active_date = today_dt
+    if (profile.current_streak_days or 0) > (profile.best_streak_days or 0):
+        profile.best_streak_days = profile.current_streak_days
+
+    profile.save(ignore_permissions=True)
+    frappe.db.commit()
+
+
+def _check_and_award_badges(user):
+    """Check all active badges against user's stats and award any new ones.
+
+    Returns list of newly awarded badge dicts.
+    """
+    newly_awarded = []
+
+    badges = frappe.get_all(
+        "Hambaft Badge",
+        filters={"active": 1},
+        fields=["name", "badge_name", "badge_name_fa", "icon", "criteria_type", "criteria_value", "points_awarded", "rarity"],
+    )
+
+    for badge in badges:
+        # Already earned?
+        if frappe.db.exists("Hambaft User Badge", {"user": user, "badge": badge.name}):
+            continue
+
+        # Check criteria
+        if _user_meets_criteria(user, badge.criteria_type, badge.criteria_value):
+            # Award badge
+            ub = frappe.new_doc("Hambaft User Badge")
+            ub.user = user
+            ub.badge = badge.name
+            ub.earned_at = now_datetime()
+            ub.insert(ignore_permissions=True)
+
+            # Award bonus points for badge (if any)
+            if badge.points_awarded and badge.points_awarded > 0:
+                pt = frappe.new_doc("Hambaft Point Transaction")
+                pt.user = user
+                pt.points = badge.points_awarded
+                pt.reason = "badge_awarded"
+                pt.entity_type = "Hambaft Badge"
+                pt.entity = badge.name
+                pt.description = f"نشان «{badge.badge_name_fa or badge.badge_name}» کسب شد"
+                pt.insert(ignore_permissions=True)
+
+                # Update profile points (but don't recurse badge check here)
+                profile = _get_or_create_profile(user)
+                profile.total_points = (profile.total_points or 0) + badge.points_awarded
+                new_level = _level_for_points(profile.total_points)
+                profile.level = new_level
+                profile.save(ignore_permissions=True)
+
+            frappe.db.commit()
+
+            newly_awarded.append({
+                "badge_id": badge.name,
+                "badge_name": badge.badge_name,
+                "badge_name_fa": badge.badge_name_fa,
+                "icon": badge.icon,
+                "rarity": badge.rarity,
+                "points_awarded": badge.points_awarded or 0,
+            })
+
+    return newly_awarded
+
+
+def _user_meets_criteria(user, criteria_type, criteria_value):
+    """Check if a user meets a specific badge criteria."""
+    val = criteria_value or 1
+
+    if criteria_type == "first_task":
+        count = frappe.db.count("Task", filters={"owner": user, "status": "done"})
+        return count >= 1
+
+    elif criteria_type == "first_proof":
+        count = frappe.db.count("Hambaft Proof Upload", filters={"user": user, "status": "فعال"})
+        return count >= 1
+
+    elif criteria_type == "tasks_completed":
+        count = frappe.db.count("Task", filters={"owner": user, "status": "done"})
+        return count >= val
+
+    elif criteria_type == "proofs_uploaded":
+        count = frappe.db.count("Hambaft Proof Upload", filters={"user": user, "status": "فعال"})
+        return count >= val
+
+    elif criteria_type == "streak_days":
+        profile = _get_or_create_profile(user)
+        return (profile.current_streak_days or 0) >= val
+
+    elif criteria_type == "points_total":
+        profile = _get_or_create_profile(user)
+        return (profile.total_points or 0) >= val
+
+    elif criteria_type == "partner_count":
+        count = frappe.db.sql(
+            """SELECT COUNT(*) FROM `tabHambaft Partner Connection`
+            WHERE status = 'فعال' AND (user_a = %s OR user_b = %s)""",
+            (user, user),
+        )[0][0]
+        return count >= val
+
+    elif criteria_type == "comments_count":
+        count = frappe.db.count("Hambaft Comment", filters={"user": user, "status": "فعال"})
+        return count >= val
+
+    elif criteria_type == "challenges_completed":
+        # Will be used in Phase 10
+        return False
+
+    elif criteria_type == "goals_completed":
+        count = frappe.db.count("Goal", filters={"owner": user, "status": "تکمیل‌شده"})
+        return count >= val
+
+    return False
+
+
+# --- Whitelisted API endpoints ---
+
+@frappe.whitelist()
+def get_gamification_profile():
+    """Get the current user's gamification profile: points, level, streak, badges."""
+    _check_auth()
+    user = frappe.session.user
+
+    profile = _get_or_create_profile(user)
+    next_level_pts = _points_for_next_level(profile.level or 1)
+
+    # Get user badges with badge details
+    user_badges = frappe.get_all(
+        "Hambaft User Badge",
+        filters={"user": user},
+        fields=["name", "badge", "earned_at"],
+        order_by="earned_at desc",
+    )
+
+    badges_result = []
+    for ub in user_badges:
+        badge_doc = frappe.db.get_value(
+            "Hambaft Badge", ub.badge,
+            ["name", "badge_name", "badge_name_fa", "icon", "description", "description_fa", "rarity", "points_awarded"],
+            as_dict=True,
+        )
+        if badge_doc:
+            badges_result.append({
+                "id": ub.name,
+                "badge_id": badge_doc.name,
+                "badge_name": badge_doc.badge_name,
+                "badge_name_fa": badge_doc.badge_name_fa,
+                "icon": badge_doc.icon or "🏆",
+                "description": badge_doc.description,
+                "description_fa": badge_doc.description_fa,
+                "rarity": badge_doc.rarity,
+                "points_awarded": badge_doc.points_awarded or 0,
+                "earned_at": str(ub.earned_at),
+            })
+
+    # Recent point transactions
+    recent_pts = frappe.get_all(
+        "Hambaft Point Transaction",
+        filters={"user": user},
+        fields=["name", "points", "reason", "description", "created_at"],
+        order_by="creation desc",
+        limit_page_length=20,
+    )
+
+    # Stats summary
+    tasks_done = frappe.db.count("Task", filters={"owner": user, "status": "done"})
+    proofs_count = frappe.db.count("Hambaft Proof Upload", filters={"user": user, "status": "فعال"})
+    comments_count = frappe.db.count("Hambaft Comment", filters={"user": user, "status": "فعال"})
+
+    return _api_response({
+        "total_points": profile.total_points or 0,
+        "level": profile.level or 1,
+        "points_to_next_level": next_level_pts,
+        "current_streak_days": profile.current_streak_days or 0,
+        "best_streak_days": profile.best_streak_days or 0,
+        "badges": badges_result,
+        "recent_points": [
+            {
+                "id": p.name,
+                "points": p.points,
+                "reason": p.reason,
+                "description": p.description or "",
+                "created_at": str(p.created_at),
+            }
+            for p in recent_pts
+        ],
+        "stats": {
+            "tasks_completed": tasks_done,
+            "proofs_uploaded": proofs_count,
+            "comments_posted": comments_count,
+        },
+    })
+
+
+@frappe.whitelist()
+def get_all_badges():
+    """Get all badges with earned status for current user."""
+    _check_auth()
+    user = frappe.session.user
+
+    badges = frappe.get_all(
+        "Hambaft Badge",
+        filters={"active": 1},
+        fields=["name", "badge_name", "badge_name_fa", "icon", "description", "description_fa",
+                 "criteria_type", "criteria_value", "points_awarded", "rarity"],
+        order_by="rarity, badge_name",
+    )
+
+    earned_ids = set(
+        frappe.get_all("Hambaft User Badge", filters={"user": user}, pluck="badge")
+    )
+
+    result = []
+    for b in badges:
+        result.append({
+            "badge_id": b.name,
+            "badge_name": b.badge_name,
+            "badge_name_fa": b.badge_name_fa,
+            "icon": b.icon or "🏆",
+            "description": b.description,
+            "description_fa": b.badge_name_fa or b.description,
+            "criteria_type": b.criteria_type,
+            "criteria_value": b.criteria_value,
+            "points_awarded": b.points_awarded or 0,
+            "rarity": b.rarity,
+            "earned": b.name in earned_ids,
+        })
+
+    return _api_response({"badges": result, "total": len(result), "earned_count": len(earned_ids)})
+
+
+@frappe.whitelist()
+def get_point_history(limit=50, offset=0):
+    """Get paginated point transaction history for current user."""
+    _check_auth()
+    user = frappe.session.user
+
+    pts = frappe.get_all(
+        "Hambaft Point Transaction",
+        filters={"user": user},
+        fields=["name", "points", "reason", "entity_type", "entity", "description", "created_at"],
+        order_by="creation desc",
+        limit_page_length=cint(limit),
+        start=cint(offset),
+    )
+
+    total = frappe.db.count("Hambaft Point Transaction", filters={"user": user})
+
+    return _api_response({
+        "transactions": [
+            {
+                "id": p.name,
+                "points": p.points,
+                "reason": p.reason,
+                "entity_type": p.entity_type or "",
+                "entity": p.entity or "",
+                "description": p.description or "",
+                "created_at": str(p.created_at),
+            }
+            for p in pts
+        ],
+        "total": total,
+    })
+
+
+@frappe.whitelist()
+def seed_badges():
+    """Seed the default badge definitions. Called once by admin or during migration.
+    This is idempotent — it won't duplicate existing badges.
+    """
+    _check_auth()
+    # Only System Manager or specific admin can seed
+    if "System Manager" not in frappe.get_roles(frappe.session.user):
+        frappe.throw("فقط مدیر سیستم می‌تواند نشان‌ها را مقداردهی کند.", frappe.PermissionError)
+
+    default_badges = [
+        {
+            "badge_name": "First Step",
+            "badge_name_fa": "قدم اول",
+            "description": "Complete your first task",
+            "description_fa": "اولین تسک خود را کامل کنید",
+            "icon": "👣",
+            "criteria_type": "first_task",
+            "criteria_value": 1,
+            "points_awarded": 5,
+            "rarity": "Common",
+        },
+        {
+            "badge_name": "Proof Pioneer",
+            "badge_name_fa": "پیشگام اثبات",
+            "description": "Upload your first proof",
+            "description_fa": "اولین اثبات خود را آپلود کنید",
+            "icon": "📸",
+            "criteria_type": "first_proof",
+            "criteria_value": 1,
+            "points_awarded": 5,
+            "rarity": "Common",
+        },
+        {
+            "badge_name": "Accountability Buddy",
+            "badge_name_fa": "رفيق مسئولیت‌پذیری",
+            "description": "Connect with your first partner",
+            "description_fa": "اولین پارتنر خود را متصل کنید",
+            "icon": "🤝",
+            "criteria_type": "partner_count",
+            "criteria_value": 1,
+            "points_awarded": 10,
+            "rarity": "Common",
+        },
+        {
+            "badge_name": "Three Day Spark",
+            "badge_name_fa": "جرقه سه‌روزه",
+            "description": "Maintain a 3-day activity streak",
+            "description_fa": "استریک ۳ روزه فعالیت داشته باشید",
+            "icon": "⚡",
+            "criteria_type": "streak_days",
+            "criteria_value": 3,
+            "points_awarded": 15,
+            "rarity": "Common",
+        },
+        {
+            "badge_name": "One Week Warrior",
+            "badge_name_fa": "جنگجوی هفته‌ای",
+            "description": "Maintain a 7-day activity streak",
+            "description_fa": "استریک ۷ روزه فعالیت داشته باشید",
+            "icon": "🔥",
+            "criteria_type": "streak_days",
+            "criteria_value": 7,
+            "points_awarded": 25,
+            "rarity": "Rare",
+        },
+        {
+            "badge_name": "Monthly Master",
+            "badge_name_fa": "استاد ماهانه",
+            "description": "Maintain a 30-day activity streak",
+            "description_fa": "استریک ۳۰ روزه فعالیت داشته باشید",
+            "icon": "👑",
+            "criteria_type": "streak_days",
+            "criteria_value": 30,
+            "points_awarded": 50,
+            "rarity": "Epic",
+        },
+        {
+            "badge_name": "Point Collector",
+            "badge_name_fa": "جمع‌کننده امتیاز",
+            "description": "Earn 100 total points",
+            "description_fa": "۱۰۰ امتیاز کل کسب کنید",
+            "icon": "💎",
+            "criteria_type": "points_total",
+            "criteria_value": 100,
+            "points_awarded": 0,
+            "rarity": "Rare",
+        },
+        {
+            "badge_name": "Momentum Builder",
+            "badge_name_fa": "سازنده مومنتوم",
+            "description": "Earn 500 total points",
+            "description_fa": "۵۰۰ امتیاز کل کسب کنید",
+            "icon": "🚀",
+            "criteria_type": "points_total",
+            "criteria_value": 500,
+            "points_awarded": 0,
+            "rarity": "Epic",
+        },
+        {
+            "badge_name": "Goal Champion",
+            "badge_name_fa": "قهرمان هدف",
+            "description": "Earn 1000 total points",
+            "description_fa": "۱۰۰۰ امتیاز کل کسب کنید",
+            "icon": "🏅",
+            "criteria_type": "points_total",
+            "criteria_value": 1000,
+            "points_awarded": 0,
+            "rarity": "Legendary",
+        },
+        {
+            "badge_name": "Consistency Champion",
+            "badge_name_fa": "قهرمان ثبات",
+            "description": "Complete 50 tasks",
+            "description_fa": "۵۰ تسک تکمیل کنید",
+            "icon": "✅",
+            "criteria_type": "tasks_completed",
+            "criteria_value": 50,
+            "points_awarded": 30,
+            "rarity": "Epic",
+        },
+        {
+            "badge_name": "Supportive Partner",
+            "badge_name_fa": "پارتنر حامی",
+            "description": "Post 10 comments on partner goals",
+            "description_fa": "۱۰ نظر روی اهداف پارتنر ثبت کنید",
+            "icon": "💬",
+            "criteria_type": "comments_count",
+            "criteria_value": 10,
+            "points_awarded": 10,
+            "rarity": "Rare",
+        },
+        {
+            "badge_name": "Proof Master",
+            "badge_name_fa": "استاد اثبات",
+            "description": "Upload 10 proofs",
+            "description_fa": "۱۰ اثبات آپلود کنید",
+            "icon": "🎬",
+            "criteria_type": "proofs_uploaded",
+            "criteria_value": 10,
+            "points_awarded": 15,
+            "rarity": "Rare",
+        },
+        {
+            "badge_name": "Goal Achiever",
+            "badge_name_fa": "رسیدن به هدف",
+            "description": "Complete your first goal",
+            "description_fa": "اولین هدف خود را تکمیل کنید",
+            "icon": "🎯",
+            "criteria_type": "goals_completed",
+            "criteria_value": 1,
+            "points_awarded": 20,
+            "rarity": "Rare",
+        },
+        {
+            "badge_name": "Multi Goal Master",
+            "badge_name_fa": "استاد چندهدفی",
+            "description": "Complete 5 goals",
+            "description_fa": "۵ هدف تکمیل کنید",
+            "icon": "🌟",
+            "criteria_type": "goals_completed",
+            "criteria_value": 5,
+            "points_awarded": 40,
+            "rarity": "Epic",
+        },
+    ]
+
+    created = []
+    for badge_data in default_badges:
+        if frappe.db.exists("Hambaft Badge", {"badge_name": badge_data["badge_name"]}):
+            continue
+        doc = frappe.new_doc("Hambaft Badge")
+        doc.update(badge_data)
+        doc.active = 1
+        doc.insert(ignore_permissions=True)
+        created.append(badge_data["badge_name"])
+
+    frappe.db.commit()
+
+    return _api_response({
+        "seeded": len(created),
+        "badges": created,
+        "message": f"{len(created)} نشان جدید ایجاد شد." if created else "همه نشان‌ها از قبل وجود دارند.",
+    })

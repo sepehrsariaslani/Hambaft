@@ -811,4 +811,82 @@ export interface LifeData {
   contactRelations?: ContactRelation[];
   moodLogs?: MoodLog[];
   areas?: Area[];
+  gamification?: {
+    totalPoints: number;
+    level: number;
+    currentStreakDays: number;
+    bestStreakDays: number;
+  };
+}
+
+// Phase 9: Gamification
+export interface GamificationProfile {
+  totalPoints: number;
+  level: number;
+  pointsToNextLevel: number;
+  currentStreakDays: number;
+  bestStreakDays: number;
+  badges: UserBadge[];
+  recentPoints: PointTransaction[];
+  stats: GamificationStats;
+}
+
+export interface GamificationStats {
+  tasksCompleted: number;
+  proofsUploaded: number;
+  commentsPosted: number;
+}
+
+export interface UserBadge {
+  id: string;
+  badgeId: string;
+  badgeName: string;
+  badgeNameFa: string;
+  icon: string;
+  description: string;
+  descriptionFa: string;
+  rarity: BadgeRarity;
+  pointsAwarded: number;
+  earnedAt: string;
+}
+
+export type BadgeRarity = 'Common' | 'Rare' | 'Epic' | 'Legendary';
+
+export interface BadgeDefinition {
+  badgeId: string;
+  badgeName: string;
+  badgeNameFa: string;
+  icon: string;
+  description: string;
+  descriptionFa: string;
+  criteriaType: string;
+  criteriaValue: number;
+  pointsAwarded: number;
+  rarity: BadgeRarity;
+  earned: boolean;
+}
+
+export interface PointTransaction {
+  id: string;
+  points: number;
+  reason: string;
+  entityType: string;
+  entity: string;
+  description: string;
+  createdAt: string;
+}
+
+export interface GamificationResult {
+  pointsAdded: number;
+  totalPoints: number;
+  level: number;
+  levelUp: boolean;
+  newBadges: Array<{
+    badge_id: string;
+    badge_name: string;
+    badge_name_fa: string;
+    icon: string;
+    rarity: string;
+    points_awarded: number;
+  }>;
 }

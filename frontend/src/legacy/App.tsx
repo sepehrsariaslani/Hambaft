@@ -3886,7 +3886,14 @@ export default function App({
               </div>
               <div className="text-right flex-1">
                 <h3 className="font-extrabold text-xs text-white">سلام، {lifeData.profile?.name || 'کاربر'} عزیز</h3>
-                <span className="text-[9px] text-[#DDE2D5]/70 block font-semibold mt-0.5">توازن زندگی • هم‌بافت</span>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <span className="text-[9px] text-[#DDE2D5]/70 font-semibold">توازن زندگی • هم‌بافت</span>
+                  {(lifeData as any).gamification?.totalPoints > 0 && (
+                    <span className="text-[8px] bg-[#4A6741]/60 text-[#E8ECE0] px-1.5 py-0.5 rounded-md font-black">
+                      ⭐ {(lifeData as any).gamification?.level || 1} | {(lifeData as any).gamification?.totalPoints || 0}
+                    </span>
+                  )}
+                </div>
               </div>
             </button>
 
