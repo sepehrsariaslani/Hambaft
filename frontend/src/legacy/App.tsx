@@ -3741,6 +3741,7 @@ export default function App({
             onDeleteContact={handleDeleteContact}
             onUpdateContact={handleUpdateContact}
             onAddOccasion={handleAddOccasion}
+            onSelectContact={(_id: string) => { /* relation navigation handled inside ContactsSection */ }}
             todayDate={TODAY_DATE}
           />
         );

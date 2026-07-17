@@ -1,11 +1,15 @@
-import React, { useState } from 'react';
-import { Contact, ContactInteractionLog, Occasion } from '../types';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Contact, ContactInteractionLog, ContactRelation, ContactRelationType, ContactRelationDirection, Occasion } from '../types';
 import { 
   User, Users, Phone, Mail, Plus, Trash2, Calendar, MessageCircle, 
   Check, Search, Sparkles, Upload, Heart, Clock, MapPin, Activity, 
-  Award, AlertCircle, Filter, Tag, MessageSquare, Briefcase, PlusCircle, X, CheckCircle, Edit2
+  Award, AlertCircle, Filter, Tag, MessageSquare, Briefcase, PlusCircle, X, CheckCircle, Edit2,
+  Link2, ChevronDown, GripVertical
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import {
+  getContactRelations, createContactRelation, updateContactRelation, deleteContactRelation,
+} from '../../app/hambaft-api';
 
 interface ContactsSectionProps {
   contacts: Contact[];
@@ -13,6 +17,7 @@ interface ContactsSectionProps {
   onDeleteContact: (id: string) => void;
   onUpdateContact: (contact: Contact) => void;
   onAddOccasion?: (occ: Omit<Occasion, 'id'>) => void;
+  onSelectContact?: (id: string) => void;
   todayDate: string;
 }
 
@@ -31,12 +36,31 @@ const CLONESESS_LABELS = {
   acquaintance: 'آشنا / ارتباط موقت'
 };
 
+const RELATION_TYPE_LABELS: Record<string, string> = {
+  family: '👨‍👩‍👧 خانواده',
+  spouse_partner: '❤️ همسر/شریک زندگی',
+  friend: '🤝 دوست',
+  colleague: '💼 همکار',
+  manager: '👔 مدیر',
+  mentor: '🎓 منتور',
+  client: '🏢 مشتری',
+  introduced_by: '🔗 معرفی‌شده توسط',
+  custom: '✨ سفارشی',
+};
+
+const DIRECTION_LABELS: Record<string, string> = {
+  mutual: 'دوطرفه',
+  outgoing: 'خروجی',
+  incoming: 'ورودی',
+};
+
 export default function ContactsSection({
   contacts = [],
   onAddContact,
   onDeleteContact,
   onUpdateContact,
   onAddOccasion,
+  onSelectContact,
   todayDate
 }: ContactsSectionProps) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -61,6 +85,58 @@ export default function ContactsSection({
   const [hobbies, setHobbies] = useState('');
   const [notes, setNotes] = useState('');
   const [photoBase64, setPhotoBase64] = useState<string | undefined>(undefined);
+
+  // Contact Relations State
+  const [contactRelations, setContactRelations] = useState<ContactRelation[]>([]);
+  const [loadingRelations, setLoadingRelations] = useState(false);
+  const [relationModalOpen, setRelationModalOpen] = useState(false);
+  const [editRelationName, setEditRelationName] = useState<string | null>(null);
+  const [relTargetContact, setRelTargetContact] = useState<string>('');
+  const [relType, setRelType] = useState<ContactRelationType>('friend');
+  const [relDirectionality, setRelDirectionality] = useState<ContactRelationDirection>('mutual');
+  const [relStrength, setRelStrength] = useState(50);
+  const [relSinceDate, setRelSinceDate] = useState('');
+  const [relNotes, setRelNotes] = useState('');
+  const [deleteRelationConfirm, setDeleteRelationConfirm] = useState<string | null>(null);
+
+  // Fetch relations for the active contact
+  const fetchRelations = useCallback(async (contactId: string) => {
+    setLoadingRelations(true);
+    try {
+      const resp = await getContactRelations(contactId);
+      const raw = resp?.data?.relations || [];
+      const mapped: ContactRelation[] = raw.map((r: any) => ({
+        name: r.name,
+        fromContact: r.from_contact,
+        toContact: r.to_contact,
+        relationType: r.relation_type,
+        directionality: r.directionality,
+        directionLabel: r.direction_label,
+        otherContactId: r.other_contact_id,
+        otherContactName: r.other_contact_name,
+        otherContactPhoto: r.other_contact_photo,
+        otherContactCategory: r.other_contact_category,
+        strengthScore: r.strength_score || 0,
+        sinceDate: r.since_date,
+        notes: r.notes || '',
+        sortOrder: r.sort_order || 0,
+      }));
+      setContactRelations(mapped);
+    } catch {
+      setContactRelations([]);
+    } finally {
+      setLoadingRelations(false);
+    }
+  }, []);
+
+  // Fetch relations when active contact changes
+  useEffect(() => {
+    if (selectedContactId) {
+      fetchRelations(selectedContactId);
+    } else {
+      setContactRelations([]);
+    }
+  }, [selectedContactId, fetchRelations]);
 
   const activeContact = contacts.find(c => c.id === selectedContactId) || null;
 
@@ -154,6 +230,68 @@ export default function ContactsSection({
       setPhotoBase64(reader.result as string);
     };
     reader.readAsDataURL(file);
+  };
+
+  // Relation handlers
+  const handleOpenRelationModal = (existing?: ContactRelation) => {
+    if (existing) {
+      setEditRelationName(existing.name);
+      setRelTargetContact(existing.otherContactId);
+      setRelType(existing.relationType);
+      setRelDirectionality(existing.directionality);
+      setRelStrength(existing.strengthScore);
+      setRelSinceDate(existing.sinceDate || '');
+      setRelNotes(existing.notes);
+    } else {
+      setEditRelationName(null);
+      setRelTargetContact('');
+      setRelType('friend');
+      setRelDirectionality('mutual');
+      setRelStrength(50);
+      setRelSinceDate('');
+      setRelNotes('');
+    }
+    setRelationModalOpen(true);
+  };
+
+  const handleSaveRelation = async () => {
+    if (!activeContact || !relTargetContact) return;
+    try {
+      if (editRelationName) {
+        await updateContactRelation(editRelationName, {
+          relation_type: relType,
+          directionality: relDirectionality,
+          strength_score: relStrength,
+          since_date: relSinceDate || undefined,
+          notes: relNotes,
+        });
+      } else {
+        await createContactRelation({
+          from_contact: activeContact.id,
+          to_contact: relTargetContact,
+          relation_type: relType,
+          directionality: relDirectionality,
+          strength_score: relStrength,
+          since_date: relSinceDate || undefined,
+          notes: relNotes,
+        });
+      }
+      await fetchRelations(activeContact.id);
+      setRelationModalOpen(false);
+    } catch (err) {
+      console.error('[hambaft] save relation failed', err);
+    }
+  };
+
+  const handleDeleteRelation = async (relationName: string) => {
+    if (!activeContact) return;
+    try {
+      await deleteContactRelation(relationName);
+      await fetchRelations(activeContact.id);
+    } catch (err) {
+      console.error('[hambaft] delete relation failed', err);
+    }
+    setDeleteRelationConfirm(null);
   };
 
   const handleSaveContact = (e: React.FormEvent) => {
@@ -680,6 +818,86 @@ export default function ContactsSection({
                 </div>
               </div>
 
+              {/* Relations Network Section */}
+              <div className="space-y-4 pt-4 border-t border-dashed border-[#E6DFD3]/80 dark:border-[#3D4133]/20">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-black text-[#2D3025] dark:text-[#E8ECE0] flex items-center gap-1.5">
+                    <Link2 className="w-3.5 h-3.5 text-[#7C8363] dark:text-[#9ECE9A]" />
+                    <span>شبکه ارتباطات</span>
+                    {contactRelations.length > 0 && (
+                      <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full bg-[#7C8363]/10 dark:bg-[#9ECE9A]/10 text-[#7C8363] dark:text-[#9ECE9A]">{contactRelations.length}</span>
+                    )}
+                  </h4>
+                  <button
+                    onClick={() => handleOpenRelationModal()}
+                    className="px-2.5 py-1.5 bg-[#7C8363]/10 dark:bg-[#9ECE9A]/10 text-[#7C8363] dark:text-[#9ECE9A] text-[9px] font-black rounded-lg cursor-pointer hover:bg-[#7C8363]/20 transition-colors flex items-center gap-1"
+                  >
+                    <Plus className="w-3 h-3" />
+                    افزودن رابطه
+                  </button>
+                </div>
+
+                {loadingRelations ? (
+                  <div className="flex items-center justify-center py-6 gap-2">
+                    <div className="w-4 h-4 border-2 border-[#7C8363]/30 dark:border-[#9ECE9A]/30 border-t-[#7C8363] dark:border-t-[#9ECE9A] rounded-full animate-spin" />
+                    <span className="text-[10px] text-[#8D7F72] dark:text-[#9D978B]">در حال بارگذاری...</span>
+                  </div>
+                ) : contactRelations.length > 0 ? (
+                  <div className="space-y-2">
+                    {contactRelations.map(rel => (
+                      <div key={rel.name} className="group flex items-center gap-3 p-3 bg-white dark:bg-[#20241A] border border-[#E6DFD3]/40 dark:border-[#3D4133]/20 rounded-2xl text-right transition-all hover:shadow-sm">
+                        {/* Other contact avatar */}
+                        <button
+                          onClick={() => { setSelectedContactId(rel.otherContactId); if (onSelectContact) onSelectContact(rel.otherContactId); }}
+                          className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 border border-[#E6DFD3]/40 dark:border-[#3D4133]/30 overflow-hidden shrink-0 flex items-center justify-center cursor-pointer hover:opacity-80 transition-opacity"
+                        >
+                          {rel.otherContactPhoto ? (
+                            <img src={rel.otherContactPhoto} alt="" className="w-full h-full object-cover" />
+                          ) : (
+                            <span className="text-lg">👤</span>
+                          )}
+                        </button>
+
+                        <div className="flex-1 min-w-0">
+                          <button
+                            onClick={() => { setSelectedContactId(rel.otherContactId); if (onSelectContact) onSelectContact(rel.otherContactId); }}
+                            className="text-[11px] font-black text-[#2D3025] dark:text-[#E8ECE0] block truncate text-right hover:text-[#7C8363] dark:hover:text-[#9ECE9A] cursor-pointer transition-colors"
+                          >
+                            {rel.otherContactName}
+                          </button>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className="text-[8px] font-bold text-[#7C8363] dark:text-[#9ECE9A] bg-[#7C8363]/10 dark:bg-[#9ECE9A]/10 px-1.5 py-0.5 rounded-md">
+                              {RELATION_TYPE_LABELS[rel.relationType] || rel.relationType}
+                            </span>
+                            <span className={`text-[7px] font-bold px-1.5 py-0.5 rounded-md ${
+                              rel.directionLabel === 'mutual' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300' :
+                              rel.directionLabel === 'outgoing' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300' :
+                              'bg-amber-100 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300'
+                            }`}>
+                              {DIRECTION_LABELS[rel.directionLabel] || rel.directionLabel}
+                            </span>
+                            {rel.strengthScore > 0 && (
+                              <span className="text-[7px] text-[#8D7F72] dark:text-[#9D978B]">💪 {rel.strengthScore}</span>
+                            )}
+                          </div>
+                          {rel.notes && (
+                            <p className="text-[9px] text-[#8D7F72] dark:text-[#9D978B] mt-1 truncate">{rel.notes}</p>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                          <button onClick={() => handleOpenRelationModal(rel)} className="p-1 rounded text-[#8D7F72] dark:text-[#9D978B] hover:text-[#7C8363] dark:hover:text-[#9ECE9A] cursor-pointer"><Edit2 className="w-3 h-3" /></button>
+                          <button onClick={() => setDeleteRelationConfirm(rel.name)} className="p-1 rounded text-[#8D7F72] dark:text-[#9D978B] hover:text-red-400 cursor-pointer"><Trash2 className="w-3 h-3" /></button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-5 text-[10px] text-[#8D7F72] dark:text-[#9D978B] border border-[#E6DFD3]/40 dark:border-[#3D4133]/20 rounded-2xl bg-white dark:bg-[#20241A] p-4">
+                    هنوز ارتباطی ثبت نشده. با افزودن رابطه، شبکه ارتباطات خود را بسازید.
+                  </div>
+                )}
+              </div>
             </motion.div>
           ) : (
             <div className="bg-[#FDFBF7] dark:bg-[#1B1D16] border border-[#E6DFD3] dark:border-[#3D4133]/30 rounded-[28px] p-12 text-center text-xs text-[#8D7F72] transition-colors flex flex-col items-center justify-center h-full min-h-[350px]">
@@ -1205,6 +1423,127 @@ export default function ContactsSection({
               </form>
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+
+      {/* MODAL: ADD/EDIT RELATION */}
+      <AnimatePresence>
+        {relationModalOpen && activeContact && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-[#FDFBF7] dark:bg-[#1B1D16] border border-[#E6DFD3] dark:border-[#3D4133]/50 rounded-[24px] p-6 max-w-md w-full text-right"
+            >
+              <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-3 mb-4">
+                <h3 className="text-sm font-black text-[#2D3025] dark:text-[#E8ECE0] flex items-center gap-2">
+                  <Link2 className="w-4 h-4 text-[#7C8363] dark:text-[#9ECE9A]" />
+                  {editRelationName ? 'ویرایش رابطه' : 'افزودن رابطه'}
+                </h3>
+                <button onClick={() => setRelationModalOpen(false)} className="p-1 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 cursor-pointer">
+                  <X className="w-4 h-4 text-[#8D7F72]" />
+                </button>
+              </div>
+
+              <div className="space-y-4 max-h-[70vh] overflow-y-auto px-1">
+                {/* Target Contact */}
+                <div>
+                  <label className="text-[10px] font-black text-[#8D7F72] dark:text-[#9D978B] block mb-1">مخاطب مقصد *</label>
+                  <select
+                    value={relTargetContact}
+                    onChange={(e) => setRelTargetContact(e.target.value)}
+                    disabled={!!editRelationName}
+                    className="w-full text-xs font-black p-3 rounded-xl border border-[#E6DFD3] dark:border-[#3D4133]/50 bg-white dark:bg-[#20241A] disabled:opacity-50"
+                  >
+                    <option value="">انتخاب کنید...</option>
+                    {contacts.filter(c => c.id !== activeContact.id).map(c => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Relation Type */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[10px] font-black text-[#8D7F72] dark:text-[#9D978B] block mb-1">نوع رابطه *</label>
+                    <select
+                      value={relType}
+                      onChange={(e) => setRelType(e.target.value as ContactRelationType)}
+                      className="w-full text-xs font-black p-3 rounded-xl border border-[#E6DFD3] dark:border-[#3D4133]/50 bg-white dark:bg-[#20241A]"
+                    >
+                      {Object.entries(RELATION_TYPE_LABELS).map(([k, v]) => (
+                        <option key={k} value={k}>{v}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black text-[#8D7F72] dark:text-[#9D978B] block mb-1">جهت رابطه *</label>
+                    <select
+                      value={relDirectionality}
+                      onChange={(e) => setRelDirectionality(e.target.value as ContactRelationDirection)}
+                      className="w-full text-xs font-black p-3 rounded-xl border border-[#E6DFD3] dark:border-[#3D4133]/50 bg-white dark:bg-[#20241A]"
+                    >
+                      <option value="mutual">دوطرفه (متقابل)</option>
+                      <option value="directed">یک‌طرفه (جهت‌دار)</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Strength */}
+                <div>
+                  <label className="text-[10px] font-black text-[#8D7F72] dark:text-[#9D978B] block mb-1">شدت رابطه: {relStrength}</label>
+                  <input type="range" min={0} max={100} value={relStrength} onChange={e => setRelStrength(Number(e.target.value))}
+                    className="w-full accent-[#7C8363] dark:accent-[#9ECE9A]" />
+                  <div className="flex justify-between text-[7px] text-[#9D978B] mt-0.5"><span>ضعیف</span><span>متوسط</span><span>قوی</span></div>
+                </div>
+
+                {/* Since Date */}
+                <div>
+                  <label className="text-[10px] font-black text-[#8D7F72] dark:text-[#9D978B] block mb-1">تاریخ شروع (اختیاری)</label>
+                  <input type="date" value={relSinceDate} onChange={e => setRelSinceDate(e.target.value)}
+                    className="w-full text-xs font-black p-3 rounded-xl border border-[#E6DFD3] dark:border-[#3D4133]/50 bg-white dark:bg-[#20241A]" />
+                </div>
+
+                {/* Notes */}
+                <div>
+                  <label className="text-[10px] font-black text-[#8D7F72] dark:text-[#9D978B] block mb-1">یادداشت (اختیاری)</label>
+                  <textarea rows={2} value={relNotes} onChange={e => setRelNotes(e.target.value)}
+                    placeholder="توضیحات رابطه..."
+                    className="w-full text-xs font-extrabold p-3 rounded-xl border border-[#E6DFD3] dark:border-[#3D4133]/50 bg-white dark:bg-[#20241A] resize-none focus:outline-none" />
+                </div>
+
+                {/* Submit */}
+                <button
+                  onClick={handleSaveRelation}
+                  disabled={!relTargetContact}
+                  className="w-full py-3 bg-[#7C8363] dark:bg-[#9ECE9A] text-white dark:text-[#121411] text-xs font-black rounded-xl shadow-md cursor-pointer hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  <Check className="w-4 h-4" />
+                  {editRelationName ? 'ذخیره تغییرات' : 'ثبت رابطه'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* DELETE RELATION CONFIRM */}
+      <AnimatePresence>
+        {deleteRelationConfirm && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setDeleteRelationConfirm(null)}>
+            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }}
+              onClick={e => e.stopPropagation()}
+              className="bg-white dark:bg-[#1B1D16] rounded-2xl p-5 max-w-xs w-full shadow-2xl border border-[#E6DFD3]/60 dark:border-[#3D4133]/60">
+              <h3 className="text-[12px] font-black text-[#2D3025] dark:text-[#E8ECE0] mb-2">حذف رابطه</h3>
+              <p className="text-[10px] text-[#8D7F72] dark:text-[#9D978B] mb-3">مطمئنی؟ این رابطه حذف می‌شه.</p>
+              <div className="flex items-center gap-2 justify-end">
+                <button onClick={() => setDeleteRelationConfirm(null)} className="px-3 py-1.5 text-[10px] font-bold text-[#8D7F72] dark:text-[#9D978B] cursor-pointer">انصراف</button>
+                <button onClick={() => handleDeleteRelation(deleteRelationConfirm)} className="px-3 py-1.5 bg-red-500 text-white rounded-lg text-[10px] font-bold cursor-pointer">حذف</button>
+              </div>
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
 

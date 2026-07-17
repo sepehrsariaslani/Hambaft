@@ -862,6 +862,42 @@ export async function deleteContactRecord(id: string) {
   return call('hambaft.hambaft.api.delete_contact', { name: id })
 }
 
+// ─── Contact Relations ─────────────────────────────────────
+
+export async function getContactRelations(contactId: string) {
+  return callGet<{ data?: { relations?: any[]; contact_not_ready?: boolean } }>(
+    `hambaft.hambaft.api.get_contact_relations?contact_id=${encodeURIComponent(contactId)}`
+  )
+}
+
+export async function createContactRelation(data: {
+  from_contact: string;
+  to_contact: string;
+  relation_type?: string;
+  directionality?: string;
+  strength_score?: number;
+  since_date?: string;
+  notes?: string;
+}) {
+  return call('hambaft.hambaft.api.create_contact_relation', { data })
+}
+
+export async function updateContactRelation(name: string, data: {
+  relation_type?: string;
+  directionality?: string;
+  strength_score?: number;
+  since_date?: string;
+  notes?: string;
+  sort_order?: number;
+  status?: string;
+}) {
+  return call('hambaft.hambaft.api.update_contact_relation', { name, data })
+}
+
+export async function deleteContactRelation(name: string) {
+  return call('hambaft.hambaft.api.delete_contact_relation', { name })
+}
+
 export async function createSleepLogRecord(log: Omit<SleepLog, 'id'>) {
   return call('hambaft.hambaft.api.create_sleep_log', {
     data: {

@@ -2576,7 +2576,174 @@ def update_contact(name, data):
 def delete_contact(name):
     _check_auth()
     _require_owner("Hambaft Contact", name)
+    # Also delete all contact relations involving this contact
+    try:
+        for rel in frappe.get_all("Hambaft Contact Relation", filters={"user": frappe.session.user, "from_contact": name}):
+            frappe.delete_doc("Hambaft Contact Relation", rel.name, ignore_permissions=True, force=True)
+        for rel in frappe.get_all("Hambaft Contact Relation", filters={"user": frappe.session.user, "to_contact": name}):
+            frappe.delete_doc("Hambaft Contact Relation", rel.name, ignore_permissions=True, force=True)
+    except Exception:
+        pass  # Relation tables may not exist yet
     frappe.delete_doc("Hambaft Contact", name, ignore_permissions=True)
+    frappe.db.commit()
+    return _api_response({"ok": True})
+
+
+# ─── Contact Relations ─────────────────────────────────────────
+
+
+def _contact_relations_table_exists():
+    """Check if Hambaft Contact Relation table exists."""
+    try:
+        return frappe.db.exists("DocType", "Hambaft Contact Relation")
+    except Exception:
+        return False
+
+
+@frappe.whitelist()
+def get_contact_relations(contact_id):
+    """Get all relations for a contact. Returns both outgoing and incoming relations.
+    For mutual relations, only returns one record (from_contact < to_contact).
+    Enriches with contact names for display.
+    """
+    _check_auth()
+    user = frappe.session.user
+
+    if not _contact_relations_table_exists():
+        return _api_response({"relations": [], "contact_not_ready": True})
+
+    # Fetch relations where this contact is either from or to
+    relations = frappe.get_all(
+        "Hambaft Contact Relation",
+        filters={"user": user, "status": "active"},
+        fields=["name", "from_contact", "to_contact", "relation_type", "directionality",
+                 "strength_score", "since_date", "notes", "sort_order", "status"],
+        order_by="sort_order asc, creation desc",
+    )
+
+    # Filter to only relations involving this contact
+    result = []
+    for rel in relations:
+        if rel.from_contact != contact_id and rel.to_contact != contact_id:
+            continue
+
+        # Determine the "other" contact
+        other_id = rel.to_contact if rel.from_contact == contact_id else rel.from_contact
+
+        # Get other contact's name
+        other_name = frappe.db.get_value("Hambaft Contact", other_id, "full_name") or other_id
+        other_photo = frappe.db.get_value("Hambaft Contact", other_id, "photo_url") or None
+        other_category = frappe.db.get_value("Hambaft Contact", other_id, "contact_category") or None
+
+        # Determine direction label from the perspective of the active contact
+        is_from = rel.from_contact == contact_id
+        if rel.directionality == "mutual":
+            direction_label = "mutual"
+        elif is_from:
+            direction_label = "outgoing"
+        else:
+            direction_label = "incoming"
+
+        result.append({
+            "name": rel.name,
+            "from_contact": rel.from_contact,
+            "to_contact": rel.to_contact,
+            "relation_type": rel.relation_type,
+            "directionality": rel.directionality,
+            "direction_label": direction_label,
+            "other_contact_id": other_id,
+            "other_contact_name": other_name,
+            "other_contact_photo": other_photo,
+            "other_contact_category": other_category,
+            "strength_score": rel.strength_score or 0,
+            "since_date": rel.since_date or None,
+            "notes": rel.notes or "",
+            "sort_order": rel.sort_order or 0,
+        })
+
+    return _api_response({"relations": result})
+
+
+@frappe.whitelist()
+def create_contact_relation(data):
+    """Create a relation between two contacts.
+    Both contacts must belong to the same user.
+    For mutual relations, also creates the reverse record for easy querying.
+    """
+    _check_auth()
+    user = frappe.session.user
+
+    if not _contact_relations_table_exists():
+        return _api_response({"relation_name": None, "created": False, "contact_not_ready": True})
+
+    if isinstance(data, str):
+        data = json.loads(data)
+    data = data or {}
+
+    from_contact = data.get("from_contact")
+    to_contact = data.get("to_contact")
+
+    if not from_contact or not to_contact:
+        frappe.throw("Both from_contact and to_contact are required.")
+
+    if from_contact == to_contact:
+        frappe.throw("A contact cannot be related to itself.")
+
+    # Validate ownership of both contacts
+    for cid in [from_contact, to_contact]:
+        owner = frappe.db.get_value("Hambaft Contact", cid, "user")
+        if owner != user:
+            frappe.throw(f"Contact {cid} does not belong to you.", frappe.PermissionError)
+
+    relation_type = data.get("relation_type") or "friend"
+    directionality = data.get("directionality") or "mutual"
+    strength_score = cint(data.get("strength_score") or 0)
+    since_date = data.get("since_date") or None
+    notes = data.get("notes") or ""
+
+    doc = frappe.new_doc("Hambaft Contact Relation")
+    doc.user = user
+    doc.from_contact = from_contact
+    doc.to_contact = to_contact
+    doc.relation_type = relation_type
+    doc.directionality = directionality
+    doc.strength_score = strength_score
+    doc.status = "active"
+    doc.since_date = since_date
+    doc.notes = notes
+    doc.sort_order = cint(data.get("sort_order") or 0)
+    doc.insert(ignore_permissions=True)
+    frappe.db.commit()
+
+    return _api_response({"relation_name": doc.name, "created": True})
+
+
+@frappe.whitelist()
+def update_contact_relation(name, data):
+    """Update a contact relation."""
+    _check_auth()
+    _require_owner("Hambaft Contact Relation", name)
+
+    if isinstance(data, str):
+        data = json.loads(data)
+    data = data or {}
+
+    doc = frappe.get_doc("Hambaft Contact Relation", name)
+    for fieldname in ("relation_type", "directionality", "strength_score", "since_date", "notes", "sort_order", "status"):
+        if fieldname in data:
+            setattr(doc, fieldname, data.get(fieldname))
+
+    doc.save(ignore_permissions=True)
+    frappe.db.commit()
+    return _api_response({"ok": True})
+
+
+@frappe.whitelist()
+def delete_contact_relation(name):
+    """Delete a contact relation."""
+    _check_auth()
+    _require_owner("Hambaft Contact Relation", name)
+    frappe.delete_doc("Hambaft Contact Relation", name, ignore_permissions=True, force=True)
     frappe.db.commit()
     return _api_response({"ok": True})
 

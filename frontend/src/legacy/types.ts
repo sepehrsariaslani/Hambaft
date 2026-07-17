@@ -615,6 +615,28 @@ export interface Contact {
   interactionLogs?: ContactInteractionLog[];
   relationshipScore?: number; // 1-100 score of frequency of communication
   closenessTier?: 'inner' | 'outer' | 'acquaintance'; // طلایی (حلقه اول)، نقره‌ای، معمولی
+  relations?: ContactRelation[];
+}
+
+export type ContactRelationType = 'family' | 'spouse_partner' | 'friend' | 'colleague' | 'manager' | 'mentor' | 'client' | 'introduced_by' | 'custom';
+export type ContactRelationDirection = 'mutual' | 'directed';
+export type ContactDirectionLabel = 'mutual' | 'outgoing' | 'incoming';
+
+export interface ContactRelation {
+  name: string;
+  fromContact: string;
+  toContact: string;
+  relationType: ContactRelationType;
+  directionality: ContactRelationDirection;
+  directionLabel: ContactDirectionLabel;
+  otherContactId: string;
+  otherContactName: string;
+  otherContactPhoto?: string;
+  otherContactCategory?: string;
+  strengthScore: number;
+  sinceDate?: string;
+  notes: string;
+  sortOrder: number;
 }
 
 export interface MoodLog {
@@ -682,6 +704,7 @@ export interface LifeData {
   bodyMeasurementLogs?: BodyMeasurementLog[];
   installments?: Installment[];
   contacts?: Contact[];
+  contactRelations?: ContactRelation[];
   moodLogs?: MoodLog[];
   areas?: Area[];
 }
