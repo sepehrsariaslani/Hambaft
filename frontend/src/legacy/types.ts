@@ -712,6 +712,21 @@ export interface GoalMemberItem {
   joinedAt: string | null;
 }
 
+// Phase 7: Comments & Reactions
+export interface CommentItem {
+  id: string;
+  userInfo: PartnerInfo;
+  body: string;
+  createdAt: string;
+}
+
+export interface ReactionGroup {
+  emoji: string;
+  count: number;
+  users: PartnerInfo[];
+  myReaction: boolean;
+}
+
 export interface MoodLog {
   id: string;
   date: string; // YYYY-MM-DD

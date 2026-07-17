@@ -1786,3 +1786,54 @@ export async function getSharedGoals() {
 export async function removeGoalMember(data: { goal_id: string; member_email: string }) {
   return call<{ data?: any }>('hambaft.hambaft.api.remove_goal_member', { data })
 }
+
+
+// ═══════════════════════════════════════════════════════════════
+// Phase 7: Comments & Reactions
+// ═══════════════════════════════════════════════════════════════
+
+export interface CommentItem {
+  id: string
+  user_info: PartnerInfo
+  body: string
+  created_at: string
+}
+
+export interface ReactionGroup {
+  emoji: string
+  count: number
+  users: PartnerInfo[]
+  my_reaction: boolean
+}
+
+export async function addComment(data: {
+  entity_type: string
+  entity: string
+  body: string
+}) {
+  return call<{ data?: any }>('hambaft.hambaft.api.add_comment', { data })
+}
+
+export async function getComments(entityType: string, entity: string) {
+  return callGet<{ data?: { comments?: CommentItem[] } }>(
+    `hambaft.hambaft.api.get_comments?entity_type=${encodeURIComponent(entityType)}&entity=${encodeURIComponent(entity)}`
+  )
+}
+
+export async function deleteComment(commentId: string) {
+  return call<{ data?: any }>('hambaft.hambaft.api.delete_comment', { comment_id: commentId })
+}
+
+export async function toggleReaction(data: {
+  entity_type: string
+  entity: string
+  emoji: string
+}) {
+  return call<{ data?: any }>('hambaft.hambaft.api.toggle_reaction', { data })
+}
+
+export async function getReactions(entityType: string, entity: string) {
+  return callGet<{ data?: { reactions?: ReactionGroup[] } }>(
+    `hambaft.hambaft.api.get_reactions?entity_type=${encodeURIComponent(entityType)}&entity=${encodeURIComponent(entity)}`
+  )
+}

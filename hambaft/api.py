@@ -600,6 +600,27 @@ def _ensure_hambaft_user_role(user_name):
         user_doc.save(ignore_permissions=True)
 
 
+def _get_goal_members_list(goal_name):
+    """Get active members for a goal."""
+    members = frappe.get_all(
+        "Hambaft Goal Member",
+        filters={"goal": goal_name, "status": "فعال"},
+        fields=["name", "user", "role", "joined_at"],
+    )
+    result = []
+    for m in members:
+        info = _user_display_info(m.user)
+        result.append({
+            "membership_id": m.name,
+            "user_email": m.user,
+            "user_full_name": info.get("full_name", m.user),
+            "user_avatar_url": info.get("avatar_url"),
+            "role": m.role,
+            "joined_at": str(m.joined_at) if m.joined_at else None,
+        })
+    return result
+
+
 def _extract_note_blocks(doc):
     """Parse note_blocks_json from a doc into noteBlocks list for frontend."""
     raw = getattr(doc, "note_blocks_json", None) if hasattr(doc, "note_blocks_json") else None
@@ -1100,6 +1121,24 @@ def get_goals(status=None, category=None, limit=50, offset=0):
         filters["category"] = category
     goals = frappe.get_all("Goal", filters=filters, fields="*",
                            limit_page_length=cint(limit), start=cint(offset))
+
+    # Also include shared goals where user is a member but not owner
+    user = frappe.session.user
+    shared_memberships = frappe.get_all(
+        "Hambaft Goal Member",
+        filters={"user": user, "status": "فعال"},
+        fields=["goal"],
+    )
+    shared_goal_ids = [m.goal for m in shared_memberships if m.goal]
+    already_loaded = {g.get("name") for g in goals}
+    for gid in shared_goal_ids:
+        if gid not in already_loaded:
+            try:
+                gdoc = frappe.get_doc("Goal", gid)
+                goals.append(gdoc.as_dict())
+            except Exception:
+                pass
+
     return _api_response({"goals": goals})
 
 
@@ -5670,6 +5709,7 @@ def _goal_to_frontend(doc):
         "color": doc.color,
         "icon": doc.icon,
         "user": doc.user,
+        "privacy": getattr(doc, "privacy", None) or "خصوصی",
         # Project weight buckets
         "project_progress_weight": doc.project_progress_weight or 40,
         "milestone_weight": doc.milestone_weight or 25,
@@ -5689,6 +5729,7 @@ def _goal_to_frontend(doc):
         "linked_habits": linked_habits,
         "linked_finance_accounts": linked_finance,
         "linked_projects": linked_projects,
+        "members": _get_goal_members_list(doc.name),
         "noteBlocks": _extract_note_blocks(doc),
         "creation": str(doc.creation) if getattr(doc, "creation", None) else None,
     }
@@ -7191,3 +7232,221 @@ def remove_goal_member(data=None):
     frappe.db.commit()
 
     return _api_response({"status": "removed"})
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PHASE 7: Comments & Reactions
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@frappe.whitelist()
+def add_comment(data=None):
+    """Add a comment on an entity (goal, task, etc.)."""
+    _check_auth()
+    user = frappe.session.user
+
+    if isinstance(data, str):
+        data = json.loads(data)
+    data = data or {}
+
+    entity_type = data.get("entity_type")
+    entity = data.get("entity")
+    body = (data.get("body") or "").strip()
+
+    if not entity_type or not entity or not body:
+        frappe.throw("entity_type, entity, and body are required.")
+
+    # Validate entity exists and user has access
+    _validate_entity_access(entity_type, entity, user)
+
+    doc = frappe.new_doc("Hambaft Comment")
+    doc.entity_type = entity_type
+    doc.entity = entity
+    doc.user = user
+    doc.body = body
+    doc.status = "فعال"
+    doc.insert(ignore_permissions=True)
+    frappe.db.commit()
+
+    return _api_response({
+        "comment_id": doc.name,
+        "user_info": _user_display_info(user),
+        "body": body,
+        "created_at": str(doc.creation),
+    })
+
+
+@frappe.whitelist()
+def get_comments(entity_type=None, entity=None, limit=50, offset=0):
+    """Get comments for an entity."""
+    _check_auth()
+    user = frappe.session.user
+
+    if not entity_type or not entity:
+        frappe.throw("entity_type and entity are required.")
+
+    _validate_entity_access(entity_type, entity, user, read_only=True)
+
+    comments = frappe.get_all(
+        "Hambaft Comment",
+        filters={"entity_type": entity_type, "entity": entity, "status": "فعال"},
+        fields=["name", "user", "body", "status", "creation"],
+        order_by="creation asc",
+        limit_page_length=cint(limit),
+        start=cint(offset),
+    )
+
+    result = []
+    for c in comments:
+        info = _user_display_info(c.user)
+        result.append({
+            "id": c.name,
+            "user_info": info,
+            "body": c.body,
+            "created_at": str(c.creation),
+        })
+
+    return _api_response({"comments": result})
+
+
+@frappe.whitelist()
+def delete_comment(comment_id=None):
+    """Delete your own comment."""
+    _check_auth()
+    user = frappe.session.user
+
+    if not comment_id:
+        frappe.throw("comment_id is required.")
+
+    comment_doc = frappe.get_doc("Hambaft Comment", comment_id)
+    if comment_doc.user != user:
+        frappe.throw("You can only delete your own comments.", frappe.PermissionError)
+
+    comment_doc.status = "حذف‌شده"
+    comment_doc.save(ignore_permissions=True)
+    frappe.db.commit()
+
+    return _api_response({"status": "deleted"})
+
+
+@frappe.whitelist()
+def toggle_reaction(data=None):
+    """Toggle an emoji reaction on an entity. If exists, remove it. If not, add it."""
+    _check_auth()
+    user = frappe.session.user
+
+    if isinstance(data, str):
+        data = json.loads(data)
+    data = data or {}
+
+    entity_type = data.get("entity_type")
+    entity = data.get("entity")
+    emoji = data.get("emoji")
+
+    if not entity_type or not entity or not emoji:
+        frappe.throw("entity_type, entity, and emoji are required.")
+
+    _validate_entity_access(entity_type, entity, user)
+
+    # Check if reaction exists
+    existing = frappe.db.exists(
+        "Hambaft Reaction",
+        {
+            "entity_type": entity_type,
+            "entity": entity,
+            "user": user,
+            "emoji": emoji,
+        },
+    )
+
+    if existing:
+        # Remove reaction
+        frappe.delete_doc("Hambaft Reaction", existing, ignore_permissions=True, force=True)
+        frappe.db.commit()
+        return _api_response({"status": "removed", "emoji": emoji})
+    else:
+        # Add reaction
+        doc = frappe.new_doc("Hambaft Reaction")
+        doc.entity_type = entity_type
+        doc.entity = entity
+        doc.user = user
+        doc.emoji = emoji
+        doc.insert(ignore_permissions=True)
+        frappe.db.commit()
+        return _api_response({"status": "added", "emoji": emoji})
+
+
+@frappe.whitelist()
+def get_reactions(entity_type=None, entity=None):
+    """Get all reactions for an entity, grouped by emoji."""
+    _check_auth()
+    user = frappe.session.user
+
+    if not entity_type or not entity:
+        frappe.throw("entity_type and entity are required.")
+
+    _validate_entity_access(entity_type, entity, user, read_only=True)
+
+    reactions = frappe.get_all(
+        "Hambaft Reaction",
+        filters={"entity_type": entity_type, "entity": entity},
+        fields=["name", "user", "emoji", "creation"],
+    )
+
+    # Group by emoji
+    grouped = {}
+    for r in reactions:
+        emoji = r.emoji
+        if emoji not in grouped:
+            grouped[emoji] = {"emoji": emoji, "count": 0, "users": [], "my_reaction": False}
+        info = _user_display_info(r.user)
+        grouped[emoji]["count"] += 1
+        grouped[emoji]["users"].append(info)
+        if r.user == user:
+            grouped[emoji]["my_reaction"] = True
+
+    return _api_response({"reactions": list(grouped.values())})
+
+
+def _validate_entity_access(entity_type, entity, user, read_only=False):
+    """Validate that the user has access to the entity."""
+    doctype_map = {
+        "goal": "Hambaft Goal",
+        "project": "Hambaft Project",
+        "task": "Hambaft Task",
+        "occasion": "Hambaft Occasion",
+        "document": "Hambaft Document",
+        "finance": "Hambaft Finance Entry",
+        "journal_entry": "Hambaft Daily Journal",
+        "comment": "Hambaft Comment",
+    }
+
+    target_dt = doctype_map.get(entity_type)
+    if not target_dt:
+        frappe.throw(f"Unsupported entity type: {entity_type}")
+
+    if not frappe.db.exists(target_dt, entity):
+        frappe.throw(f"{target_dt} '{entity}' does not exist.")
+
+    # For goals: owner or member can access shared goals
+    if entity_type == "goal":
+        goal_owner = frappe.db.get_value("Hambaft Goal", entity, "user")
+        if goal_owner == user:
+            return
+        # Check membership
+        is_member = frappe.db.exists("Hambaft Goal Member", {
+            "goal": entity, "user": user, "status": "فعال"
+        })
+        if is_member:
+            return
+        # Check privacy — public goals are readable
+        privacy = frappe.db.get_value("Hambaft Goal", entity, "privacy") or "خصوصی"
+        if privacy != "خصوصی" and read_only:
+            return
+        frappe.throw("You do not have access to this goal.", frappe.PermissionError)
+
+    # For other entity types: owner check
+    if not read_only:
+        owner = frappe.db.get_value(target_dt, entity, "user")
+        if owner and owner != user:
+            # Allow if they share a goal
+            frappe.throw("You do not have permission to modify this.", frappe.PermissionError)

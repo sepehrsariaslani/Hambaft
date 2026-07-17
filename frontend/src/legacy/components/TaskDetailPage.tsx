@@ -22,6 +22,7 @@ import {
 } from 'lucide-react'
 import type { Task } from '../types'
 import LinkedContacts from './LinkedContacts'
+import CommentReactions from './CommentReactions'
 import {
   ImportanceBadge, ImportanceSelector, ImpactScoreBadge,
   TaskImpactBanner, TaskImpactExplanation, BlockedTaskIndicator,
@@ -847,6 +848,9 @@ export default function TaskDetailPage({
               {task.id && (
                 <div className="px-4 py-2.5 border-t border-[#E6DFD3]/30 dark:border-[#3D4133]/20">
                   <LinkedContacts entityType="task" entityId={task.id} contacts={contacts} onNavigateContact={(contactId) => onNavigate?.('contacts', contactId)} />
+                  <div className="mt-2 pt-2 border-t border-[#E6DFD3]/30 dark:border-[#3D4133]/20">
+                    <CommentReactions entityType="task" entityId={task.id} />
+                  </div>
                 </div>
               )}
             </div>
