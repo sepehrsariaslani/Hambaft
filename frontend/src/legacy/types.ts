@@ -890,3 +890,22 @@ export interface GamificationResult {
     points_awarded: number;
   }>;
 }
+
+// Phase 10: Daily Challenges
+export interface DailyChallenge {
+  id: string;
+  templateId: string;
+  title: string;
+  titleFa: string;
+  description: string;
+  descriptionFa: string;
+  icon: string;
+  challengeType: string;
+  difficulty: 'easy' | 'medium' | 'hard';
+  category: string;
+  status: 'active' | 'completed' | 'expired';
+  progress: number;
+  targetCount: number;
+  pointsReward: number;
+  completedAt: string | null;
+}

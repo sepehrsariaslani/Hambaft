@@ -1954,3 +1954,56 @@ export async function getPointHistory(limit = 50, offset = 0) {
 export async function seedBadges() {
   return call<{ data?: any }>('hambaft.hambaft.api.seed_badges', {})
 }
+
+
+// ═══════════════════════════════════════════════════════════════
+// Phase 10: Daily Challenges
+// ═══════════════════════════════════════════════════════════════
+
+export interface DailyChallenge {
+  id: string
+  template_id: string
+  title: string
+  title_fa: string
+  description: string
+  description_fa: string
+  icon: string
+  challenge_type: string
+  difficulty: 'easy' | 'medium' | 'hard'
+  category: string
+  status: 'فعال' | 'تکمیل‌شده' | 'منقضی‌شده'
+  progress: number
+  target_count: number
+  points_reward: number
+  completed_at: string | null
+}
+
+export interface ChallengeHistoryItem {
+  id: string
+  title: string
+  title_fa: string
+  icon: string
+  difficulty: string
+  status: string
+  progress: number
+  target_count: number
+  points_reward: number
+  challenge_date: string
+  completed_at: string | null
+}
+
+export async function getDailyChallenges() {
+  return callGet<{ data?: { challenges: DailyChallenge[]; date: string } }>(
+    'hambaft.hambaft.api.get_daily_challenges'
+  )
+}
+
+export async function getChallengeHistory(limit = 30, offset = 0) {
+  return callGet<{ data?: { challenges: ChallengeHistoryItem[] } }>(
+    `hambaft.hambaft.api.get_challenge_history?limit=${limit}&offset=${offset}`
+  )
+}
+
+export async function seedChallengeTemplates() {
+  return call<{ data?: any }>('hambaft.hambaft.api.seed_challenge_templates', {})
+}

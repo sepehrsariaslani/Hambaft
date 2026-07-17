@@ -1408,6 +1408,11 @@ def complete_task(name, actual_minutes=None):
             )
         except Exception:
             gamification_result = {}
+        # Phase 10: Update daily challenge progress
+        try:
+            _update_challenge_progress(frappe.session.user, "complete_task")
+        except Exception:
+            pass
 
     return _api_response({"task": doc.as_dict(), "gamification": gamification_result})
 
@@ -1573,6 +1578,15 @@ def log_habit(habit, date=None, status="انجام‌شده", value=1, note=None
     doc.user = frappe.session.user
     doc.save()
     frappe.db.commit()
+
+    # Phase 10: Update daily challenge progress for habit logging
+    if status == "انجام‌شده":
+        try:
+            _update_challenge_progress(frappe.session.user, "log_habit")
+            _update_challenge_progress(frappe.session.user, "consistency")
+        except Exception:
+            pass
+
     return _api_response({"log": doc.as_dict()})
 
 
@@ -7292,6 +7306,12 @@ def add_comment(data=None):
     doc.insert(ignore_permissions=True)
     frappe.db.commit()
 
+    # Phase 10: Update daily challenge progress for comments
+    try:
+        _update_challenge_progress(user, "add_comment")
+    except Exception:
+        pass
+
     return _api_response({
         "comment_id": doc.name,
         "user_info": _user_display_info(user),
@@ -7594,6 +7614,11 @@ def upload_proof(data=None):
             entity_type="Hambaft Proof Upload", entity=proof.name,
             description="اثبات آپلود شد"
         )
+        # Phase 10: Update daily challenge progress
+        _update_challenge_progress(user, "upload_proof")
+        # Creativity challenge: proof with reflection
+        if reflection and len(reflection.strip()) >= 50:
+            _update_challenge_progress(user, "creativity")
     except Exception:
         gamification_result = {}
 
@@ -7915,8 +7940,8 @@ def _user_meets_criteria(user, criteria_type, criteria_value):
         return count >= val
 
     elif criteria_type == "challenges_completed":
-        # Will be used in Phase 10
-        return False
+        count = frappe.db.count("Hambaft Daily Challenge", filters={"user": user, "status": "تکمیل‌شده"})
+        return count >= val
 
     elif criteria_type == "goals_completed":
         count = frappe.db.count("Goal", filters={"owner": user, "status": "تکمیل‌شده"})
@@ -8240,6 +8265,28 @@ def seed_badges():
             "points_awarded": 40,
             "rarity": "Epic",
         },
+        {
+            "badge_name": "Challenge Starter",
+            "badge_name_fa": "شروع‌کننده چالش",
+            "description": "Complete your first daily challenge",
+            "description_fa": "اولین چالش روزانه خود را تکمیل کنید",
+            "icon": "🎯",
+            "criteria_type": "challenges_completed",
+            "criteria_value": 1,
+            "points_awarded": 10,
+            "rarity": "Common",
+        },
+        {
+            "badge_name": "Challenge Master",
+            "badge_name_fa": "استاد چالش",
+            "description": "Complete 30 daily challenges",
+            "description_fa": "۳۰ چالش روزانه تکمیل کنید",
+            "icon": "🏆",
+            "criteria_type": "challenges_completed",
+            "criteria_value": 30,
+            "points_awarded": 50,
+            "rarity": "Epic",
+        },
     ]
 
     created = []
@@ -8258,4 +8305,403 @@ def seed_badges():
         "seeded": len(created),
         "badges": created,
         "message": f"{len(created)} نشان جدید ایجاد شد." if created else "همه نشان‌ها از قبل وجود دارند.",
+    })
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Phase 10: Daily Challenges
+# ═══════════════════════════════════════════════════════════════════
+
+# Points by difficulty
+_DIFFICULTY_POINTS = {"easy": 20, "medium": 35, "hard": 50}
+
+
+def _assign_daily_challenges(user):
+    """Assign today's daily challenges for a user.
+    Uses a deterministic seed based on user + date so the same
+    challenges appear throughout the day even if called multiple times.
+    """
+    today_str = str(today())
+
+    # Check if user already has challenges for today
+    existing = frappe.get_all(
+        "Hambaft Daily Challenge",
+        filters={"user": user, "challenge_date": today_str},
+        pluck="name",
+    )
+    if existing:
+        return existing
+
+    # Get all active templates
+    templates = frappe.get_all(
+        "Hambaft Challenge Template",
+        filters={"active": 1},
+        fields=["name", "challenge_type", "difficulty", "target_count", "points_reward"],
+    )
+    if not templates:
+        return []
+
+    # Deterministic random: seed from user + date
+    seed_str = f"{user}:{today_str}"
+    rng = random.Random(seed_str)
+
+    # Pick 3 challenges: 1 easy, 1 medium, 1 hard (if available)
+    by_difficulty = {"easy": [], "medium": [], "hard": []}
+    for t in templates:
+        d = t.difficulty or "easy"
+        if d in by_difficulty:
+            by_difficulty[d].append(t)
+
+    selected = []
+    for diff in ("easy", "medium", "hard"):
+        pool = by_difficulty[diff]
+        if pool:
+            pick = rng.choice(pool)
+            selected.append(pick)
+
+    # If we couldn't get 3, fill from remaining
+    if len(selected) < 3:
+        remaining = [t for t in templates if t not in selected]
+        rng.shuffle(remaining)
+        for t in remaining:
+            if len(selected) >= 3:
+                break
+            selected.append(t)
+
+    # Create daily challenge records
+    created = []
+    for tmpl in selected:
+        dc = frappe.new_doc("Hambaft Daily Challenge")
+        dc.user = user
+        dc.template = tmpl.name
+        dc.challenge_date = today_str
+        dc.status = "فعال"
+        dc.progress = 0
+        dc.target_count = tmpl.target_count or 1
+        dc.points_reward = tmpl.points_reward or _DIFFICULTY_POINTS.get(tmpl.difficulty, 20)
+        dc.challenge_type = tmpl.challenge_type
+        dc.insert(ignore_permissions=True)
+        created.append(dc.name)
+
+    if created:
+        frappe.db.commit()
+
+    return created
+
+
+def _update_challenge_progress(user, challenge_type, increment=1):
+    """Update progress on active daily challenges of a given type.
+    Called from complete_task, upload_proof, etc.
+    """
+    today_str = str(today())
+    challenges = frappe.get_all(
+        "Hambaft Daily Challenge",
+        filters={
+            "user": user,
+            "challenge_date": today_str,
+            "status": "فعال",
+            "challenge_type": challenge_type,
+        },
+        fields=["name", "progress", "target_count", "points_reward"],
+    )
+
+    for ch in challenges:
+        new_progress = (ch.progress or 0) + increment
+        target = ch.target_count or 1
+
+        if new_progress >= target:
+            # Challenge completed!
+            frappe.db.set_value("Hambaft Daily Challenge", ch.name, {
+                "progress": target,
+                "status": "تکمیل‌شده",
+                "completed_at": now_datetime(),
+            })
+            # Award challenge points
+            _award_points(
+                user, ch.points_reward or 20, "daily_challenge",
+                entity_type="Hambaft Daily Challenge", entity=ch.name,
+                description="چالش روزانه تکمیل شد"
+            )
+        else:
+            frappe.db.set_value("Hambaft Daily Challenge", ch.name, "progress", new_progress)
+
+    frappe.db.commit()
+
+
+@frappe.whitelist()
+def get_daily_challenges():
+    """Get today's challenges for the current user. Auto-assigns if none exist."""
+    _check_auth()
+    user = frappe.session.user
+
+    # Ensure challenges are assigned
+    _assign_daily_challenges(user)
+
+    today_str = str(today())
+    challenges = frappe.get_all(
+        "Hambaft Daily Challenge",
+        filters={"user": user, "challenge_date": today_str},
+        fields=["name", "template", "challenge_date", "status", "progress",
+                 "target_count", "points_reward", "challenge_type", "completed_at"],
+        order_by="creation asc",
+    )
+
+    result = []
+    for ch in challenges:
+        # Get template details
+        tmpl = frappe.db.get_value(
+            "Hambaft Challenge Template", ch.template,
+            ["name", "title", "title_fa", "description", "description_fa",
+             "icon", "challenge_type", "difficulty", "category"],
+            as_dict=True,
+        ) if ch.template else None
+
+        result.append({
+            "id": ch.name,
+            "template_id": ch.template,
+            "title": tmpl.title if tmpl else "",
+            "title_fa": tmpl.title_fa if tmpl else "",
+            "description": tmpl.description if tmpl else "",
+            "description_fa": tmpl.description_fa if tmpl else "",
+            "icon": tmpl.icon if tmpl else "🎯",
+            "challenge_type": ch.challenge_type or (tmpl.challenge_type if tmpl else ""),
+            "difficulty": tmpl.difficulty if tmpl else "easy",
+            "category": tmpl.category if tmpl else "",
+            "status": ch.status,
+            "progress": ch.progress or 0,
+            "target_count": ch.target_count or 1,
+            "points_reward": ch.points_reward or 20,
+            "completed_at": str(ch.completed_at) if ch.completed_at else None,
+        })
+
+    return _api_response({"challenges": result, "date": today_str})
+
+
+@frappe.whitelist()
+def get_challenge_history(limit=30, offset=0):
+    """Get past completed/expired challenges for the current user."""
+    _check_auth()
+    user = frappe.session.user
+
+    challenges = frappe.get_all(
+        "Hambaft Daily Challenge",
+        filters={"user": user},
+        fields=["name", "template", "challenge_date", "status", "progress",
+                 "target_count", "points_reward", "challenge_type", "completed_at"],
+        order_by="challenge_date desc, creation asc",
+        limit_page_length=cint(limit),
+        start=cint(offset),
+    )
+
+    result = []
+    for ch in challenges:
+        tmpl = frappe.db.get_value(
+            "Hambaft Challenge Template", ch.template,
+            ["title", "title_fa", "icon", "difficulty"],
+            as_dict=True,
+        ) if ch.template else None
+
+        result.append({
+            "id": ch.name,
+            "title": tmpl.title if tmpl else "",
+            "title_fa": tmpl.title_fa if tmpl else "",
+            "icon": tmpl.icon if tmpl else "🎯",
+            "difficulty": tmpl.difficulty if tmpl else "easy",
+            "status": ch.status,
+            "progress": ch.progress or 0,
+            "target_count": ch.target_count or 1,
+            "points_reward": ch.points_reward or 20,
+            "challenge_date": str(ch.challenge_date),
+            "completed_at": str(ch.completed_at) if ch.completed_at else None,
+        })
+
+    return _api_response({"challenges": result})
+
+
+@frappe.whitelist()
+def seed_challenge_templates():
+    """Seed default challenge templates. Idempotent. Admin only."""
+    _check_auth()
+    if "System Manager" not in frappe.get_roles(frappe.session.user):
+        frappe.throw("فقط مدیر سیستم می‌تواند چالش‌ها را مقداردهی کند.", frappe.PermissionError)
+
+    default_templates = [
+        # --- Easy challenges (20 pts) ---
+        {
+            "title": "Complete 1 Task",
+            "title_fa": "یک تسک انجام بده",
+            "description": "Complete any one task today",
+            "description_fa": "هر تسکی رو امروز کامل کن",
+            "icon": "✅",
+            "challenge_type": "complete_task",
+            "target_count": 1,
+            "difficulty": "easy",
+            "points_reward": 20,
+            "category": "productivity",
+        },
+        {
+            "title": "Habit Check-in",
+            "title_fa": "ثبت عادت",
+            "description": "Log one habit today",
+            "description_fa": "یک عادت رو امروز ثبت کن",
+            "icon": "🔄",
+            "challenge_type": "log_habit",
+            "target_count": 1,
+            "difficulty": "easy",
+            "points_reward": 20,
+            "category": "health",
+        },
+        {
+            "title": "Spread Positivity",
+            "title_fa": "انرژی مثبت منتقل کن",
+            "description": "Leave a comment on a partner's goal",
+            "description_fa": "روی هدف پارتنر نظر بذار",
+            "icon": "💬",
+            "challenge_type": "add_comment",
+            "target_count": 1,
+            "difficulty": "easy",
+            "points_reward": 20,
+            "category": "social",
+        },
+        {
+            "title": "Quick Proof",
+            "title_fa": "اثبات سریع",
+            "description": "Upload one proof for any task",
+            "description_fa": "یه اثبات برای تسکت آپلود کن",
+            "icon": "📸",
+            "challenge_type": "upload_proof",
+            "target_count": 1,
+            "difficulty": "easy",
+            "points_reward": 20,
+            "category": "productivity",
+        },
+        # --- Medium challenges (35 pts) ---
+        {
+            "title": "Triple Threat",
+            "title_fa": "سه‌ضرب",
+            "description": "Complete 3 tasks today",
+            "description_fa": "۳ تسک رو امروز انجام بده",
+            "icon": "⚡",
+            "challenge_type": "complete_task",
+            "target_count": 3,
+            "difficulty": "medium",
+            "points_reward": 35,
+            "category": "productivity",
+        },
+        {
+            "title": "Proof Collector",
+            "title_fa": "جمع‌آوری اثبات",
+            "description": "Upload 2 proofs today",
+            "description_fa": "۲ اثبات امروز آپلود کن",
+            "icon": "🎬",
+            "challenge_type": "upload_proof",
+            "target_count": 2,
+            "difficulty": "medium",
+            "points_reward": 35,
+            "category": "productivity",
+        },
+        {
+            "title": "Habit Streak Day",
+            "title_fa": "روز استریک عادت",
+            "description": "Log 2 different habits today",
+            "description_fa": "۲ عادت مختلف رو امروز ثبت کن",
+            "icon": "🔥",
+            "challenge_type": "log_habit",
+            "target_count": 2,
+            "difficulty": "medium",
+            "points_reward": 35,
+            "category": "health",
+        },
+        {
+            "title": "Social Butterfly",
+            "title_fa": "پروانه اجتماعی",
+            "description": "Leave 3 comments today",
+            "description_fa": "۳ نظر امروز ثبت کن",
+            "icon": "🦋",
+            "challenge_type": "add_comment",
+            "target_count": 3,
+            "difficulty": "medium",
+            "points_reward": 35,
+            "category": "social",
+        },
+        # --- Hard challenges (50 pts) ---
+        {
+            "title": "Power Day",
+            "title_fa": "روز قدرت",
+            "description": "Complete 5 tasks today",
+            "description_fa": "۵ تسک رو امروز انجام بده",
+            "icon": "💪",
+            "challenge_type": "complete_task",
+            "target_count": 5,
+            "difficulty": "hard",
+            "points_reward": 50,
+            "category": "productivity",
+        },
+        {
+            "title": "Evidence Overload",
+            "title_fa": "طوفان اثبات",
+            "description": "Upload 3 proofs today",
+            "description_fa": "۳ اثبات امروز آپلود کن",
+            "icon": "📹",
+            "challenge_type": "upload_proof",
+            "target_count": 3,
+            "difficulty": "hard",
+            "points_reward": 50,
+            "category": "productivity",
+        },
+        {
+            "title": "Habit Master",
+            "title_fa": "استاد عادت",
+            "description": "Log 4 different habits today",
+            "description_fa": "۴ عادت مختلف رو امروز ثبت کن",
+            "icon": "🧘",
+            "challenge_type": "log_habit",
+            "target_count": 4,
+            "difficulty": "hard",
+            "points_reward": 50,
+            "category": "health",
+        },
+        # --- Creativity challenges (special) ---
+        {
+            "title": "Creative Reflection",
+            "title_fa": "تأمل خلاق",
+            "description": "Upload a proof with a reflection of at least 50 characters",
+            "description_fa": "اثباتی با تأمل حداقل ۵۰ کاراکتر آپلود کن",
+            "icon": "🎨",
+            "challenge_type": "creativity",
+            "target_count": 1,
+            "difficulty": "medium",
+            "points_reward": 35,
+            "category": "creativity",
+        },
+        {
+            "title": "Morning Ritual",
+            "title_fa": "آیین صبحگاهی",
+            "description": "Complete 1 task and log 1 habit before noon",
+            "description_fa": "۱ تسک و ۱ عادت قبل از ظهر ثبت کن",
+            "icon": "🌅",
+            "challenge_type": "consistency",
+            "target_count": 2,
+            "difficulty": "medium",
+            "points_reward": 35,
+            "category": "mindfulness",
+        },
+    ]
+
+    created = []
+    for tmpl_data in default_templates:
+        if frappe.db.exists("Hambaft Challenge Template", {"title": tmpl_data["title"]}):
+            continue
+        doc = frappe.new_doc("Hambaft Challenge Template")
+        doc.update(tmpl_data)
+        doc.active = 1
+        doc.insert(ignore_permissions=True)
+        created.append(tmpl_data["title"])
+
+    frappe.db.commit()
+
+    return _api_response({
+        "seeded": len(created),
+        "templates": created,
+        "message": f"{len(created)} الگوی چالش جدید ایجاد شد." if created else "همه الگوها از قبل وجود دارند.",
     })

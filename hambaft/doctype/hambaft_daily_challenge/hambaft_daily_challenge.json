@@ -1,0 +1,98 @@
+{
+ "name": "Hambaft Daily Challenge",
+ "creation": "2026-01-01 00:00:00",
+ "modified": "2026-01-01 00:00:00",
+ "modified_by": "Administrator",
+ "owner": "Administrator",
+ "docstatus": 0,
+ "module": "Hambaft",
+ "autoname": "format:DC-{#####}",
+ "fields": [
+  {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "label": "کاربر",
+   "options": "User",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "template",
+   "fieldtype": "Link",
+   "label": "الگوی چالش",
+   "options": "Hambaft Challenge Template",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "challenge_date",
+   "fieldtype": "Date",
+   "label": "تاریخ چالش",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "وضعیت",
+   "options": "فعال\nتکمیل‌شده\nمنقضی‌شده",
+   "default": "فعال",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "progress",
+   "fieldtype": "Int",
+   "label": "پیشرفت",
+   "default": 0,
+   "non_negative": 1
+  },
+  {
+   "fieldname": "target_count",
+   "fieldtype": "Int",
+   "label": "تعداد هدف",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "points_reward",
+   "fieldtype": "Int",
+   "label": "امتیاز پاداش",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "completed_at",
+   "fieldtype": "Datetime",
+   "label": "تاریخ تکمیل",
+   "read_only": 1
+  },
+  {
+   "fieldname": "challenge_type",
+   "fieldtype": "Data",
+   "label": "نوع چالش",
+   "read_only": 1
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1
+  },
+  {
+   "role": "Hambaft User",
+   "read": 1,
+   "write": 1,
+   "create": 0,
+   "delete": 0
+  }
+ ],
+ "doctype": "DocType",
+ "custom": 0,
+ "istable": 0,
+ "issingle": 0
+}

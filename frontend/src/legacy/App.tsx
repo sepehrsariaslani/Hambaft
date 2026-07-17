@@ -106,6 +106,7 @@ const BalanceReportSection = React.lazy(() => import('./components/BalanceReport
 const ContactsSection = React.lazy(() => import('./components/ContactsSection'));
 const TaskDetailPage = React.lazy(() => import('./components/TaskDetailPage'));
 const GalleryPage = React.lazy(() => import('./components/GalleryPage'));
+const DailyChallengesDisplay = React.lazy(() => import('./components/DailyChallengesDisplay'));
 import { Contact, MoodLog } from './types';
 
 import { 
@@ -150,7 +151,8 @@ import {
   Activity,
   Layers,
   ChevronDown,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Trophy
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -159,6 +161,7 @@ const NAVIGATION_GROUPS = [
     title: 'خانه',
     items: [
       { id: 'dashboard', label: 'داشبورد', icon: LayoutDashboard },
+      { id: 'challenges', label: 'چالش روزانه', icon: Trophy },
       { id: 'coach', label: 'کوچ هوشمند', icon: Sparkles },
       { id: 'contacts', label: 'مخاطبان', icon: Users }
     ]
@@ -287,6 +290,7 @@ function tabToPath(tab: string, ids: { taskId?: string | null; goalId?: string |
     case 'finance': return '/finance';
     case 'documents': return '/documents';
     case 'profile': return '/profile';
+    case 'challenges': return '/challenges';
     case 'task-detail': return ids.taskId ? `/task/${ids.taskId}` : '/tasks';
     case 'planner-timeline': return '/planner/timeline';
     case 'planner-week': return '/planner/week';
@@ -3839,6 +3843,12 @@ export default function App({
             onImportData={handleImportData}
           />
         );
+      case 'challenges':
+        return (
+          <React.Suspense fallback={<div className="flex items-center justify-center py-20"><div className="w-6 h-6 border-2 border-[#4A6741] border-t-transparent rounded-full animate-spin" /></div>}>
+            <DailyChallengesDisplay />
+          </React.Suspense>
+        );
       default:
         return (
           <DashboardOverview 
@@ -3975,6 +3985,7 @@ export default function App({
                     activeTab === 'planner-board' ? 'برنامه‌ریز — بورد' :
                     activeTab === 'planner-areas' ? 'برنامه‌ریز — حوزه‌ها' :
                     activeTab === 'balance_report' ? 'گزارش توازن زندگی' :
+                    activeTab === 'challenges' ? 'چالش‌های روزانه' :
                     activeTab === 'profile' ? 'تنظیمات' : 'همبافت'
                   }</span>
                 </h2>
