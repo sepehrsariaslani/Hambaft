@@ -909,3 +909,33 @@ export interface DailyChallenge {
   pointsReward: number;
   completedAt: string | null;
 }
+
+// Phase 11: Notifications
+export interface NotificationItem {
+  id: string;
+  type: string;
+  title: string;
+  titleFa: string;
+  body: string;
+  bodyFa: string;
+  icon: string;
+  entityType: string;
+  entity: string;
+  read: boolean;
+  createdAt: string;
+}
+
+export type NotificationType =
+  | 'level_up'
+  | 'badge_earned'
+  | 'challenge_completed'
+  | 'challenge_expired'
+  | 'partner_invite'
+  | 'partner_accepted'
+  | 'goal_shared'
+  | 'comment_received'
+  | 'reaction_received'
+  | 'daily_reminder'
+  | 'streak_milestone'
+  | 'goal_deadline'
+  | 'system';

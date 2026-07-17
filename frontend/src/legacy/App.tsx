@@ -107,6 +107,7 @@ const ContactsSection = React.lazy(() => import('./components/ContactsSection'))
 const TaskDetailPage = React.lazy(() => import('./components/TaskDetailPage'));
 const GalleryPage = React.lazy(() => import('./components/GalleryPage'));
 const DailyChallengesDisplay = React.lazy(() => import('./components/DailyChallengesDisplay'));
+const NotificationCenter = React.lazy(() => import('./components/NotificationCenter'));
 import { Contact, MoodLog } from './types';
 
 import { 
@@ -152,7 +153,8 @@ import {
   Layers,
   ChevronDown,
   Image as ImageIcon,
-  Trophy
+  Trophy,
+  Bell
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -162,6 +164,7 @@ const NAVIGATION_GROUPS = [
     items: [
       { id: 'dashboard', label: 'داشبورد', icon: LayoutDashboard },
       { id: 'challenges', label: 'چالش روزانه', icon: Trophy },
+      { id: 'notifications', label: 'اعلان‌ها', icon: Bell },
       { id: 'coach', label: 'کوچ هوشمند', icon: Sparkles },
       { id: 'contacts', label: 'مخاطبان', icon: Users }
     ]
@@ -291,6 +294,7 @@ function tabToPath(tab: string, ids: { taskId?: string | null; goalId?: string |
     case 'documents': return '/documents';
     case 'profile': return '/profile';
     case 'challenges': return '/challenges';
+    case 'notifications': return '/notifications';
     case 'task-detail': return ids.taskId ? `/task/${ids.taskId}` : '/tasks';
     case 'planner-timeline': return '/planner/timeline';
     case 'planner-week': return '/planner/week';
@@ -3849,6 +3853,12 @@ export default function App({
             <DailyChallengesDisplay />
           </React.Suspense>
         );
+      case 'notifications':
+        return (
+          <React.Suspense fallback={<div className="flex items-center justify-center py-20"><div className="w-6 h-6 border-2 border-[#4A6741] border-t-transparent rounded-full animate-spin" /></div>}>
+            <NotificationCenter />
+          </React.Suspense>
+        );
       default:
         return (
           <DashboardOverview 
@@ -3986,6 +3996,7 @@ export default function App({
                     activeTab === 'planner-areas' ? 'برنامه‌ریز — حوزه‌ها' :
                     activeTab === 'balance_report' ? 'گزارش توازن زندگی' :
                     activeTab === 'challenges' ? 'چالش‌های روزانه' :
+                    activeTab === 'notifications' ? 'اعلان‌ها' :
                     activeTab === 'profile' ? 'تنظیمات' : 'همبافت'
                   }</span>
                 </h2>

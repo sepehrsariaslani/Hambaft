@@ -6799,6 +6799,19 @@ def invite_partner(data):
 
     if invitee:
         invite_info["invitee"] = _user_display_info(invitee)
+        # Phase 11: Notify the invitee about the partner invite
+        try:
+            inviter_info = _user_display_info(user)
+            _create_notification(
+                invitee, "partner_invite",
+                title_fa="دعوت پارتنر جدید",
+                body_fa=f"{inviter_info.get('full_name', user)} شما رو به پارتنری دعوت کرده.",
+                icon="🤝",
+                entity_type="Hambaft Partner Invite",
+                entity=doc.name,
+            )
+        except Exception:
+            pass
 
     return _api_response(invite_info)
 
@@ -6906,6 +6919,20 @@ def accept_partner_invite(data=None):
             goal_member.insert(ignore_permissions=True)
 
     frappe.db.commit()
+
+    # Phase 11: Notify the inviter that their invite was accepted
+    try:
+        accepter_info = _user_display_info(user)
+        _create_notification(
+            inviter, "partner_accepted",
+            title_fa="پارتنر شما پذیرفت!",
+            body_fa=f"{accepter_info.get('full_name', user)} دعوت پارتنری شما رو پذیرفت.",
+            icon="✅",
+            entity_type="Hambaft Partner Connection",
+            entity=conn_doc.name,
+        )
+    except Exception:
+        pass
 
     return _api_response({
         "connection_id": conn_doc.name,
@@ -7418,6 +7445,31 @@ def toggle_reaction(data=None):
         doc.emoji = emoji
         doc.insert(ignore_permissions=True)
         frappe.db.commit()
+
+        # Phase 11: Notify entity owner about the reaction
+        try:
+            # Find owner of the entity
+            if entity_type == "goal":
+                owner = frappe.db.get_value("Hambaft Goal", entity, "user")
+            elif entity_type == "task":
+                owner = frappe.db.get_value("Task", entity, "owner")
+            elif entity_type == "project":
+                owner = frappe.db.get_value("Hambaft Project", entity, "owner")
+            else:
+                owner = None
+            if owner and owner != user:
+                reactor_info = _user_display_info(user)
+                _create_notification(
+                    owner, "reaction_received",
+                    title_fa="واکنش جدید به محتوایت",
+                    body_fa=f"{reactor_info.get('full_name', user)} با {emoji} واکنش نشون داد.",
+                    icon=emoji,
+                    entity_type=entity_type,
+                    entity=entity,
+                )
+        except Exception:
+            pass
+
         return _api_response({"status": "added", "emoji": emoji})
 
 
@@ -7801,6 +7853,27 @@ def _award_points(user, amount, reason, entity_type=None, entity=None, descripti
 
     # Update daily streak
     _update_daily_streak(user)
+
+    # Phase 11: Create notifications for level-up and badges
+    try:
+        if level_up:
+            _create_notification(
+                user, "level_up",
+                title_fa=f"سطح {new_level} رسیدی!",
+                body_fa=f"آفرین! به سطح {new_level} ارتقا پیدا کردی.",
+                icon="🎉",
+            )
+        for b in new_badges:
+            _create_notification(
+                user, "badge_earned",
+                title_fa=f"نشان «{b.get('badge_name_fa', b.get('badge_name', ''))}» کسب شد!",
+                body_fa=f"نشان {b.get('rarity', '')} شما رو اهدا کردیم.",
+                icon=b.get("icon", "🏆"),
+                entity_type="Hambaft Badge",
+                entity=b.get("badge_id", ""),
+            )
+    except Exception:
+        pass
 
     return {
         "points_added": amount,
@@ -8422,6 +8495,18 @@ def _update_challenge_progress(user, challenge_type, increment=1):
                 entity_type="Hambaft Daily Challenge", entity=ch.name,
                 description="چالش روزانه تکمیل شد"
             )
+            # Phase 11: Notification for challenge completion
+            try:
+                _create_notification(
+                    user, "challenge_completed",
+                    title_fa="چالش روزانه تکمیل شد! 🎯",
+                    body_fa=f"+{ch.points_reward or 20} امتیاز کسب کردی",
+                    icon="🎯",
+                    entity_type="Hambaft Daily Challenge",
+                    entity=ch.name,
+                )
+            except Exception:
+                pass
         else:
             frappe.db.set_value("Hambaft Daily Challenge", ch.name, "progress", new_progress)
 
@@ -8705,3 +8790,151 @@ def seed_challenge_templates():
         "templates": created,
         "message": f"{len(created)} الگوی چالش جدید ایجاد شد." if created else "همه الگوها از قبل وجود دارند.",
     })
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Phase 11: Notifications
+# ═══════════════════════════════════════════════════════════════════
+
+_NOTIFICATION_CONFIG = {
+    "level_up": {"icon": "🎉", "title_fa": "سطح جدید!"},
+    "badge_earned": {"icon": "🏆", "title_fa": "نشان جدید!"},
+    "challenge_completed": {"icon": "🎯", "title_fa": "چالش تکمیل شد!"},
+    "challenge_expired": {"icon": "⏰", "title_fa": "چالش منقضی شد"},
+    "partner_invite": {"icon": "🤝", "title_fa": "دعوت پارتنر"},
+    "partner_accepted": {"icon": "✅", "title_fa": "پارتنر پذیرفته شد"},
+    "goal_shared": {"icon": "🔗", "title_fa": "هدف به اشتراک گذاشته شد"},
+    "comment_received": {"icon": "💬", "title_fa": "نظر جدید"},
+    "reaction_received": {"icon": "❤️", "title_fa": "واکنش جدید"},
+    "daily_reminder": {"icon": "📋", "title_fa": "یادآوری روزانه"},
+    "streak_milestone": {"icon": "🔥", "title_fa": "استریک ویژه"},
+    "goal_deadline": {"icon": "⏳", "title_fa": "مهلت هدف"},
+    "system": {"icon": "🔔", "title_fa": "اعلان سیستمی"},
+}
+
+
+def _create_notification(user, notification_type, title="", title_fa="", body="", body_fa="",
+                         icon=None, entity_type=None, entity=None):
+    """Create a notification for a user. Internal helper."""
+    conf = _NOTIFICATION_CONFIG.get(notification_type, {})
+
+    n = frappe.new_doc("Hambaft Notification")
+    n.user = user
+    n.notification_type = notification_type
+    n.title = title or conf.get("title_fa", notification_type)
+    n.title_fa = title_fa or conf.get("title_fa", notification_type)
+    n.body = body
+    n.body_fa = body_fa
+    n.icon = icon or conf.get("icon", "🔔")
+    if entity_type:
+        n.entity_type = entity_type
+    if entity:
+        n.entity = entity
+    n.read = 0
+    n.dismissed = 0
+    n.insert(ignore_permissions=True)
+    frappe.db.commit()
+    return n.name
+
+
+@frappe.whitelist()
+def get_notifications(limit=50, offset=0, unread_only=False):
+    """Get notifications for the current user."""
+    _check_auth()
+    user = frappe.session.user
+
+    filters = {"user": user, "dismissed": 0}
+    if cint(unread_only):
+        filters["read"] = 0
+
+    notifications = frappe.get_all(
+        "Hambaft Notification",
+        filters=filters,
+        fields=["name", "notification_type", "title", "title_fa", "body", "body_fa",
+                 "icon", "entity_type", "entity", "read", "created_at"],
+        order_by="creation desc",
+        limit_page_length=cint(limit),
+        start=cint(offset),
+    )
+
+    unread_count = frappe.db.count("Hambaft Notification", filters={"user": user, "read": 0, "dismissed": 0})
+
+    result = []
+    for n in notifications:
+        result.append({
+            "id": n.name,
+            "type": n.notification_type,
+            "title": n.title,
+            "title_fa": n.title_fa,
+            "body": n.body or "",
+            "body_fa": n.body_fa or "",
+            "icon": n.icon or "🔔",
+            "entity_type": n.entity_type or "",
+            "entity": n.entity or "",
+            "read": cint(n.read),
+            "created_at": str(n.created_at),
+        })
+
+    return _api_response({"notifications": result, "unread_count": unread_count})
+
+
+@frappe.whitelist()
+def mark_notification_read(notification_id=None):
+    """Mark a single notification as read."""
+    _check_auth()
+    user = frappe.session.user
+
+    if not notification_id:
+        frappe.throw("notification_id is required.")
+
+    n = frappe.get_doc("Hambaft Notification", notification_id)
+    if n.user != user:
+        frappe.throw("This notification does not belong to you.", frappe.PermissionError)
+
+    n.read = 1
+    n.save(ignore_permissions=True)
+    frappe.db.commit()
+    return _api_response({"status": "read"})
+
+
+@frappe.whitelist()
+def mark_all_notifications_read():
+    """Mark all notifications as read for the current user."""
+    _check_auth()
+    user = frappe.session.user
+
+    frappe.db.sql(
+        "UPDATE `tabHambaft Notification` SET `read` = 1 WHERE user = %s AND `read` = 0",
+        (user,)
+    )
+    frappe.db.commit()
+    return _api_response({"status": "all_read"})
+
+
+@frappe.whitelist()
+def dismiss_notification(notification_id=None):
+    """Dismiss (soft-delete) a notification."""
+    _check_auth()
+    user = frappe.session.user
+
+    if not notification_id:
+        frappe.throw("notification_id is required.")
+
+    n = frappe.get_doc("Hambaft Notification", notification_id)
+    if n.user != user:
+        frappe.throw("This notification does not belong to you.", frappe.PermissionError)
+
+    n.dismissed = 1
+    n.save(ignore_permissions=True)
+    frappe.db.commit()
+    return _api_response({"status": "dismissed"})
+
+
+@frappe.whitelist()
+def get_unread_notification_count():
+    """Get just the unread count for badge display."""
+    _check_auth()
+    user = frappe.session.user
+
+    count = frappe.db.count("Hambaft Notification", filters={"user": user, "read": 0, "dismissed": 0})
+    return _api_response({"unread_count": count})

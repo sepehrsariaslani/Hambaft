@@ -2007,3 +2007,47 @@ export async function getChallengeHistory(limit = 30, offset = 0) {
 export async function seedChallengeTemplates() {
   return call<{ data?: any }>('hambaft.hambaft.api.seed_challenge_templates', {})
 }
+
+
+// ═══════════════════════════════════════════════════════════════
+// Phase 11: Notifications
+// ═══════════════════════════════════════════════════════════════
+
+export interface NotificationItem {
+  id: string
+  type: string
+  title: string
+  title_fa: string
+  body: string
+  body_fa: string
+  icon: string
+  entity_type: string
+  entity: string
+  read: number
+  created_at: string
+}
+
+export async function getNotifications(limit = 50, offset = 0, unreadOnly = false) {
+  const unreadParam = unreadOnly ? '&unread_only=1' : ''
+  return callGet<{ data?: { notifications: NotificationItem[]; unread_count: number } }>(
+    `hambaft.hambaft.api.get_notifications?limit=${limit}&offset=${offset}${unreadParam}`
+  )
+}
+
+export async function markNotificationRead(notificationId: string) {
+  return call<{ data?: any }>('hambaft.hambaft.api.mark_notification_read', { notification_id: notificationId })
+}
+
+export async function markAllNotificationsRead() {
+  return call<{ data?: any }>('hambaft.hambaft.api.mark_all_notifications_read', {})
+}
+
+export async function dismissNotification(notificationId: string) {
+  return call<{ data?: any }>('hambaft.hambaft.api.dismiss_notification', { notification_id: notificationId })
+}
+
+export async function getUnreadNotificationCount() {
+  return callGet<{ data?: { unread_count: number } }>(
+    'hambaft.hambaft.api.get_unread_notification_count'
+  )
+}

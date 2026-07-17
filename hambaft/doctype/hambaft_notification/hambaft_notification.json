@@ -1,0 +1,117 @@
+{
+ "name": "Hambaft Notification",
+ "creation": "2026-01-01 00:00:00",
+ "modified": "2026-01-01 00:00:00",
+ "modified_by": "Administrator",
+ "owner": "Administrator",
+ "docstatus": 0,
+ "module": "Hambaft",
+ "autoname": "format:NTF-{#####}",
+ "fields": [
+  {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "label": "کاربر",
+   "options": "User",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "notification_type",
+   "fieldtype": "Select",
+   "label": "نوع نوتیفیکیشن",
+   "options": "level_up\nbadge_earned\nchallenge_completed\nchallenge_expired\npartner_invite\npartner_accepted\ngoal_shared\ncomment_received\nreaction_received\ndaily_reminder\nstreak_milestone\ngoal_deadline\nsystem",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "label": "عنوان",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "title_fa",
+   "fieldtype": "Data",
+   "label": "عنوان (فارسی)",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "body",
+   "fieldtype": "Small Text",
+   "label": "متن"
+  },
+  {
+   "fieldname": "body_fa",
+   "fieldtype": "Small Text",
+   "label": "متن (فارسی)"
+  },
+  {
+   "fieldname": "icon",
+   "fieldtype": "Data",
+   "label": "آیکون (ایموجی)"
+  },
+  {
+   "fieldname": "entity_section",
+   "fieldtype": "Section Break",
+   "label": "لینک موجودیت"
+  },
+  {
+   "fieldname": "entity_type",
+   "fieldtype": "Data",
+   "label": "نوع موجودیت"
+  },
+  {
+   "fieldname": "entity",
+   "fieldtype": "Data",
+   "label": "موجودیت"
+  },
+  {
+   "fieldname": "status_section",
+   "fieldtype": "Section Break",
+   "label": "وضعیت"
+  },
+  {
+   "fieldname": "read",
+   "fieldtype": "Check",
+   "label": "خوانده‌شده",
+   "default": 0,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "dismissed",
+   "fieldtype": "Check",
+   "label": "نادیده گرفته‌شده",
+   "default": 0
+  },
+  {
+   "fieldname": "created_at",
+   "fieldtype": "Datetime",
+   "label": "تاریخ ایجاد",
+   "read_only": 1,
+   "in_list_view": 1
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1
+  },
+  {
+   "role": "Hambaft User",
+   "read": 1,
+   "write": 1,
+   "create": 0,
+   "delete": 0
+  }
+ ],
+ "doctype": "DocType",
+ "custom": 0,
+ "istable": 0,
+ "issingle": 0
+}
