@@ -93,6 +93,7 @@ interface GoalDetailViewProps {
   sleepLogs?: SleepLog[];
   mindfulnessSessions?: MindfulnessSession[];
   journalEntries?: JournalEntry[];
+  contacts?: { id: string; name: string; photoUrl?: string; category?: string }[];
   onBack: () => void;
   onUpdateGoal: (updatedGoal: Goal) => void;
   onAddProjectToGoal: (goalId: string, title: string, description: string) => void;
@@ -320,6 +321,7 @@ export default function GoalDetailView({
   onAddBankAccount,
   onSelectProject,
   onMoveProjectToGoal,
+  contacts = [],
 }: GoalDetailViewProps) {
   
   const [activeTab, setActiveTab] = useState<'projects' | 'habits' | 'milestones' | 'metrics' | 'vision' | 'notes' | 'config' | 'finance_links'>('projects');
@@ -3015,7 +3017,7 @@ export default function GoalDetailView({
         {/* Linked Contacts - shown across all tabs */}
         {goal.id && (
           <div className="bg-[#FDFBF7] dark:bg-[#1B1D16] p-4 rounded-2xl border border-[#E6DFD3] dark:border-[#3D4133]/30">
-            <LinkedContacts entityType="goal" entityId={goal.id} />
+            <LinkedContacts entityType="goal" entityId={goal.id} contacts={contacts} onNavigateContact={(_contactId: string) => { /* navigation via contacts tab */ }} />
           </div>
         )}
 

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Occasion, OccasionType, BankAccount, Transaction } from '../types';
+import LinkedContacts from './LinkedContacts';
 import {
   Cake, Heart, CalendarDays, Bell, Star, Plus, Trash2, Gift, Clock, CreditCard
 } from 'lucide-react';
@@ -14,6 +15,7 @@ interface OccasionsSectionProps {
   onUpdateOccasion?: (updated: Occasion) => void;
   onAddTransaction?: (newT: Omit<Transaction, 'id'>) => void;
   bankAccounts?: BankAccount[];
+  contacts?: { id: string; name: string; photoUrl?: string; category?: string }[];
 }
 
 const TODAY = '2026-07-04';
@@ -61,7 +63,8 @@ export default function OccasionsSection({
   onDeleteOccasion,
   onUpdateOccasion,
   onAddTransaction,
-  bankAccounts = []
+  bankAccounts = [],
+  contacts = []
 }: OccasionsSectionProps) {
   const [showForm, setShowForm] = useState(false);
   const [filterType, setFilterType] = useState<OccasionType | 'all'>('all');
@@ -337,6 +340,13 @@ export default function OccasionsSection({
 
                     {o.notes && (
                       <p className="text-[10px] text-[#8D7F72] italic mt-1">{o.notes}</p>
+                    )}
+
+                    {/* Linked Contacts */}
+                    {o.id && (
+                      <div className="mt-2 pt-2 border-t border-[#E6DFD3]/40">
+                        <LinkedContacts entityType="occasion" entityId={o.id} contacts={contacts} />
+                      </div>
                     )}
 
                     {/* Budget & Spent progress indicator */}

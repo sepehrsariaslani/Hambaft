@@ -98,6 +98,7 @@ interface ProjectDetailViewProps {
   onNavigateTask?: (taskId: string) => void;
   onNavigateEntity?: (tab: string, id?: string) => void;
   onMoveProjectToGoal: (fromGoalId: string, projectId: string, toGoalId: string) => void;
+  contacts?: { id: string; name: string; photoUrl?: string; category?: string }[];
 }
 
 export default function ProjectDetailView({
@@ -117,6 +118,7 @@ export default function ProjectDetailView({
   onNavigateTask,
   onNavigateEntity,
   onMoveProjectToGoal,
+  contacts = [],
 }: ProjectDetailViewProps) {
   // Views/Tabs State
   const [activeTab, setActiveTab] = useState<'tasks' | 'finance' | 'planning' | 'milestones' | 'report' | 'notes'>('tasks');
@@ -522,7 +524,7 @@ export default function ProjectDetailView({
       {/* Linked Contacts */}
       {project.id && (
         <div className="bg-[#FDFBF7] dark:bg-[#1B1D16] p-4 rounded-2xl border border-[#E6DFD3] dark:border-[#3D4133]/30">
-          <LinkedContacts entityType="project" entityId={project.id} />
+          <LinkedContacts entityType="project" entityId={project.id} contacts={contacts} onNavigateContact={(_contactId: string) => { /* navigation via contacts tab */ }} />
         </div>
       )}
 

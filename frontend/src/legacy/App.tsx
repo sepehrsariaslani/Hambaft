@@ -3411,6 +3411,7 @@ export default function App({
             onPayInstallment={handlePayInstallment}
             initialQuickTemplates={financeQuickTemplates}
             onQuickTemplatesChange={(templates) => patchSettings({ finance_quick_templates_json: JSON.stringify(templates) })}
+            contacts={(lifeData.contacts || []).map(c => ({ id: c.id, name: c.name, photoUrl: c.photoUrl, category: c.category }))}
           />
         );
       case 'habits':
@@ -3515,6 +3516,7 @@ export default function App({
               onStartTimer={handleStartTimer}
               onPauseTimer={handlePauseTimer}
               onStopTimer={handleStopTimer}
+              contacts={(lifeData.contacts || []).map(c => ({ id: c.id, name: c.name, photoUrl: c.photoUrl, category: c.category }))}
             />
           </React.Suspense>
         );
@@ -3533,6 +3535,7 @@ export default function App({
                 sleepLogs={lifeData.sleepLogs || []}
                 mindfulnessSessions={lifeData.mindfulnessSessions || []}
                 journalEntries={lifeData.journalEntries || []}
+                contacts={(lifeData.contacts || []).map(c => ({ id: c.id, name: c.name, photoUrl: c.photoUrl, category: c.category }))}
                 onBack={() => goToGoal(null)}
                 onUpdateGoal={handleUpdateGoal}
                 onAddProjectToGoal={handleAddProjectToGoal}
@@ -3616,6 +3619,7 @@ export default function App({
                   else goToTab(tab)
                 }}
                 onMoveProjectToGoal={handleMoveProjectToGoal}
+                contacts={(lifeData.contacts || []).map(c => ({ id: c.id, name: c.name, photoUrl: c.photoUrl, category: c.category }))}
               />
             );
           }
@@ -3657,6 +3661,7 @@ export default function App({
             onDeleteDocument={handleDeleteDocument}
             bankAccounts={lifeData.bankAccounts || []}
             assets={lifeData.assets || []}
+            contacts={(lifeData.contacts || []).map(c => ({ id: c.id, name: c.name, photoUrl: c.photoUrl, category: c.category }))}
           />
         );
       case 'occasions':
@@ -3668,6 +3673,7 @@ export default function App({
             onUpdateOccasion={handleUpdateOccasion}
             onAddTransaction={handleAddTransaction}
             bankAccounts={lifeData.bankAccounts || []}
+            contacts={(lifeData.contacts || []).map(c => ({ id: c.id, name: c.name, photoUrl: c.photoUrl, category: c.category }))}
           />
         );
       case 'mindfulness':

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Document, DocumentType, BankAccount, AssetInvestment } from '../types';
+import LinkedContacts from './LinkedContacts';
 import {
   FileText, Shield, Award, Heart, DollarSign, Scale, FolderOpen,
   Plus, Trash2, AlertTriangle, CheckCircle, Clock, Tag, Building2, Calendar,
@@ -15,6 +16,7 @@ interface DocumentsSectionProps {
   onDeleteDocument: (id: string) => void;
   bankAccounts: BankAccount[];
   assets: AssetInvestment[];
+  contacts?: { id: string; name: string; photoUrl?: string; category?: string }[];
 }
 
 const DOC_TYPES: Record<DocumentType, { label: string; icon: React.ReactNode; color: string; bg: string }> = {
@@ -35,7 +37,7 @@ function getDaysUntilExpiry(expiryDate?: string): number | null {
   return Math.ceil(diff);
 }
 
-export default function DocumentsSection({ documents, onAddDocument, onDeleteDocument, bankAccounts = [], assets = [] }: DocumentsSectionProps) {
+export default function DocumentsSection({ documents, onAddDocument, onDeleteDocument, bankAccounts = [], assets = [], contacts = [] }: DocumentsSectionProps) {
   const [showForm, setShowForm] = useState(false);
   const [filterType, setFilterType] = useState<DocumentType | 'all'>('all');
   const [title, setTitle] = useState('');
@@ -638,6 +640,13 @@ export default function DocumentsSection({ documents, onAddDocument, onDeleteDoc
                           {tag}
                         </span>
                       ))}
+                    </div>
+                  )}
+
+                  {/* Linked Contacts */}
+                  {selectedDoc.id && (
+                    <div className="border-t border-[#E6DFD3]/60 dark:border-[#3D4133]/40 pt-3">
+                      <LinkedContacts entityType="document" entityId={selectedDoc.id} contacts={contacts} />
                     </div>
                   )}
 

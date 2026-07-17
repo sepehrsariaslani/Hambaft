@@ -378,6 +378,7 @@ interface TaskDetailPageProps {
   onPauseTimer?: () => void
   onStopTimer?: () => void
   onResetTimer?: (taskId: string) => void
+  contacts?: { id: string; name: string; photoUrl?: string; category?: string }[]
 }
 
 type SubTab = 'steps' | 'time' | 'files'
@@ -401,6 +402,7 @@ export default function TaskDetailPage({
   onPauseTimer,
   onStopTimer,
   onResetTimer,
+  contacts = [],
 }: TaskDetailPageProps) {
   const [subTab, setSubTab] = useState<SubTab>('steps')
   const [isEditingTitle, setIsEditingTitle] = useState(false)
@@ -844,7 +846,7 @@ export default function TaskDetailPage({
               {/* Linked Contacts */}
               {task.id && (
                 <div className="px-4 py-2.5 border-t border-[#E6DFD3]/30 dark:border-[#3D4133]/20">
-                  <LinkedContacts entityType="task" entityId={task.id} />
+                  <LinkedContacts entityType="task" entityId={task.id} contacts={contacts} onNavigateContact={(_contactId: string) => { /* navigation via contacts tab */ }} />
                 </div>
               )}
             </div>

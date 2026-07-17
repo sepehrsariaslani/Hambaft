@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Transaction, Subscription, CategoryDef, BudgetSettings, BankAccount, RecurringTransaction, Debt, AssetInvestment, Document, Installment } from '../types';
 import { CATEGORY_LABELS } from '../initialData';
+import LinkedContacts from './LinkedContacts';
 import PersianDatePicker from './PersianDatePicker';
 import FinanceCategoryDashboard from './FinanceCategoryDashboard';
 import {
@@ -105,6 +106,7 @@ interface FinanceSectionProps {
     bankAccountId?: string;
     iconName?: string;
   }>) => void;
+  contacts?: { id: string; name: string; photoUrl?: string; category?: string }[];
 }
 
 type FinanceTab = 'records' | 'accounts' | 'subscriptions' | 'budget' | 'report' | 'categories' | 'debts' | 'assets';
@@ -212,7 +214,8 @@ export default function FinanceSection({
   onDeleteInstallment,
   onPayInstallment,
   initialQuickTemplates,
-  onQuickTemplatesChange
+  onQuickTemplatesChange,
+  contacts = []
 }: FinanceSectionProps) {
 
   // ── Tab ──────────────────────────────────────────────────────────────────
@@ -3685,6 +3688,13 @@ export default function FinanceSection({
                       <Trash2 className="w-4 h-4" />حذف
                     </button>
                   </div>
+                </div>
+              )}
+
+              {/* Linked Contacts */}
+              {detailTx.id && !txEditMode && (
+                <div className="border-t border-[#E6DFD3]/60 pt-3 mt-2">
+                  <LinkedContacts entityType="finance" entityId={detailTx.id} contacts={contacts} />
                 </div>
               )}
             </motion.div>
