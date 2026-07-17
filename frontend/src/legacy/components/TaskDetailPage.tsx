@@ -21,6 +21,7 @@ import {
   ChevronLeft, X, AlarmClock, Flame, Diamond, Milestone, Home, Paperclip, Upload, FileText, Download,
 } from 'lucide-react'
 import type { Task } from '../types'
+import LinkedContacts from './LinkedContacts'
 import {
   ImportanceBadge, ImportanceSelector, ImpactScoreBadge,
   TaskImpactBanner, TaskImpactExplanation, BlockedTaskIndicator,
@@ -837,6 +838,13 @@ export default function TaskDetailPage({
                     <Pin className="w-3.5 h-3.5 text-[#D4A017]" /> برجسته
                   </span>
                   <Badge color="#D4A017">بله</Badge>
+                </div>
+              )}
+
+              {/* Linked Contacts */}
+              {task.id && (
+                <div className="px-4 py-2.5 border-t border-[#E6DFD3]/30 dark:border-[#3D4133]/20">
+                  <LinkedContacts entityType="task" entityId={task.id} />
                 </div>
               )}
             </div>

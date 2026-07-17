@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Goal, Project, Task, GoalCategory, GoalLinkedProject, BankAccount, Transaction, Milestone } from '../types';
+import LinkedContacts from './LinkedContacts';
 import EntityNoteEditor from '../../notes/components/EntityNoteEditor';
 import ViewSwitcher, { type ViewMode } from './ViewSwitcher';
 import ProjectMetaPanel from './ProjectMetaPanel';
@@ -517,6 +518,13 @@ export default function ProjectDetailView({
         onMoveProjectToGoal={onMoveProjectToGoal}
         onOpenGoal={(goalId) => onNavigateEntity?.('goals', goalId)}
       />
+
+      {/* Linked Contacts */}
+      {project.id && (
+        <div className="bg-[#FDFBF7] dark:bg-[#1B1D16] p-4 rounded-2xl border border-[#E6DFD3] dark:border-[#3D4133]/30">
+          <LinkedContacts entityType="project" entityId={project.id} />
+        </div>
+      )}
 
       {/* GOAL CONTRIBUTION CONTEXT with Health State */}
       {project.goalId && project.goalTitle && (() => {

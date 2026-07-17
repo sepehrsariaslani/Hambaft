@@ -1,15 +1,16 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Contact, ContactInteractionLog, ContactRelation, ContactRelationType, ContactRelationDirection, ContactSummary, RelationshipHealth, Occasion } from '../types';
+import { Contact, ContactInteractionLog, ContactRelation, ContactRelationType, ContactRelationDirection, ContactSummary, RelationshipHealth, ContactLink, ContactLinkEntityType, ContactLinkRole, Occasion, Goal, Project, Task } from '../types';
 import { 
   User, Users, Phone, Mail, Plus, Trash2, Calendar, MessageCircle, 
   Check, Search, Sparkles, Upload, Heart, Clock, MapPin, Activity, 
   Award, AlertCircle, Filter, Tag, MessageSquare, Briefcase, PlusCircle, X, CheckCircle, Edit2,
-  Link2, ChevronDown, GripVertical, ArrowUpDown, Zap, Wifi, WifiOff, TrendingUp, ArrowRight
+  Link2, ChevronDown, GripVertical, ArrowUpDown, Zap, Wifi, WifiOff, TrendingUp, ArrowRight, Target, FileText, DollarSign
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   getContactRelations, createContactRelation, updateContactRelation, deleteContactRelation,
   getContactsSummary,
+  getContactLinks, createContactLink, updateContactLink, deleteContactLink,
 } from '../../app/hambaft-api';
 
 interface ContactsSectionProps {
@@ -19,6 +20,11 @@ interface ContactsSectionProps {
   onUpdateContact: (contact: Contact) => void;
   onAddOccasion?: (occ: Omit<Occasion, 'id'>) => void;
   onSelectContact?: (id: string) => void;
+  onNavigateEntity?: (entityType: string, entityId: string) => void;
+  goals?: Goal[];
+  projects?: Project[];
+  tasks?: Task[];
+  occasions?: Occasion[];
   todayDate: string;
 }
 
@@ -74,7 +80,30 @@ const DETAIL_TABS = [
   { key: 'overview', label: 'خلاصه', emoji: '📋' },
   { key: 'relations', label: 'افراد مرتبط', emoji: '🔗' },
   { key: 'history', label: 'تاریخچه تعامل', emoji: '💬' },
+  { key: 'linked', label: 'آیتم‌های مرتبط', emoji: '📌' },
 ] as const;
+
+const ENTITY_TYPE_LABELS: Record<string, { label: string; emoji: string }> = {
+  goal: { label: 'هدف', emoji: '🎯' },
+  project: { label: 'پروژه', emoji: '📂' },
+  task: { label: 'وظیفه', emoji: '✅' },
+  occasion: { label: 'مناسبت', emoji: '📅' },
+  document: { label: 'سند', emoji: '📄' },
+  finance: { label: 'مالی', emoji: '💰' },
+};
+
+const LINK_ROLE_LABELS: Record<string, string> = {
+  owner: 'مالک',
+  collaborator: 'همکار',
+  mentor: 'منتور',
+  accountability: 'پاسخگو',
+  stakeholder: 'ذی‌نفع',
+  family: 'خانواده',
+  vendor: 'تأمین‌کننده',
+  client: 'مشتری',
+  introduced_by: 'معرفی‌شده توسط',
+  related_person: 'شخص مرتبط',
+};
 
 export default function ContactsSection({
   contacts = [],
@@ -83,6 +112,11 @@ export default function ContactsSection({
   onUpdateContact,
   onAddOccasion,
   onSelectContact,
+  onNavigateEntity,
+  goals = [],
+  projects = [],
+  tasks = [],
+  occasions = [],
   todayDate
 }: ContactsSectionProps) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -93,7 +127,18 @@ export default function ContactsSection({
   const [selectedRelationFilter, setSelectedRelationFilter] = useState<string>('all'); // all/has_relations/no_relations/needs_follow_up
   const [sortBy, setSortBy] = useState<string>('default');
   const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
-  const [activeDetailTab, setActiveDetailTab] = useState<'overview' | 'relations' | 'history'>('overview');
+  const [activeDetailTab, setActiveDetailTab] = useState<'overview' | 'relations' | 'history' | 'linked'>('overview');
+
+  // Contact-entity links state
+  const [contactLinks, setContactLinks] = useState<ContactLink[]>([]);
+  const [loadingLinks, setLoadingLinks] = useState(false);
+  const [linkModalOpen, setLinkModalOpen] = useState(false);
+  const [linkEntityType, setLinkEntityType] = useState<ContactLinkEntityType>('goal');
+  const [linkEntityId, setLinkEntityId] = useState('');
+  const [linkRole, setLinkRole] = useState<ContactLinkRole>('related_person');
+  const [linkContextNote, setLinkContextNote] = useState('');
+  const [editLinkName, setEditLinkName] = useState<string | null>(null);
+  const [deleteLinkConfirm, setDeleteLinkConfirm] = useState<string | null>(null);
 
   // Contact summaries from backend (relation counts + health)
   const [contactSummaries, setContactSummaries] = useState<Record<string, ContactSummary>>({});
@@ -199,6 +244,41 @@ export default function ContactsSection({
   useEffect(() => {
     fetchSummaries();
   }, [fetchSummaries, contacts.length]);
+
+  // Fetch entity links for active contact
+  const fetchLinks = useCallback(async (contactId: string) => {
+    setLoadingLinks(true);
+    try {
+      const resp = await getContactLinks({ contactId });
+      const raw = resp?.data?.links || [];
+      const mapped: ContactLink[] = raw.map((l: any) => ({
+        name: l.name,
+        contact: l.contact,
+        contactName: l.contact_name,
+        contactPhoto: l.contact_photo,
+        entityType: l.entity_type,
+        entity: l.entity,
+        entityTitle: l.entity_title,
+        role: l.role,
+        contextNote: l.context_note || '',
+        status: l.status,
+        sortOrder: l.sort_order || 0,
+      }));
+      setContactLinks(mapped);
+    } catch {
+      setContactLinks([]);
+    } finally {
+      setLoadingLinks(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (selectedContactId) {
+      fetchLinks(selectedContactId);
+    } else {
+      setContactLinks([]);
+    }
+  }, [selectedContactId, fetchLinks]);
 
   const activeContact = contacts.find(c => c.id === selectedContactId) || null;
 
@@ -354,6 +434,59 @@ export default function ContactsSection({
       console.error('[hambaft] delete relation failed', err);
     }
     setDeleteRelationConfirm(null);
+  };
+
+  // Contact link handlers
+  const handleOpenLinkModal = (existing?: ContactLink) => {
+    if (existing) {
+      setEditLinkName(existing.name);
+      setLinkEntityType(existing.entityType);
+      setLinkEntityId(existing.entity);
+      setLinkRole(existing.role);
+      setLinkContextNote(existing.contextNote);
+    } else {
+      setEditLinkName(null);
+      setLinkEntityType('goal');
+      setLinkEntityId('');
+      setLinkRole('related_person');
+      setLinkContextNote('');
+    }
+    setLinkModalOpen(true);
+  };
+
+  const handleSaveLink = async () => {
+    if (!activeContact || !linkEntityId) return;
+    try {
+      if (editLinkName) {
+        await updateContactLink(editLinkName, {
+          role: linkRole,
+          context_note: linkContextNote,
+        });
+      } else {
+        await createContactLink({
+          contact: activeContact.id,
+          entity_type: linkEntityType,
+          entity: linkEntityId,
+          role: linkRole,
+          context_note: linkContextNote,
+        });
+      }
+      await fetchLinks(activeContact.id);
+      setLinkModalOpen(false);
+    } catch (err) {
+      console.error('[hambaft] save link failed', err);
+    }
+  };
+
+  const handleDeleteLink = async (linkName: string) => {
+    if (!activeContact) return;
+    try {
+      await deleteContactLink(linkName);
+      await fetchLinks(activeContact.id);
+    } catch (err) {
+      console.error('[hambaft] delete link failed', err);
+    }
+    setDeleteLinkConfirm(null);
   };
 
   // Quick action: mark as reached today
@@ -1265,6 +1398,87 @@ export default function ContactsSection({
               </div>
               )}
 
+              {/* Tab Content: Linked Items */}
+              {activeDetailTab === 'linked' && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-black text-[#2D3025] dark:text-[#E8ECE0] flex items-center gap-1.5">
+                    <Link2 className="w-3.5 h-3.5 text-[#7C8363] dark:text-[#9ECE9A]" />
+                    <span>آیتم‌های مرتبط در سیستم</span>
+                    {contactLinks.length > 0 && (
+                      <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full bg-[#7C8363]/10 dark:bg-[#9ECE9A]/10 text-[#7C8363] dark:text-[#9ECE9A]">{contactLinks.length}</span>
+                    )}
+                  </h4>
+                  <button
+                    onClick={() => handleOpenLinkModal()}
+                    className="px-2.5 py-1.5 bg-[#7C8363]/10 dark:bg-[#9ECE9A]/10 text-[#7C8363] dark:text-[#9ECE9A] text-[9px] font-black rounded-lg cursor-pointer hover:bg-[#7C8363]/20 transition-colors flex items-center gap-1"
+                  >
+                    <Plus className="w-3 h-3" />
+                    افزودن پیوند
+                  </button>
+                </div>
+
+                {loadingLinks ? (
+                  <div className="flex items-center justify-center py-6 gap-2">
+                    <div className="w-4 h-4 border-2 border-[#7C8363]/30 border-t-[#7C8363] rounded-full animate-spin" />
+                    <span className="text-[10px] text-[#8D7F72]">در حال بارگذاری...</span>
+                  </div>
+                ) : contactLinks.length > 0 ? (
+                  // Group by entity type
+                  Object.entries(
+                    contactLinks.reduce((acc, link) => {
+                      if (!acc[link.entityType]) acc[link.entityType] = [];
+                      acc[link.entityType].push(link);
+                      return acc;
+                    }, {} as Record<string, ContactLink[]>)
+                  ).map(([etype, links]) => {
+                    const elabel = ENTITY_TYPE_LABELS[etype] || { label: etype, emoji: '📎' };
+                    return (
+                      <div key={etype}>
+                        <h5 className="text-[10px] font-black text-[#7C8363] dark:text-[#9ECE9A] mb-2 flex items-center gap-1">
+                          {elabel.emoji} {elabel.label}
+                          <span className="text-[8px] bg-[#7C8363]/10 dark:bg-[#9ECE9A]/10 px-1.5 py-0.5 rounded-full">{links.length}</span>
+                        </h5>
+                        <div className="space-y-2">
+                          {links.map(link => (
+                            <div key={link.name} className="group flex items-center gap-3 p-2.5 bg-white dark:bg-[#20241A] border border-[#E6DFD3]/40 dark:border-[#3D4133]/20 rounded-xl text-right transition-all hover:shadow-sm">
+                              <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 border border-[#E6DFD3]/40 shrink-0 flex items-center justify-center text-sm">
+                                {elabel.emoji}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <button
+                                  onClick={() => { if (onNavigateEntity) onNavigateEntity(link.entityType, link.entity); }}
+                                  className="text-[10px] font-black text-[#2D3025] dark:text-[#E8ECE0] block truncate text-right hover:text-[#7C8363] dark:hover:text-[#9ECE9A] cursor-pointer"
+                                >
+                                  {link.entityTitle}
+                                </button>
+                                <div className="flex items-center gap-1.5 mt-0.5">
+                                  <span className="text-[7px] font-bold px-1.5 py-0.5 rounded-md bg-[#7C8363]/10 dark:bg-[#9ECE9A]/10 text-[#7C8363] dark:text-[#9ECE9A]">
+                                    {LINK_ROLE_LABELS[link.role] || link.role}
+                                  </span>
+                                  {link.contextNote && (
+                                    <span className="text-[7px] text-[#8D7F72] truncate">{link.contextNote}</span>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button onClick={() => handleOpenLinkModal(link)} className="p-1 rounded text-[#8D7F72] hover:text-[#7C8363] cursor-pointer"><Edit2 className="w-3 h-3" /></button>
+                                <button onClick={() => setDeleteLinkConfirm(link.name)} className="p-1 rounded text-[#8D7F72] hover:text-red-400 cursor-pointer"><Trash2 className="w-3 h-3" /></button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="text-center py-5 text-[10px] text-[#8D7F72] border border-[#E6DFD3]/40 dark:border-[#3D4133]/20 rounded-2xl bg-white dark:bg-[#20241A] p-4">
+                    هنوز آیتمی پیوند نشده. اهداف، پروژه‌ها و وظایف مرتبط را به این مخاطب پیوند دهید.
+                  </div>
+                )}
+              </div>
+              )}
+
               {/* Insights mini-section at bottom of any tab */}
               {(() => {
                 const summary = contactSummaries[activeContact.id];
@@ -1967,6 +2181,123 @@ export default function ContactsSection({
               <div className="flex items-center gap-2 justify-end">
                 <button onClick={() => setDeleteRelationConfirm(null)} className="px-3 py-1.5 text-[10px] font-bold text-[#8D7F72] dark:text-[#9D978B] cursor-pointer">انصراف</button>
                 <button onClick={() => handleDeleteRelation(deleteRelationConfirm)} className="px-3 py-1.5 bg-red-500 text-white rounded-lg text-[10px] font-bold cursor-pointer">حذف</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* CONTACT LINK MODAL */}
+      <AnimatePresence>
+        {linkModalOpen && activeContact && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-[#FDFBF7] dark:bg-[#1B1D16] border border-[#E6DFD3] dark:border-[#3D4133]/50 rounded-[24px] p-6 max-w-md w-full text-right"
+            >
+              <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-3 mb-4">
+                <h3 className="text-sm font-black text-[#2D3025] dark:text-[#E8ECE0] flex items-center gap-2">
+                  <Link2 className="w-4 h-4 text-[#7C8363]" />
+                  {editLinkName ? 'ویرایش پیوند' : 'افزودن پیوند'}
+                </h3>
+                <button onClick={() => setLinkModalOpen(false)} className="p-1 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 cursor-pointer">
+                  <X className="w-4 h-4 text-[#8D7F72]" />
+                </button>
+              </div>
+
+              <div className="space-y-4 max-h-[70vh] overflow-y-auto px-1">
+                {/* Entity Type */}
+                <div>
+                  <label className="text-[10px] font-black text-[#8D7F72] dark:text-[#9D978B] block mb-1">نوع آیتم *</label>
+                  <select
+                    value={linkEntityType}
+                    onChange={(e) => { setLinkEntityType(e.target.value as ContactLinkEntityType); setLinkEntityId(''); }}
+                    disabled={!!editLinkName}
+                    className="w-full text-xs font-black p-3 rounded-xl border border-[#E6DFD3] dark:border-[#3D4133]/50 bg-white dark:bg-[#20241A] disabled:opacity-50"
+                  >
+                    {Object.entries(ENTITY_TYPE_LABELS).map(([k, v]) => (
+                      <option key={k} value={k}>{v.emoji} {v.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Entity Selection */}
+                <div>
+                  <label className="text-[10px] font-black text-[#8D7F72] dark:text-[#9D978B] block mb-1">انتخاب آیتم *</label>
+                  <select
+                    value={linkEntityId}
+                    onChange={(e) => setLinkEntityId(e.target.value)}
+                    disabled={!!editLinkName}
+                    className="w-full text-xs font-black p-3 rounded-xl border border-[#E6DFD3] dark:border-[#3D4133]/50 bg-white dark:bg-[#20241A] disabled:opacity-50"
+                  >
+                    <option value="">انتخاب کنید...</option>
+                    {linkEntityType === 'goal' && goals.map(g => (
+                      <option key={g.id} value={g.id}>{g.title}</option>
+                    ))}
+                    {linkEntityType === 'project' && projects.map(p => (
+                      <option key={p.id} value={p.id}>{p.title}</option>
+                    ))}
+                    {linkEntityType === 'task' && tasks.map(t => (
+                      <option key={t.id} value={t.id}>{t.title}</option>
+                    ))}
+                    {linkEntityType === 'occasion' && occasions.map(o => (
+                      <option key={o.id} value={o.id}>{o.title}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Role */}
+                <div>
+                  <label className="text-[10px] font-black text-[#8D7F72] dark:text-[#9D978B] block mb-1">نقش در این آیتم *</label>
+                  <select
+                    value={linkRole}
+                    onChange={(e) => setLinkRole(e.target.value as ContactLinkRole)}
+                    className="w-full text-xs font-black p-3 rounded-xl border border-[#E6DFD3] dark:border-[#3D4133]/50 bg-white dark:bg-[#20241A]"
+                  >
+                    {Object.entries(LINK_ROLE_LABELS).map(([k, v]) => (
+                      <option key={k} value={k}>{v}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Context Note */}
+                <div>
+                  <label className="text-[10px] font-black text-[#8D7F72] dark:text-[#9D978B] block mb-1">توضیح زمینه (اختیاری)</label>
+                  <textarea rows={2} value={linkContextNote} onChange={e => setLinkContextNote(e.target.value)}
+                    placeholder="مثلاً: منتور در مسیر یادگیری..."
+                    className="w-full text-xs font-extrabold p-3 rounded-xl border border-[#E6DFD3] dark:border-[#3D4133]/50 bg-white dark:bg-[#20241A] resize-none focus:outline-none" />
+                </div>
+
+                {/* Submit */}
+                <button
+                  onClick={handleSaveLink}
+                  disabled={!linkEntityId}
+                  className="w-full py-3 bg-[#7C8363] dark:bg-[#9ECE9A] text-white dark:text-[#121411] text-xs font-black rounded-xl shadow-md cursor-pointer hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  <Check className="w-4 h-4" />
+                  {editLinkName ? 'ذخیره تغییرات' : 'ثبت پیوند'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* DELETE LINK CONFIRM */}
+      <AnimatePresence>
+        {deleteLinkConfirm && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setDeleteLinkConfirm(null)}>
+            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }}
+              onClick={e => e.stopPropagation()}
+              className="bg-white dark:bg-[#1B1D16] rounded-2xl p-5 max-w-xs w-full shadow-2xl border border-[#E6DFD3]/60 dark:border-[#3D4133]/60">
+              <h3 className="text-[12px] font-black text-[#2D3025] dark:text-[#E8ECE0] mb-2">حذف پیوند</h3>
+              <p className="text-[10px] text-[#8D7F72] dark:text-[#9D978B] mb-3">مطمئنی؟ این پیوند حذف می‌شه.</p>
+              <div className="flex items-center gap-2 justify-end">
+                <button onClick={() => setDeleteLinkConfirm(null)} className="px-3 py-1.5 text-[10px] font-bold text-[#8D7F72] dark:text-[#9D978B] cursor-pointer">انصراف</button>
+                <button onClick={() => handleDeleteLink(deleteLinkConfirm)} className="px-3 py-1.5 bg-red-500 text-white rounded-lg text-[10px] font-bold cursor-pointer">حذف</button>
               </div>
             </motion.div>
           </motion.div>

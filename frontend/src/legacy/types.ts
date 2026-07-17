@@ -653,6 +653,23 @@ export interface ContactSummary {
   health: RelationshipHealth;
 }
 
+export type ContactLinkEntityType = 'goal' | 'project' | 'task' | 'occasion' | 'document' | 'finance';
+export type ContactLinkRole = 'owner' | 'collaborator' | 'mentor' | 'accountability' | 'stakeholder' | 'family' | 'vendor' | 'client' | 'introduced_by' | 'related_person';
+
+export interface ContactLink {
+  name: string;
+  contact: string;
+  contactName: string;
+  contactPhoto?: string;
+  entityType: ContactLinkEntityType;
+  entity: string;
+  entityTitle: string;
+  role: ContactLinkRole;
+  contextNote: string;
+  status: string;
+  sortOrder: number;
+}
+
 export interface MoodLog {
   id: string;
   date: string; // YYYY-MM-DD

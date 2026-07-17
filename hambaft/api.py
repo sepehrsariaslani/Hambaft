@@ -2584,6 +2584,12 @@ def delete_contact(name):
             frappe.delete_doc("Hambaft Contact Relation", rel.name, ignore_permissions=True, force=True)
     except Exception:
         pass  # Relation tables may not exist yet
+    # Also delete all contact-entity links involving this contact
+    try:
+        for link in frappe.get_all("Hambaft Contact Link", filters={"user": frappe.session.user, "contact": name}):
+            frappe.delete_doc("Hambaft Contact Link", link.name, ignore_permissions=True, force=True)
+    except Exception:
+        pass  # Link table may not exist yet
     frappe.delete_doc("Hambaft Contact", name, ignore_permissions=True)
     frappe.db.commit()
     return _api_response({"ok": True})
@@ -2840,6 +2846,166 @@ def delete_contact_relation(name):
     _check_auth()
     _require_owner("Hambaft Contact Relation", name)
     frappe.delete_doc("Hambaft Contact Relation", name, ignore_permissions=True, force=True)
+    frappe.db.commit()
+    return _api_response({"ok": True})
+
+
+# ─── Contact Links (contact ↔ entity) ──────────────────────────
+
+
+def _contact_link_table_exists():
+    """Check if Hambaft Contact Link table exists."""
+    try:
+        return frappe.db.exists("DocType", "Hambaft Contact Link")
+    except Exception:
+        return False
+
+
+_ENTITY_DOCTYPE_MAP = {
+    "goal": "Hambaft Goal",
+    "project": "Hambaft Project",
+    "task": "Hambaft Task",
+    "occasion": "Hambaft Occasion",
+    "document": "Hambaft Document",
+    "finance": "Hambaft Finance Entry",
+}
+
+
+def _enrich_contact_link(link):
+    """Add entity title and contact name to a link record."""
+    result = {
+        "name": link.name,
+        "contact": link.contact,
+        "entity_type": link.entity_type,
+        "entity": link.entity,
+        "role": link.role,
+        "context_note": link.context_note or "",
+        "status": link.status,
+        "sort_order": link.sort_order or 0,
+    }
+    # Contact name
+    result["contact_name"] = frappe.db.get_value("Hambaft Contact", link.contact, "full_name") or link.contact
+    result["contact_photo"] = frappe.db.get_value("Hambaft Contact", link.contact, "photo_url") or None
+
+    # Entity title
+    target_dt = _ENTITY_DOCTYPE_MAP.get(link.entity_type)
+    if target_dt and link.entity:
+        title_field = "title" if target_dt != "Hambaft Finance Entry" else "title"
+        result["entity_title"] = frappe.db.get_value(target_dt, link.entity, title_field) or link.entity
+    else:
+        result["entity_title"] = link.entity
+
+    return result
+
+
+@frappe.whitelist()
+def get_contact_links(contact_id=None, entity_type=None, entity_id=None):
+    """Get contact-entity links. Can filter by contact, entity, or both.
+    If contact_id provided: returns all links for that contact.
+    If entity_type+entity_id provided: returns all links for that entity.
+    """
+    _check_auth()
+    user = frappe.session.user
+
+    if not _contact_link_table_exists():
+        return _api_response({"links": [], "contact_link_not_ready": True})
+
+    filters = {"user": user, "status": "active"}
+    if contact_id:
+        filters["contact"] = contact_id
+    if entity_type:
+        filters["entity_type"] = entity_type
+    if entity_id:
+        filters["entity"] = entity_id
+
+    links = frappe.get_all(
+        "Hambaft Contact Link",
+        filters=filters,
+        fields=["name", "contact", "entity_type", "entity", "role", "context_note", "status", "sort_order"],
+        order_by="sort_order asc, creation desc",
+    )
+
+    result = [_enrich_contact_link(link) for link in links]
+    return _api_response({"links": result})
+
+
+@frappe.whitelist()
+def create_contact_link(data):
+    """Create a link between a contact and an entity."""
+    _check_auth()
+    user = frappe.session.user
+
+    if not _contact_link_table_exists():
+        return _api_response({"link_name": None, "created": False, "contact_link_not_ready": True})
+
+    if isinstance(data, str):
+        data = json.loads(data)
+    data = data or {}
+
+    contact = data.get("contact")
+    entity_type = data.get("entity_type")
+    entity = data.get("entity")
+
+    if not contact or not entity_type or not entity:
+        frappe.throw("contact, entity_type, and entity are required.")
+
+    # Validate contact ownership
+    owner = frappe.db.get_value("Hambaft Contact", contact, "user")
+    if owner != user:
+        frappe.throw("Contact does not belong to you.", frappe.PermissionError)
+
+    # Validate entity ownership
+    target_dt = _ENTITY_DOCTYPE_MAP.get(entity_type)
+    if not target_dt:
+        frappe.throw(f"Unsupported entity type: {entity_type}")
+    eowner = frappe.db.get_value(target_dt, entity, "user")
+    if eowner != user:
+        frappe.throw(f"Entity does not belong to you.", frappe.PermissionError)
+
+    role = data.get("role") or "related_person"
+    context_note = data.get("context_note") or ""
+
+    doc = frappe.new_doc("Hambaft Contact Link")
+    doc.user = user
+    doc.contact = contact
+    doc.entity_type = entity_type
+    doc.entity = entity
+    doc.role = role
+    doc.context_note = context_note
+    doc.status = "active"
+    doc.sort_order = cint(data.get("sort_order") or 0)
+    doc.insert(ignore_permissions=True)
+    frappe.db.commit()
+
+    return _api_response({"link_name": doc.name, "created": True})
+
+
+@frappe.whitelist()
+def update_contact_link(name, data):
+    """Update a contact link."""
+    _check_auth()
+    _require_owner("Hambaft Contact Link", name)
+
+    if isinstance(data, str):
+        data = json.loads(data)
+    data = data or {}
+
+    doc = frappe.get_doc("Hambaft Contact Link", name)
+    for fieldname in ("role", "context_note", "sort_order", "status"):
+        if fieldname in data:
+            setattr(doc, fieldname, data.get(fieldname))
+
+    doc.save(ignore_permissions=True)
+    frappe.db.commit()
+    return _api_response({"ok": True})
+
+
+@frappe.whitelist()
+def delete_contact_link(name):
+    """Delete a contact link."""
+    _check_auth()
+    _require_owner("Hambaft Contact Link", name)
+    frappe.delete_doc("Hambaft Contact Link", name, ignore_permissions=True, force=True)
     frappe.db.commit()
     return _api_response({"ok": True})
 

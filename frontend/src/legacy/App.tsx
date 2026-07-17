@@ -3742,6 +3742,15 @@ export default function App({
             onUpdateContact={handleUpdateContact}
             onAddOccasion={handleAddOccasion}
             onSelectContact={(_id: string) => { /* relation navigation handled inside ContactsSection */ }}
+            onNavigateEntity={(entityType: string, entityId: string) => {
+              if (entityType === 'goal') goToGoal(entityId);
+              else if (entityType === 'project') goToProject(entityId);
+              else if (entityType === 'task') goToTaskDetail(entityId);
+            }}
+            goals={lifeData.goals}
+            projects={lifeData.goals.flatMap(g => g.projects || [])}
+            tasks={lifeData.tasks}
+            occasions={lifeData.occasions}
             todayDate={TODAY_DATE}
           />
         );
