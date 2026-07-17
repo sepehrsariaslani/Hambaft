@@ -222,6 +222,8 @@ function mapGoals(items: any[]): Goal[] {
       color: item.color || undefined,
       icon: item.icon || undefined,
       status: item.status || undefined,
+      privacy: item.privacy || undefined,
+      members: item.members || undefined,
       metric:
         item.target_value || item.current_value || item.unit
           ? {

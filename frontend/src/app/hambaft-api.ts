@@ -1677,3 +1677,112 @@ export async function quickAddTask(
   if (options?.context) params.context = options.context
   return call<{ data?: { task?: any } }>('hambaft.hambaft.api.quick_add_task', params)
 }
+
+
+// ═══════════════════════════════════════════════════════════════
+// Phase 6: Partner Connection & Social Infrastructure
+// ═══════════════════════════════════════════════════════════════
+
+export interface PartnerInfo {
+  email: string
+  full_name: string
+  username: string | null
+  avatar_url: string | null
+}
+
+export interface PartnerConnection {
+  connection_id: string
+  partner: PartnerInfo
+  connected_since: string | null
+  notes: string
+  shared_goals_count: number
+}
+
+export interface PartnerInvite {
+  name: string
+  invitee?: string
+  invitee_username: string
+  invite_code: string
+  status: string
+  goal?: string
+  message?: string
+  expires_at?: string
+  creation: string
+  invitee_info?: PartnerInfo
+  inviter?: string
+  inviter_info?: PartnerInfo
+}
+
+export interface GoalMember {
+  membership_id: string | null
+  user: PartnerInfo
+  role: string
+  joined_at: string | null
+}
+
+export async function invitePartner(data: {
+  username?: string
+  email?: string
+  goal_id?: string
+  message?: string
+  generate_code?: boolean
+}) {
+  return call<{ data?: any }>('hambaft.hambaft.api.invite_partner', { data })
+}
+
+export async function acceptPartnerInvite(data: {
+  invite_code?: string
+  invite_id?: string
+}) {
+  return call<{ data?: any }>('hambaft.hambaft.api.accept_partner_invite', { data })
+}
+
+export async function rejectPartnerInvite(data: {
+  invite_id?: string
+  invite_code?: string
+}) {
+  return call<{ data?: any }>('hambaft.hambaft.api.reject_partner_invite', { data })
+}
+
+export async function cancelPartnerInvite(inviteId: string) {
+  return call<{ data?: any }>('hambaft.hambaft.api.cancel_partner_invite', { invite_id: inviteId })
+}
+
+export async function getPartnerInvites() {
+  return callGet<{ data?: { sent?: PartnerInvite[]; received?: PartnerInvite[] } }>(
+    'hambaft.hambaft.api.get_partner_invites'
+  )
+}
+
+export async function getPartners() {
+  return callGet<{ data?: { partners?: PartnerConnection[] } }>(
+    'hambaft.hambaft.api.get_partners'
+  )
+}
+
+export async function removePartner(connectionId: string) {
+  return call<{ data?: any }>('hambaft.hambaft.api.remove_partner', { connection_id: connectionId })
+}
+
+export async function shareGoalWithPartner(data: {
+  goal_id: string
+  partner_email: string
+}) {
+  return call<{ data?: any }>('hambaft.hambaft.api.share_goal_with_partner', { data })
+}
+
+export async function getGoalMembers(goalId: string) {
+  return callGet<{ data?: { members?: GoalMember[] } }>(
+    `hambaft.hambaft.api.get_goal_members?goal_id=${encodeURIComponent(goalId)}`
+  )
+}
+
+export async function getSharedGoals() {
+  return callGet<{ data?: { shared_goals?: any[] } }>(
+    'hambaft.hambaft.api.get_shared_goals'
+  )
+}
+
+export async function removeGoalMember(data: { goal_id: string; member_email: string }) {
+  return call<{ data?: any }>('hambaft.hambaft.api.remove_goal_member', { data })
+}

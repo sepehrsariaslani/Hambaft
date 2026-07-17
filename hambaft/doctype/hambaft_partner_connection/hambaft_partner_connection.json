@@ -1,0 +1,82 @@
+{
+  "actions": [],
+  "autoname": "format:PC-{#####}",
+  "creation": "2026-07-18 12:00:00.000000",
+  "doctype": "DocType",
+  "engine": "InnoDB",
+  "field_order": [
+    "user_a",
+    "user_b",
+    "column_break_1",
+    "status",
+    "connected_since",
+    "section_break_notes",
+    "notes"
+  ],
+  "fields": [
+    {
+      "fieldname": "user_a",
+      "fieldtype": "Link",
+      "label": "کاربر اول",
+      "options": "User",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "user_b",
+      "fieldtype": "Link",
+      "label": "کاربر دوم",
+      "options": "User",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "column_break_1",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "status",
+      "fieldtype": "Select",
+      "label": "وضعیت",
+      "options": "\nفعال\nحذف‌شده\nبلاک‌شده",
+      "default": "فعال",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "connected_since",
+      "fieldtype": "Date",
+      "label": "تاریخ اتصال"
+    },
+    {
+      "fieldname": "section_break_notes",
+      "fieldtype": "Section Break",
+      "label": "یادداشت"
+    },
+    {
+      "fieldname": "notes",
+      "fieldtype": "Small Text",
+      "label": "یادداشت"
+    }
+  ],
+  "index_web_pages_for_search": 0,
+  "is_single": 0,
+  "istable": 0,
+  "links": [],
+  "modified": "2026-07-18 12:00:00.000000",
+  "modified_by": "Administrator",
+  "module": "Hambaft",
+  "name": "Hambaft Partner Connection",
+  "naming_rule": "Expression (old style)",
+  "owner": "Administrator",
+  "permissions": [
+    {"create": 1, "delete": 1, "email": 0, "export": 0, "print": 0, "read": 1, "report": 0, "role": "All", "share": 0, "write": 1}
+  ],
+  "sort_field": "creation",
+  "sort_order": "DESC",
+  "states": [],
+  "title_field": ""
+}

@@ -6,7 +6,7 @@ from datetime import datetime, date, timedelta
 
 import frappe
 from frappe import _
-from frappe.utils import now_datetime, getdate, today, cint, flt
+from frappe.utils import now_datetime, get_datetime, getdate, today, cint, flt
 from .settings_contract import SETTINGS_FIELDS, get_supported_settings_fields, normalize_settings_update
 from .gallery_mapping import is_gallery_image_file, plan_gallery_scope
 from .dashboard_home import (
@@ -6601,3 +6601,593 @@ def run_project_tasks_migration():
 
     frappe.db.commit()
     return _api_response({"status": "done", "created": created, "skipped": skipped, "errors": errors})
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PHASE 6: Partner Connection & Social Infrastructure
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _generate_invite_code():
+    import random, string
+    return ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
+
+
+def _user_display_info(user_email):
+    """Get display info for a user by email."""
+    full_name = frappe.db.get_value("User", user_email, "full_name") or user_email
+    user_image = frappe.db.get_value("User", user_email, "user_image") or None
+    # Try to get username
+    username = frappe.db.get_value("User", user_email, "username") or None
+    return {
+        "email": user_email,
+        "full_name": full_name,
+        "username": username,
+        "avatar_url": user_image,
+    }
+
+
+@frappe.whitelist()
+def invite_partner(data):
+    """Send a partner invite by username, email, or generate an invite code."""
+    _check_auth()
+    user = frappe.session.user
+
+    if isinstance(data, str):
+        data = json.loads(data)
+    data = data or {}
+
+    invitee_identifier = (data.get("username") or data.get("email") or "").strip()
+    goal_id = data.get("goal_id")
+    message = data.get("message") or ""
+
+    if not invitee_identifier and not data.get("generate_code"):
+        frappe.throw("Provide a username, email, or request an invite code.")
+
+    # Resolve invitee
+    invitee = None
+    if invitee_identifier:
+        # Try by email first
+        if "@" in invitee_identifier:
+            invitee = frappe.db.get_value("User", {"email": invitee_identifier}, "name")
+        # Try by username
+        if not invitee:
+            invitee = frappe.db.get_value("User", {"username": invitee_identifier}, "name")
+        # Try by full_name (fuzzy)
+        if not invitee:
+            invitee = frappe.db.get_value("User", {"full_name": ["like", f"%{invitee_identifier}%"]}, "name")
+
+        if not invitee and not data.get("generate_code"):
+            frappe.throw(f"User '{invitee_identifier}' not found. You can generate an invite code instead.")
+
+    # Check not inviting self
+    if invitee and invitee == user:
+        frappe.throw("You cannot invite yourself.")
+
+    # Check for existing pending invite
+    if invitee:
+        existing = frappe.db.exists(
+            "Hambaft Partner Invite",
+            {
+                "inviter": user,
+                "invitee": invitee,
+                "status": "در_انتظار",
+            },
+        )
+        if existing:
+            frappe.throw("A pending invite already exists for this user.")
+
+        # Check if already connected
+        conn = frappe.db.sql(
+            """SELECT name FROM `tabHambaft Partner Connection`
+            WHERE status = 'فعال'
+            AND ((user_a = %s AND user_b = %s) OR (user_a = %s AND user_b = %s))
+            LIMIT 1""",
+            (user, invitee, invitee, user),
+        )
+        if conn:
+            frappe.throw("You are already connected with this user.")
+
+    # Validate goal if specified
+    if goal_id:
+        goal_owner = frappe.db.get_value("Hambaft Goal", goal_id, "user")
+        if goal_owner != user:
+            frappe.throw("You can only share your own goals.", frappe.PermissionError)
+
+    # Create invite
+    invite_code = _generate_invite_code()
+    from frappe.utils import now_datetime, add_to_date
+    expires_at = add_to_date(now_datetime(), days=7)
+
+    doc = frappe.new_doc("Hambaft Partner Invite")
+    doc.inviter = user
+    doc.invitee = invitee or ""
+    doc.invitee_username = invitee_identifier or ""
+    doc.invite_code = invite_code
+    doc.status = "در_انتظار"
+    doc.goal = goal_id or ""
+    doc.message = message
+    doc.expires_at = expires_at
+    doc.insert(ignore_permissions=True)
+    frappe.db.commit()
+
+    invite_info = {
+        "invite_id": doc.name,
+        "invite_code": invite_code,
+        "status": doc.status,
+        "expires_at": str(expires_at),
+    }
+
+    if invitee:
+        invite_info["invitee"] = _user_display_info(invitee)
+
+    return _api_response(invite_info)
+
+
+@frappe.whitelist()
+def accept_partner_invite(data=None):
+    """Accept a partner invite by invite code or invite ID."""
+    _check_auth()
+    user = frappe.session.user
+
+    if isinstance(data, str):
+        data = json.loads(data)
+    data = data or {}
+
+    invite_code = data.get("invite_code")
+    invite_id = data.get("invite_id")
+
+    if not invite_code and not invite_id:
+        frappe.throw("Provide invite_code or invite_id.")
+
+    # Find the invite
+    if invite_code:
+        invite_name = frappe.db.get_value("Hambaft Partner Invite", {"invite_code": invite_code, "status": "در_انتظار"})
+    else:
+        invite_name = frappe.db.get_value("Hambaft Partner Invite", {"name": invite_id, "status": "در_انتظار"})
+
+    if not invite_name:
+        frappe.throw("Invite not found or no longer pending.")
+
+    invite_doc = frappe.get_doc("Hambaft Partner Invite", invite_name)
+
+    # Check if invite is for a specific user
+    if invite_doc.invitee and invite_doc.invitee != user:
+        frappe.throw("This invite was sent to another user.")
+
+    # Check expiry
+    from frappe.utils import now_datetime
+    if invite_doc.expires_at and now_datetime() > get_datetime(invite_doc.expires_at):
+        invite_doc.status = "منقضی‌شده"
+        invite_doc.save(ignore_permissions=True)
+        frappe.db.commit()
+        frappe.throw("This invite has expired.")
+
+    # Check not already connected
+    inviter = invite_doc.inviter
+    conn = frappe.db.sql(
+        """SELECT name FROM `tabHambaft Partner Connection`
+        WHERE status = 'فعال'
+        AND ((user_a = %s AND user_b = %s) OR (user_a = %s AND user_b = %s))
+        LIMIT 1""",
+        (inviter, user, user, inviter),
+    )
+    if conn:
+        frappe.throw("You are already connected with this user.")
+
+    # Create partner connection
+    import datetime
+    conn_doc = frappe.new_doc("Hambaft Partner Connection")
+    conn_doc.user_a = inviter
+    conn_doc.user_b = user
+    conn_doc.status = "فعال"
+    conn_doc.connected_since = datetime.date.today()
+    conn_doc.notes = invite_doc.message or ""
+    conn_doc.insert(ignore_permissions=True)
+
+    # Update invite
+    invite_doc.status = "پذیرفته‌شده"
+    invite_doc.responded_at = now_datetime()
+    invite_doc.save(ignore_permissions=True)
+
+    # If there's a goal, add the new user as a goal member
+    if invite_doc.goal:
+        goal = frappe.get_doc("Hambaft Goal", invite_doc.goal)
+        # Update goal privacy to shared
+        if goal.privacy == "خصوصی":
+            goal.privacy = "اشتراکی"
+        # Add member
+        existing_member = frappe.db.exists("Hambaft Goal Member", {
+            "goal": invite_doc.goal,
+            "user": user,
+            "status": "فعال",
+        })
+        if not existing_member:
+            goal_member = frappe.new_doc("Hambaft Goal Member")
+            goal_member.goal = invite_doc.goal
+            goal_member.user = user
+            goal_member.role = "پارتنر"
+            goal_member.status = "فعال"
+            goal_member.joined_at = datetime.date.today()
+            goal_member.insert(ignore_permissions=True)
+
+        # Also ensure owner is a member
+        owner_member = frappe.db.exists("Hambaft Goal Member", {
+            "goal": invite_doc.goal,
+            "user": inviter,
+            "status": "فعال",
+        })
+        if not owner_member:
+            goal_member = frappe.new_doc("Hambaft Goal Member")
+            goal_member.goal = invite_doc.goal
+            goal_member.user = inviter
+            goal_member.role = "مالک"
+            goal_member.status = "فعال"
+            goal_member.joined_at = datetime.date.today()
+            goal_member.insert(ignore_permissions=True)
+
+    frappe.db.commit()
+
+    return _api_response({
+        "connection_id": conn_doc.name,
+        "partner": _user_display_info(inviter),
+        "goal_shared": invite_doc.goal or None,
+        "status": "connected",
+    })
+
+
+@frappe.whitelist()
+def reject_partner_invite(data=None):
+    """Reject a partner invite."""
+    _check_auth()
+    user = frappe.session.user
+
+    if isinstance(data, str):
+        data = json.loads(data)
+    data = data or {}
+
+    invite_id = data.get("invite_id")
+    invite_code = data.get("invite_code")
+
+    if not invite_id and not invite_code:
+        frappe.throw("Provide invite_id or invite_code.")
+
+    if invite_code:
+        invite_name = frappe.db.get_value("Hambaft Partner Invite", {"invite_code": invite_code, "status": "در_انتظار"})
+    else:
+        invite_name = invite_id
+
+    if not invite_name:
+        frappe.throw("Invite not found or no longer pending.")
+
+    invite_doc = frappe.get_doc("Hambaft Partner Invite", invite_name)
+
+    if invite_doc.invitee and invite_doc.invitee != user:
+        frappe.throw("This invite was not sent to you.")
+
+    from frappe.utils import now_datetime
+    invite_doc.status = "ردشده"
+    invite_doc.responded_at = now_datetime()
+    invite_doc.save(ignore_permissions=True)
+    frappe.db.commit()
+
+    return _api_response({"status": "rejected"})
+
+
+@frappe.whitelist()
+def cancel_partner_invite(invite_id=None):
+    """Cancel a partner invite you sent."""
+    _check_auth()
+    user = frappe.session.user
+
+    if not invite_id:
+        frappe.throw("Provide invite_id.")
+
+    invite_doc = frappe.get_doc("Hambaft Partner Invite", invite_id)
+
+    if invite_doc.inviter != user:
+        frappe.throw("You can only cancel your own invites.")
+
+    if invite_doc.status != "در_انتظار":
+        frappe.throw("Only pending invites can be cancelled.")
+
+    invite_doc.status = "cancelled"
+    invite_doc.save(ignore_permissions=True)
+    frappe.db.commit()
+
+    return _api_response({"status": "cancelled"})
+
+
+@frappe.whitelist()
+def get_partner_invites():
+    """Get all partner invites for the current user (sent and received)."""
+    _check_auth()
+    user = frappe.session.user
+
+    # Invites I sent
+    sent = frappe.get_all(
+        "Hambaft Partner Invite",
+        filters={"inviter": user},
+        fields=["name", "invitee", "invitee_username", "invite_code", "status", "goal", "message", "expires_at", "creation"],
+        order_by="creation desc",
+    )
+    for inv in sent:
+        if inv.invitee:
+            inv["invitee_info"] = _user_display_info(inv.invitee)
+
+    # Invites I received
+    received = frappe.get_all(
+        "Hambaft Partner Invite",
+        filters={"invitee": user, "status": "در_انتظار"},
+        fields=["name", "inviter", "invite_code", "status", "goal", "message", "expires_at", "creation"],
+        order_by="creation desc",
+    )
+    for inv in received:
+        inv["inviter_info"] = _user_display_info(inv.inviter)
+
+    return _api_response({"sent": sent, "received": received})
+
+
+@frappe.whitelist()
+def get_partners():
+    """Get all active partner connections for the current user."""
+    _check_auth()
+    user = frappe.session.user
+
+    connections = frappe.db.sql(
+        """SELECT name, user_a, user_b, connected_since, notes
+        FROM `tabHambaft Partner Connection`
+        WHERE status = 'فعال' AND (user_a = %s OR user_b = %s)
+        ORDER BY connected_since DESC""",
+        (user, user),
+        as_dict=True,
+    )
+
+    partners = []
+    for conn in connections:
+        partner_email = conn.user_b if conn.user_a == user else conn.user_a
+        info = _user_display_info(partner_email)
+
+        # Count shared goals
+        shared_goals = frappe.db.sql(
+            """SELECT COUNT(DISTINCT gm.goal) as cnt
+            FROM `tabHambaft Goal Member` gm
+            WHERE gm.user = %s AND gm.status = 'فعال'
+            AND gm.goal IN (
+                SELECT gm2.goal FROM `tabHambaft Goal Member` gm2
+                WHERE gm2.user = %s AND gm2.status = 'فعال'
+            )""",
+            (user, partner_email),
+            as_dict=True,
+        )
+        shared_count = shared_goals[0].cnt if shared_goals else 0
+
+        partners.append({
+            "connection_id": conn.name,
+            "partner": info,
+            "connected_since": str(conn.connected_since) if conn.connected_since else None,
+            "notes": conn.notes or "",
+            "shared_goals_count": shared_count,
+        })
+
+    return _api_response({"partners": partners})
+
+
+@frappe.whitelist()
+def remove_partner(connection_id=None):
+    """Remove a partner connection."""
+    _check_auth()
+    user = frappe.session.user
+
+    if not connection_id:
+        frappe.throw("Provide connection_id.")
+
+    conn_doc = frappe.get_doc("Hambaft Partner Connection", connection_id)
+
+    if conn_doc.user_a != user and conn_doc.user_b != user:
+        frappe.throw("You can only remove your own connections.")
+
+    conn_doc.status = "حذف‌شده"
+    conn_doc.save(ignore_permissions=True)
+
+    # Optionally remove goal memberships for this pair
+    partner_email = conn_doc.user_b if conn_doc.user_a == user else conn_doc.user_a
+
+    # Remove active goal memberships between these two users
+    my_goals = frappe.get_all("Hambaft Goal Member", filters={"user": user, "status": "فعال"}, fields=["goal"])
+    for mg in my_goals:
+        partner_membership = frappe.db.exists("Hambaft Goal Member", {
+            "goal": mg.goal,
+            "user": partner_email,
+            "status": "فعال",
+        })
+        if partner_membership:
+            frappe.db.set_value("Hambaft Goal Member", partner_membership, "status", "حذف‌شده")
+
+    frappe.db.commit()
+
+    return _api_response({"status": "removed"})
+
+
+@frappe.whitelist()
+def share_goal_with_partner(data=None):
+    """Share an existing goal with a partner connection."""
+    _check_auth()
+    user = frappe.session.user
+
+    if isinstance(data, str):
+        data = json.loads(data)
+    data = data or {}
+
+    goal_id = data.get("goal_id")
+    partner_email = data.get("partner_email") or data.get("partner_id")
+
+    if not goal_id or not partner_email:
+        frappe.throw("goal_id and partner_email are required.")
+
+    # Verify goal ownership
+    goal_owner = frappe.db.get_value("Hambaft Goal", goal_id, "user")
+    if goal_owner != user:
+        frappe.throw("Only the goal owner can share it.", frappe.PermissionError)
+
+    # Verify active partner connection
+    conn = frappe.db.sql(
+        """SELECT name FROM `tabHambaft Partner Connection`
+        WHERE status = 'فعال'
+        AND ((user_a = %s AND user_b = %s) OR (user_a = %s AND user_b = %s))
+        LIMIT 1""",
+        (user, partner_email, partner_email, user),
+    )
+    if not conn:
+        frappe.throw("No active partner connection found with this user.")
+
+    # Check not already shared
+    existing = frappe.db.exists("Hambaft Goal Member", {
+        "goal": goal_id,
+        "user": partner_email,
+        "status": "فعال",
+    })
+    if existing:
+        frappe.throw("This goal is already shared with this partner.")
+
+    # Add partner as goal member
+    import datetime
+    gm = frappe.new_doc("Hambaft Goal Member")
+    gm.goal = goal_id
+    gm.user = partner_email
+    gm.role = "پارتنر"
+    gm.status = "فعال"
+    gm.joined_at = datetime.date.today()
+    gm.insert(ignore_permissions=True)
+
+    # Ensure owner is also a member
+    owner_member = frappe.db.exists("Hambaft Goal Member", {
+        "goal": goal_id,
+        "user": user,
+        "status": "فعال",
+    })
+    if not owner_member:
+        gm_owner = frappe.new_doc("Hambaft Goal Member")
+        gm_owner.goal = goal_id
+        gm_owner.user = user
+        gm_owner.role = "مالک"
+        gm_owner.status = "فعال"
+        gm_owner.joined_at = datetime.date.today()
+        gm_owner.insert(ignore_permissions=True)
+
+    # Update goal privacy to shared
+    frappe.db.set_value("Hambaft Goal", goal_id, "privacy", "اشتراکی")
+
+    frappe.db.commit()
+
+    return _api_response({
+        "status": "shared",
+        "goal_id": goal_id,
+        "partner": _user_display_info(partner_email),
+    })
+
+
+@frappe.whitelist()
+def get_goal_members(goal_id=None):
+    """Get all active members of a goal."""
+    _check_auth()
+    user = frappe.session.user
+
+    if not goal_id:
+        frappe.throw("goal_id is required.")
+
+    # Check access: owner or member
+    goal = frappe.get_doc("Hambaft Goal", goal_id)
+    is_owner = goal.user == user
+    is_member = frappe.db.exists("Hambaft Goal Member", {"goal": goal_id, "user": user, "status": "فعال"})
+
+    if not is_owner and not is_member:
+        frappe.throw("You do not have access to this goal.", frappe.PermissionError)
+
+    members = frappe.get_all(
+        "Hambaft Goal Member",
+        filters={"goal": goal_id, "status": "فعال"},
+        fields=["name", "user", "role", "joined_at"],
+    )
+
+    result = []
+    for m in members:
+        info = _user_display_info(m.user)
+        result.append({
+            "membership_id": m.name,
+            "user": info,
+            "role": m.role,
+            "joined_at": str(m.joined_at) if m.joined_at else None,
+        })
+
+    # Also include owner if not already in members
+    owner_in_members = any(m["user"]["email"] == goal.user for m in result)
+    if not owner_in_members:
+        result.insert(0, {
+            "membership_id": None,
+            "user": _user_display_info(goal.user),
+            "role": "مالک",
+            "joined_at": str(goal.start_date) if goal.start_date else None,
+        })
+
+    return _api_response({"members": result})
+
+
+@frappe.whitelist()
+def get_shared_goals():
+    """Get all goals shared with the current user (where user is a member but not owner)."""
+    _check_auth()
+    user = frappe.session.user
+
+    memberships = frappe.get_all(
+        "Hambaft Goal Member",
+        filters={"user": user, "status": "فعال"},
+        fields=["goal", "role"],
+    )
+
+    shared_goals = []
+    for m in memberships:
+        goal_doc = frappe.get_doc("Hambaft Goal", m.goal)
+        if goal_doc.user != user or m.role != "مالک":
+            goal_data = _goal_to_frontend(goal_doc)
+            goal_data["my_role"] = m.role
+            goal_data["owner"] = _user_display_info(goal_doc.user)
+            shared_goals.append(goal_data)
+
+    return _api_response({"shared_goals": shared_goals})
+
+
+@frappe.whitelist()
+def remove_goal_member(data=None):
+    """Remove a member from a shared goal. Only owner can do this."""
+    _check_auth()
+    user = frappe.session.user
+
+    if isinstance(data, str):
+        data = json.loads(data)
+    data = data or {}
+
+    goal_id = data.get("goal_id")
+    member_email = data.get("member_email")
+
+    if not goal_id or not member_email:
+        frappe.throw("goal_id and member_email are required.")
+
+    # Verify ownership
+    goal_owner = frappe.db.get_value("Hambaft Goal", goal_id, "user")
+    if goal_owner != user:
+        frappe.throw("Only the goal owner can remove members.", frappe.PermissionError)
+
+    # Find and deactivate membership
+    membership = frappe.db.get_value("Hambaft Goal Member", {
+        "goal": goal_id,
+        "user": member_email,
+        "status": "فعال",
+    })
+
+    if not membership:
+        frappe.throw("Active membership not found.")
+
+    frappe.db.set_value("Hambaft Goal Member", membership, "status", "حذف‌شده")
+    frappe.db.commit()
+
+    return _api_response({"status": "removed"})

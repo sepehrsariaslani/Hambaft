@@ -235,6 +235,8 @@ export interface Goal {
   icon?: string;
   startDate?: string;
   status?: string;
+  privacy?: GoalPrivacy;
+  members?: GoalMemberItem[];
   
   // Habit links
   linkedHabits?: GoalHabitLink[];
@@ -668,6 +670,46 @@ export interface ContactLink {
   contextNote: string;
   status: string;
   sortOrder: number;
+}
+
+// Phase 6: Partner Connection types
+export type PartnerConnectionStatus = 'فعال' | 'حذف‌شده' | 'بلاک‌شده';
+export type PartnerInviteStatus = 'در_انتظار' | 'پذیرفته‌شده' | 'ردشده' | 'منقضی‌شده' | 'cancelled';
+export type GoalPrivacy = 'خصوصی' | 'اشتراکی' | 'گروهی';
+export type GoalMemberRole = 'مالک' | 'پارتنر' | 'عضو';
+
+export interface PartnerInfo {
+  email: string;
+  fullName: string;
+  username: string | null;
+  avatarUrl: string | null;
+}
+
+export interface PartnerConnection {
+  id: string;
+  partner: PartnerInfo;
+  connectedSince: string | null;
+  notes: string;
+  sharedGoalsCount: number;
+}
+
+export interface PartnerInviteItem {
+  id: string;
+  inviteCode: string;
+  status: PartnerInviteStatus;
+  goal?: string;
+  message?: string;
+  expiresAt?: string;
+  createdAt: string;
+  inviteeInfo?: PartnerInfo;
+  inviterInfo?: PartnerInfo;
+}
+
+export interface GoalMemberItem {
+  membershipId: string | null;
+  user: PartnerInfo;
+  role: GoalMemberRole;
+  joinedAt: string | null;
 }
 
 export interface MoodLog {

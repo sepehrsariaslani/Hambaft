@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Goal, GoalCategory, GoalType, ProgressMode, ContributionType, ContributionPeriod, GoalHabitLink, GoalFinanceLink, GoalLinkedProject, GoalHealthState, CompletionPolicy, GoalSignalWeights, ProjectContributionType, Milestone, Habit, BankAccount, Project, Task, MetricLog, GoalMetric, WorkoutLog, SleepLog, MindfulnessSession, JournalEntry } from '../types';
 import LinkedContacts from './LinkedContacts';
+import PartnerManager from './PartnerManager';
 import { GOAL_CATEGORY_LABELS } from '../initialData';
 import { 
   getGoalDetail, 
@@ -3020,6 +3021,9 @@ export default function GoalDetailView({
         {goal.id && (
           <div className="bg-[#FDFBF7] dark:bg-[#1B1D16] p-4 rounded-2xl border border-[#E6DFD3] dark:border-[#3D4133]/30">
             <LinkedContacts entityType="goal" entityId={goal.id} contacts={contacts} onNavigateContact={(contactId) => onNavigateEntity?.('contacts', contactId)} />
+            <div className="mt-3 pt-3 border-t border-[#E6DFD3]/40 dark:border-[#3D4133]/20">
+              <PartnerManager goalId={goal.id} />
+            </div>
           </div>
         )}
 
