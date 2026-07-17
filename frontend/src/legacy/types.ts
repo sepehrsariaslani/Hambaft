@@ -727,6 +727,22 @@ export interface ReactionGroup {
   myReaction: boolean;
 }
 
+// Phase 8: Proof Uploads
+export type ProofMediaType = 'photo' | 'video' | 'text';
+export type ProofVisibility = 'خصوصی' | 'اشتراکی' | 'گروهی';
+
+export interface ProofUploadItem {
+  id: string;
+  userInfo: PartnerInfo;
+  mediaType: ProofMediaType;
+  fileUrl: string;
+  caption: string;
+  reflection: string;
+  visibility: ProofVisibility;
+  createdAt: string;
+  isMine: boolean;
+}
+
 export interface MoodLog {
   id: string;
   date: string; // YYYY-MM-DD

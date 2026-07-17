@@ -1837,3 +1837,43 @@ export async function getReactions(entityType: string, entity: string) {
     `hambaft.hambaft.api.get_reactions?entity_type=${encodeURIComponent(entityType)}&entity=${encodeURIComponent(entity)}`
   )
 }
+
+
+// ═══════════════════════════════════════════════════════════════
+// Phase 8: Proof Uploads (Photo/Video)
+// ═══════════════════════════════════════════════════════════════
+
+export interface ProofUpload {
+  id: string
+  user_info: PartnerInfo
+  media_type: 'photo' | 'video' | 'text'
+  file_url: string
+  caption: string
+  reflection: string
+  visibility: string
+  created_at: string
+  is_mine: boolean
+}
+
+export async function uploadProof(data: {
+  entity_type: string
+  entity: string
+  media_type?: 'photo' | 'video' | 'text'
+  filedata?: string
+  filename?: string
+  caption?: string
+  reflection?: string
+  visibility?: string
+}) {
+  return call<{ data?: any }>('hambaft.hambaft.api.upload_proof', { data })
+}
+
+export async function getProofs(entityType: string, entity: string) {
+  return callGet<{ data?: { proofs?: ProofUpload[] } }>(
+    `hambaft.hambaft.api.get_proofs?entity_type=${encodeURIComponent(entityType)}&entity=${encodeURIComponent(entity)}`
+  )
+}
+
+export async function deleteProof(proofId: string) {
+  return call<{ data?: any }>('hambaft.hambaft.api.delete_proof', { proof_id: proofId })
+}

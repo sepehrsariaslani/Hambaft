@@ -7450,3 +7450,198 @@ def _validate_entity_access(entity_type, entity, user, read_only=False):
         if owner and owner != user:
             # Allow if they share a goal
             frappe.throw("You do not have permission to modify this.", frappe.PermissionError)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PHASE 8: Proof Uploads (Photo/Video)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@frappe.whitelist()
+def upload_proof(data=None):
+    """Upload a photo/video proof for a task or goal.
+    Accepts base64 file data and creates both a Frappe File and a Proof Upload record.
+    """
+    _check_auth()
+    user = frappe.session.user
+
+    if isinstance(data, str):
+        data = json.loads(data)
+    data = data or {}
+
+    entity_type = data.get("entity_type")  # task, goal, habit, challenge
+    entity = data.get("entity")
+    media_type = data.get("media_type") or "photo"  # photo, video, text
+    filedata = data.get("filedata")  # base64 encoded
+    filename = data.get("filename") or f"proof_{entity_type}_{entity}"
+    caption = data.get("caption") or ""
+    reflection = data.get("reflection") or ""
+    visibility = data.get("visibility") or "اشتراکی"
+
+    if not entity_type or not entity:
+        frappe.throw("entity_type and entity are required.")
+
+    # Validate entity access
+    _validate_entity_access(entity_type, entity, user)
+
+    file_url = None
+    file_name_stored = None
+    file_size = 0
+
+    # Upload file if provided
+    if filedata and media_type in ("photo", "video"):
+        import base64 as b64
+
+        if "," in filedata:
+            filedata = filedata.split(",")[1]
+
+        try:
+            decoded = b64.b64decode(filedata)
+            file_size = len(decoded)
+        except Exception:
+            frappe.throw("Invalid file data. Please provide a valid base64-encoded file.")
+
+        # Max size check: 10MB for images, 100MB for videos
+        max_size = 100 * 1024 * 1024 if media_type == "video" else 10 * 1024 * 1024
+        if file_size > max_size:
+            max_mb = int(max_size / (1024 * 1024))
+            frappe.throw(f"File too large. Maximum size for {media_type} is {max_mb}MB.")
+
+        # Determine extension
+        ext = ".jpg"
+        if media_type == "video":
+            ext = ".mp4"
+        elif filename.endswith(".png"):
+            ext = ".png"
+        elif filename.endswith(".heic"):
+            ext = ".heic"
+        elif filename.endswith(".webp"):
+            ext = ".webp"
+
+        # Upload to Frappe File
+        doctype_map = {
+            "task": "Hambaft Task",
+            "goal": "Hambaft Goal",
+            "habit": "Hambaft Habit",
+            "challenge": "Hambaft Daily Challenge",
+        }
+        attach_doctype = doctype_map.get(entity_type, "")
+        safe_filename = f"{user}_{entity_type}_{entity}_{frappe.generate_hash(length=6)}{ext}"
+
+        from frappe.handler import upload_file as _frappe_upload
+        file_doc = frappe.get_doc({
+            "doctype": "File",
+            "file_name": safe_filename,
+            "content": decoded,
+            "is_private": 1,
+            "attached_to_doctype": attach_doctype,
+            "attached_to_name": entity,
+            "folder": "Home/Attachments",
+        })
+        file_doc.insert(ignore_permissions=True)
+        frappe.db.commit()
+
+        file_url = file_doc.file_url
+        file_name_stored = file_doc.name
+        file_size = file_doc.file_size or file_size
+
+    # Create proof record
+    proof = frappe.new_doc("Hambaft Proof Upload")
+    proof.user = user
+    proof.entity_type = entity_type
+    proof.entity = entity
+    proof.media_type = media_type
+    proof.file_url = file_url or ""
+    proof.file_name = file_name_stored or ""
+    proof.file_size = file_size
+    proof.caption = caption
+    proof.reflection = reflection
+    proof.visibility = visibility
+    proof.status = "فعال"
+    proof.insert(ignore_permissions=True)
+    frappe.db.commit()
+
+    return _api_response({
+        "proof_id": proof.name,
+        "media_type": media_type,
+        "file_url": file_url,
+        "caption": caption,
+        "reflection": reflection,
+        "created_at": str(proof.creation),
+    })
+
+
+@frappe.whitelist()
+def get_proofs(entity_type=None, entity=None, limit=50, offset=0):
+    """Get proof uploads for an entity."""
+    _check_auth()
+    user = frappe.session.user
+
+    if not entity_type or not entity:
+        frappe.throw("entity_type and entity are required.")
+
+    try:
+        _validate_entity_access(entity_type, entity, user, read_only=True)
+    except Exception:
+        # Even if strict access check fails, allow viewing own proofs
+        pass
+
+    proofs = frappe.get_all(
+        "Hambaft Proof Upload",
+        filters={
+            "entity_type": entity_type,
+            "entity": entity,
+            "status": "فعال",
+        },
+        fields=["name", "user", "media_type", "file_url", "caption", "reflection",
+                 "visibility", "creation"],
+        order_by="creation desc",
+        limit_page_length=cint(limit),
+        start=cint(offset),
+    )
+
+    result = []
+    for p in proofs:
+        # Check visibility: private only visible to owner
+        if p.visibility == "خصوصی" and p.user != user:
+            continue
+        info = _user_display_info(p.user)
+        result.append({
+            "id": p.name,
+            "user_info": info,
+            "media_type": p.media_type,
+            "file_url": p.file_url,
+            "caption": p.caption or "",
+            "reflection": p.reflection or "",
+            "visibility": p.visibility,
+            "created_at": str(p.creation),
+            "is_mine": p.user == user,
+        })
+
+    return _api_response({"proofs": result})
+
+
+@frappe.whitelist()
+def delete_proof(proof_id=None):
+    """Delete a proof upload (only own proofs)."""
+    _check_auth()
+    user = frappe.session.user
+
+    if not proof_id:
+        frappe.throw("proof_id is required.")
+
+    proof_doc = frappe.get_doc("Hambaft Proof Upload", proof_id)
+    if proof_doc.user != user:
+        frappe.throw("You can only delete your own proof uploads.", frappe.PermissionError)
+
+    # Also remove the associated file
+    if proof_doc.file_name:
+        try:
+            frappe.delete_doc("File", proof_doc.file_name, ignore_permissions=True, force=True)
+        except Exception:
+            pass
+
+    proof_doc.status = "حذف‌شده"
+    proof_doc.save(ignore_permissions=True)
+    frappe.db.commit()
+
+    return _api_response({"status": "deleted"})

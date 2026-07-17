@@ -23,6 +23,7 @@ import {
 import type { Task } from '../types'
 import LinkedContacts from './LinkedContacts'
 import CommentReactions from './CommentReactions'
+import ProofUploader from './ProofUploader'
 import {
   ImportanceBadge, ImportanceSelector, ImpactScoreBadge,
   TaskImpactBanner, TaskImpactExplanation, BlockedTaskIndicator,
@@ -850,6 +851,9 @@ export default function TaskDetailPage({
                   <LinkedContacts entityType="task" entityId={task.id} contacts={contacts} onNavigateContact={(contactId) => onNavigate?.('contacts', contactId)} />
                   <div className="mt-2 pt-2 border-t border-[#E6DFD3]/30 dark:border-[#3D4133]/20">
                     <CommentReactions entityType="task" entityId={task.id} />
+                  </div>
+                  <div className="mt-2 pt-2 border-t border-[#E6DFD3]/30 dark:border-[#3D4133]/20">
+                    <ProofUploader entityType="task" entityId={task.id} />
                   </div>
                 </div>
               )}

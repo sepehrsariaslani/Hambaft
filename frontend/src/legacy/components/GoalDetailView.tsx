@@ -3,6 +3,7 @@ import { Goal, GoalCategory, GoalType, ProgressMode, ContributionType, Contribut
 import LinkedContacts from './LinkedContacts';
 import PartnerManager from './PartnerManager';
 import CommentReactions from './CommentReactions';
+import ProofUploader from './ProofUploader';
 import { GOAL_CATEGORY_LABELS } from '../initialData';
 import { 
   getGoalDetail, 
@@ -3027,6 +3028,9 @@ export default function GoalDetailView({
             </div>
             <div className="mt-3 pt-3 border-t border-[#E6DFD3]/40 dark:border-[#3D4133]/20">
               <CommentReactions entityType="goal" entityId={goal.id} />
+            </div>
+            <div className="mt-3 pt-3 border-t border-[#E6DFD3]/40 dark:border-[#3D4133]/20">
+              <ProofUploader entityType="goal" entityId={goal.id} />
             </div>
           </div>
         )}

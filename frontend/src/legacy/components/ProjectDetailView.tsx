@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Goal, Project, Task, GoalCategory, GoalLinkedProject, BankAccount, Transaction, Milestone } from '../types';
 import LinkedContacts from './LinkedContacts';
 import CommentReactions from './CommentReactions';
+import ProofUploader from './ProofUploader';
 import EntityNoteEditor from '../../notes/components/EntityNoteEditor';
 import ViewSwitcher, { type ViewMode } from './ViewSwitcher';
 import ProjectMetaPanel from './ProjectMetaPanel';
@@ -528,6 +529,9 @@ export default function ProjectDetailView({
           <LinkedContacts entityType="project" entityId={project.id} contacts={contacts} onNavigateContact={(contactId) => onNavigateEntity?.('contacts', contactId)} />
           <div className="mt-3 pt-3 border-t border-[#E6DFD3]/40 dark:border-[#3D4133]/20">
             <CommentReactions entityType="project" entityId={project.id} />
+          </div>
+          <div className="mt-3 pt-3 border-t border-[#E6DFD3]/40 dark:border-[#3D4133]/20">
+            <ProofUploader entityType="project" entityId={project.id} />
           </div>
         </div>
       )}

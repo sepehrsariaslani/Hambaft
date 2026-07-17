@@ -1,0 +1,138 @@
+{
+  "actions": [],
+  "autoname": "format:PRF-{#####}",
+  "creation": "2026-07-18 16:00:00.000000",
+  "doctype": "DocType",
+  "engine": "InnoDB",
+  "field_order": [
+    "user",
+    "entity_type",
+    "entity",
+    "column_break_1",
+    "media_type",
+    "file_url",
+    "file_name",
+    "file_size",
+    "section_break_content",
+    "caption",
+    "reflection",
+    "section_break_meta",
+    "visibility",
+    "status",
+    "created_at"
+  ],
+  "fields": [
+    {
+      "fieldname": "user",
+      "fieldtype": "Link",
+      "label": "کاربر",
+      "options": "User",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "entity_type",
+      "fieldtype": "Select",
+      "label": "نوع موجودیت",
+      "options": "\ntask\ngoal\nhabit\nchallenge",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "entity",
+      "fieldtype": "Dynamic Link",
+      "label": "موجودیت",
+      "options": "entity_type",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "column_break_1",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "media_type",
+      "fieldtype": "Select",
+      "label": "نوع رسانه",
+      "options": "\nphoto\nvideo\ntext",
+      "default": "photo",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "file_url",
+      "fieldtype": "Data",
+      "label": "آدرس فایل"
+    },
+    {
+      "fieldname": "file_name",
+      "fieldtype": "Data",
+      "label": "نام فایل"
+    },
+    {
+      "fieldname": "file_size",
+      "fieldtype": "Int",
+      "label": "حجم فایل (بایت)"
+    },
+    {
+      "fieldname": "section_break_content",
+      "fieldtype": "Section Break",
+      "label": "محتوا"
+    },
+    {
+      "fieldname": "caption",
+      "fieldtype": "Small Text",
+      "label": "کپشن"
+    },
+    {
+      "fieldname": "reflection",
+      "fieldtype": "Small Text",
+      "label": "تأمل"
+    },
+    {
+      "fieldname": "section_break_meta",
+      "fieldtype": "Section Break",
+      "label": "متا"
+    },
+    {
+      "fieldname": "visibility",
+      "fieldtype": "Select",
+      "label": "نمایش",
+      "options": "\nخصوصی\nاشتراکی\nگروهی",
+      "default": "اشتراکی",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "status",
+      "fieldtype": "Select",
+      "label": "وضعیت",
+      "options": "\nفعال\nحذف‌شده\nگزارش‌شده",
+      "default": "فعال",
+      "reqd": 1
+    },
+    {
+      "fieldname": "created_at",
+      "fieldtype": "Datetime",
+      "label": "تاریخ ایجاد"
+    }
+  ],
+  "index_web_pages_for_search": 0,
+  "is_single": 0,
+  "istable": 0,
+  "links": [],
+  "modified": "2026-07-18 16:00:00.000000",
+  "modified_by": "Administrator",
+  "module": "Hambaft",
+  "name": "Hambaft Proof Upload",
+  "naming_rule": "Expression (old style)",
+  "owner": "Administrator",
+  "permissions": [
+    {"create": 1, "delete": 1, "email": 0, "export": 0, "print": 0, "read": 1, "report": 0, "role": "All", "share": 0, "write": 1}
+  ],
+  "sort_field": "creation",
+  "sort_order": "DESC",
+  "states": [],
+  "title_field": ""
+}
