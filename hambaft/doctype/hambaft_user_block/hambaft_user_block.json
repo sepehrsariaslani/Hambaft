@@ -1,0 +1,75 @@
+{
+ "name": "Hambaft User Block",
+ "creation": "2026-01-01 00:00:00",
+ "modified": "2026-01-01 00:00:00",
+ "modified_by": "Administrator",
+ "owner": "Administrator",
+ "docstatus": 0,
+ "module": "Hambaft",
+ "autoname": "format:BLK-{#####}",
+ "fields": [
+  {
+   "fieldname": "blocked_by",
+   "fieldtype": "Link",
+   "label": "مسدودکننده",
+   "options": "User",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "blocked_user",
+   "fieldtype": "Link",
+   "label": "کاربر مسدودشده",
+   "options": "User",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "reason",
+   "fieldtype": "Select",
+   "label": "دلیل",
+   "options": "spam\nharassment\ninappropriate\npersonal\nother",
+   "default": "personal",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "یادداشت"
+  },
+  {
+   "fieldname": "created_at",
+   "fieldtype": "Datetime",
+   "label": "تاریخ ایجاد",
+   "read_only": 1,
+   "in_list_view": 1
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1
+  },
+  {
+   "role": "Hambaft User",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1
+  }
+ ],
+ "doctype": "DocType",
+ "custom": 0,
+ "istable": 0,
+ "issingle": 0,
+ "unique_constraints": [
+  {
+   "fields": "blocked_by, blocked_user"
+  }
+ ]
+}

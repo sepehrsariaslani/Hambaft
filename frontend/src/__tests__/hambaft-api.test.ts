@@ -2,12 +2,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
   callMock,
+  callGetMock,
   checkFrappeSessionMock,
   createDocMock,
   deleteDocMock,
   updateDocMock,
 } = vi.hoisted(() => ({
   callMock: vi.fn(),
+  callGetMock: vi.fn(),
   checkFrappeSessionMock: vi.fn(),
   createDocMock: vi.fn(),
   deleteDocMock: vi.fn(),
@@ -16,6 +18,7 @@ const {
 
 vi.mock('../app/frappe', () => ({
   call: callMock,
+  callGet: callGetMock,
   checkFrappeSession: checkFrappeSessionMock,
   createDoc: createDocMock,
   deleteDoc: deleteDocMock,
@@ -28,11 +31,15 @@ import {
   updateNutritionRecord,
   updateWorkoutRecord,
   logWaterRecord,
+  getActiveTaskSession,
+  getTaskChildren,
+  getTaskSessions,
 } from '../app/hambaft-api'
 
 describe('hambaft API contracts', () => {
   beforeEach(() => {
     callMock.mockReset()
+    callGetMock.mockReset()
     checkFrappeSessionMock.mockReset()
     createDocMock.mockReset()
     deleteDocMock.mockReset()
@@ -170,5 +177,34 @@ describe('hambaft API contracts', () => {
       date: '2026-07-06',
       amount_ml: 1750,
     })
+  })
+
+  it('fetches task children through GET so detail screens can load before csrf hydration', async () => {
+    callGetMock.mockResolvedValue({ data: { tasks: [] } })
+
+    await getTaskChildren('TASK-123')
+
+    expect(callGetMock).toHaveBeenCalledWith('hambaft.hambaft.api.get_task_children', {
+      parent_task: 'TASK-123',
+    })
+  })
+
+  it('fetches task sessions through GET so timer history is not blocked by csrf', async () => {
+    callGetMock.mockResolvedValue({ data: { sessions: [] } })
+
+    await getTaskSessions('TASK-456', 20)
+
+    expect(callGetMock).toHaveBeenCalledWith('hambaft.hambaft.api.get_task_sessions', {
+      task: 'TASK-456',
+      limit: 20,
+    })
+  })
+
+  it('fetches the active task session through GET', async () => {
+    callGetMock.mockResolvedValue({ data: { session: null } })
+
+    await getActiveTaskSession()
+
+    expect(callGetMock).toHaveBeenCalledWith('hambaft.hambaft.api.get_active_session')
   })
 })

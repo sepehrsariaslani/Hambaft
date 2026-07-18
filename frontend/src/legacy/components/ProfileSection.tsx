@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, lazy, Suspense } from 'react';
 import { LifeData, UserProfile } from '../types';
 import { 
   User, 
@@ -14,10 +14,15 @@ import {
   Upload, 
   Download,
   Check,
-  MessageSquareCode
+  MessageSquareCode,
+  Trophy,
+  Bell
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import AiCoachSection from './AiCoachSection';
+
+const GamificationDisplay = lazy(() => import('./GamificationDisplay'));
+const NotificationSettingsDisplay = lazy(() => import('./NotificationSettingsDisplay'));
 
 interface ProfileSectionProps {
   lifeData: LifeData;
@@ -26,7 +31,7 @@ interface ProfileSectionProps {
 }
 
 export default function ProfileSection({ lifeData, onUpdateProfile, onImportData }: ProfileSectionProps) {
-  const [activeSubTab, setActiveSubTab] = useState<'info' | 'coach'>('info');
+  const [activeSubTab, setActiveSubTab] = useState<'info' | 'gamification' | 'notif' | 'coach'>('info');
   const [isEditing, setIsEditing] = useState(false);
 
   // Default fallback profile values
@@ -87,30 +92,54 @@ export default function ProfileSection({ lifeData, onUpdateProfile, onImportData
   return (
     <div className="space-y-6 text-right max-w-md mx-auto" dir="rtl" id="dynamic-profile-section-root">
       
-      {/* Tab Switcher: Info vs AI Coach */}
+      {/* Tab Switcher: Info vs Gamification vs AI Coach */}
       <div className="flex bg-[#F9F6EE] p-1 rounded-2xl border border-[#E6DFD3] gap-1">
         <button
           onClick={() => setActiveSubTab('info')}
-          className={`flex-1 py-2.5 text-xs font-black rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+          className={`flex-1 py-2 text-[10px] font-black rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1 ${
             activeSubTab === 'info'
               ? 'bg-[#2D3025] text-white shadow-sm'
               : 'text-[#8D7F72] hover:text-[#2D3025]'
           }`}
         >
-          <User className="w-4 h-4" />
-          <span>پروفایل و آمار توازن</span>
+          <User className="w-3.5 h-3.5" />
+          <span>پروفایل</span>
+        </button>
+
+        <button
+          onClick={() => setActiveSubTab('gamification')}
+          className={`flex-1 py-2 text-[10px] font-black rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1 ${
+            activeSubTab === 'gamification'
+              ? 'bg-[#4A6741] text-white shadow-sm'
+              : 'text-[#8D7F72] hover:text-[#4A6741]'
+          }`}
+        >
+          <Trophy className="w-3.5 h-3.5" />
+          <span>امتیاز و نشان</span>
         </button>
 
         <button
           onClick={() => setActiveSubTab('coach')}
-          className={`flex-1 py-2.5 text-xs font-black rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+          className={`flex-1 py-2 text-[10px] font-black rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1 ${
             activeSubTab === 'coach'
               ? 'bg-[#E26645] text-white shadow-sm'
               : 'text-[#8D7F72] hover:text-[#E26645]'
           }`}
         >
-          <Sparkles className="w-4 h-4" />
-          <span>مربی توازن (کوچ هوشمند)</span>
+          <Sparkles className="w-3.5 h-3.5" />
+          <span>مربی توازن</span>
+        </button>
+
+        <button
+          onClick={() => setActiveSubTab('notif')}
+          className={`flex-1 py-2 text-[10px] font-black rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1 ${
+            activeSubTab === 'notif'
+              ? 'bg-[#7C8363] text-white shadow-sm'
+              : 'text-[#8D7F72] hover:text-[#7C8363]'
+          }`}
+        >
+          <Bell className="w-3.5 h-3.5" />
+          <span>نوتیف</span>
         </button>
       </div>
 
@@ -308,7 +337,7 @@ export default function ProfileSection({ lifeData, onUpdateProfile, onImportData
                 <div className="bg-white p-3.5 rounded-2xl border border-[#EBE3C8] text-right space-y-1.5">
                   <div className="flex items-center justify-between">
                     <span className="text-[9px] font-black text-[#8D7F72]">عادت‌های فعال</span>
-                    <Flame className="w-4 h-4 text-amber-500" />
+                    <Flame className="w-4 h-4 text-[#9B6B61]" />
                   </div>
                   <h4 className="text-sm font-black text-[#2D3025]">{habitsCount} عادت منظم</h4>
                   <p className="text-[8px] text-[#8D7F72] font-semibold">برای ایجاد استمرار روزانه</p>
@@ -360,6 +389,36 @@ export default function ProfileSection({ lifeData, onUpdateProfile, onImportData
                 <span>شروع گفتگوی مربیگری با هوش مصنوعی</span>
               </button>
             </div>
+          </motion.div>
+        ) : activeSubTab === 'gamification' ? (
+          <motion.div
+            key="gamification"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+          >
+            <Suspense fallback={
+              <div className="flex items-center justify-center py-20">
+                <div className="w-6 h-6 border-2 border-[#4A6741] border-t-transparent rounded-full animate-spin" />
+              </div>
+            }>
+              <GamificationDisplay />
+            </Suspense>
+          </motion.div>
+        ) : activeSubTab === 'notif' ? (
+          <motion.div
+            key="notif-settings"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+          >
+            <Suspense fallback={
+              <div className="flex items-center justify-center py-20">
+                <div className="w-6 h-6 border-2 border-[#7C8363] border-t-transparent rounded-full animate-spin" />
+              </div>
+            }>
+              <NotificationSettingsDisplay />
+            </Suspense>
           </motion.div>
         ) : (
           <motion.div

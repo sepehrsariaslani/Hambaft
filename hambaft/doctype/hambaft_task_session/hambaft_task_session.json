@@ -1,0 +1,83 @@
+{
+  "name": "Hambaft Task Session",
+  "doctype": "DocType",
+  "module": "Hambaft",
+  "custom": 0,
+  "autoname": "hash",
+  "fields": [
+    {
+      "fieldname": "task",
+      "fieldtype": "Link",
+      "label": "تسک",
+      "options": "Task",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "user",
+      "fieldtype": "Link",
+      "label": "کاربر",
+      "options": "User",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "started_at",
+      "fieldtype": "Datetime",
+      "label": "زمان شروع",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "stopped_at",
+      "fieldtype": "Datetime",
+      "label": "زمان توقف"
+    },
+    {
+      "fieldname": "duration_minutes",
+      "fieldtype": "Int",
+      "label": "مدت (دقیقه)",
+      "default": 0
+    },
+    {
+      "fieldname": "status",
+      "fieldtype": "Select",
+      "label": "وضعیت",
+      "options": "active\npaused\ncompleted",
+      "default": "active",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "notes",
+      "fieldtype": "Text",
+      "label": "یادداشت"
+    }
+  ],
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1
+    },
+    {
+      "role": "Hambaft User",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "if_owner": 1
+    },
+    {
+      "role": "All",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "if_owner": 1
+    }
+  ],
+  "istable": 0,
+  "issingle": 0
+}

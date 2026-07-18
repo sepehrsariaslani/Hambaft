@@ -47,7 +47,10 @@ def get_supported_settings_fields(available_fields=None):
 
 def normalize_settings_update(data, available_fields=None):
     if isinstance(data, str):
-        data = json.loads(data)
+        try:
+            data = json.loads(data)
+        except (json.JSONDecodeError, ValueError):
+            return {}
 
     if not isinstance(data, dict):
         return {}

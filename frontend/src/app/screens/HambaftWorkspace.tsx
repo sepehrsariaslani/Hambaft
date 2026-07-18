@@ -105,6 +105,7 @@ export function HambaftWorkspace({ initialTab }: HambaftWorkspaceProps) {
       initialGoalId={params.goalId ?? null}
       initialProjectId={params.projectId ?? null}
       initialTaskId={params.taskId ?? null}
+      initialContactId={params.contactId ?? null}
       onNavigate={navigate}
       seedLifeData={data}
       seedScheduleItems={scheduleItems}

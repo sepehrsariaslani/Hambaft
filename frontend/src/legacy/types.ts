@@ -65,7 +65,32 @@ export interface Project {
   createdAt: string;
   milestones?: Milestone[];
   linkedGoalId?: string; // پیوند به هدف (Goal Tree)
+  areaId?: string; // پیوند به حوزه
+  parentProjectId?: string; // پروژه والد
   status?: 'waiting' | 'in_progress' | 'paused' | 'completed'; // ستون بورد کانبان
+  effortType?: 'fixed' | 'variable';
+  estimatedHours?: number;
+  actualMinutes?: number;
+  progress?: number;
+  qualityProgress?: number;
+  priority?: string;
+  startDate?: string;
+  targetDate?: string;
+  blockedByJson?: string; // JSON string of blocked-by project IDs
+  noteBlocks?: import('../notes/types').Block[]; // Notion-like rich text blocks
+  // Derived stats
+  taskCount?: number;
+  doneTaskCount?: number;
+  milestoneTotal?: number;
+  milestoneDone?: number;
+  keyTotal?: number;
+  keyDone?: number;
+  trackedMinutes?: number;
+  color?: string;
+  icon?: string;
+  // Goal contribution context
+  contributionType?: string; // اجباری/پیشنهادی/پشتیبان
+  goalHealthState?: string; // در_مسیر/در_خطر/خارج_از_مسیر/نیاز_به_بررسی
 }
 
 export interface Milestone {
@@ -75,46 +100,109 @@ export interface Milestone {
   dueDate?: string;
 }
 
-export type GoalCategory = 'financial' | 'health' | 'career' | 'learning' | 'personal' | 'other';
+export type GoalCategory = 'financial' | 'health' | 'career' | 'learning' | 'personal' | 'relationship' | 'other';
 
-export interface BankAccount {
-  id: string;
-  bankName: string; // e.g., 'بانک سامان'
-  accountName: string; // e.g., 'سپرده پس‌انداز بلندمدت'
-  balance: number; // e.g., 45000000 (For credit cards, this can be available credit or just regular balance)
-  cardNumber?: string; // e.g., '۶۲۱۹-****-****-۱۲۳۴'
-  color?: string; // e.g., '#0D47A1'
-  isCredit?: boolean; // Is this a credit card/account?
-  creditLimit?: number; // Total credit limit
-  creditDebt?: number; // Spent credit/outstanding debt
-  creditDueDate?: string; // تاریخ سررسید بدهی کارت اعتباری (e.g., '۲۵ام هر ماه' or '1405-05-25')
+export type GoalType = 'outcome' | 'metric' | 'habit_driven' | 'project_delivery' | 'savings' | 'investment' | 'debt_payoff' | 'health' | 'learning' | 'consistency';
+
+export type ProgressMode = 'manual' | 'metric_value' | 'habit_rollup' | 'project_rollup' | 'finance_balance' | 'finance_savings' | 'debt_paydown' | 'weighted_composite';
+
+export type ContributionType = 'completion_count' | 'completion_rate' | 'streak' | 'quantity_sum' | 'average_value' | 'boolean_success';
+
+export type ContributionPeriod = 'daily' | 'weekly' | 'monthly' | 'all';
+
+export interface GoalHabitLink {
+  habit: string;
+  habitTitle?: string;
+  contributionType: ContributionType;
+  weight: number;
+  period: ContributionPeriod;
+  targetValue?: number;
+  capValue?: number;
+  isNegative?: boolean;
+  notes?: string;
+}
+
+export interface GoalFinanceLink {
+  financeAccount: string;
+  accountName?: string;
+  currentBalance?: number;
+  financeType: 'balance' | 'savings' | 'debt' | 'investment' | 'income_accumulated';
+  initialAmount?: number;
+  targetAmount?: number;
+  weight: number;
+  notes?: string;
+}
+
+export type ProjectContributionType = 'mandatory' | 'recommended' | 'supporting';
+
+export interface GoalLinkedProject {
+  project: string;
+  title: string;
+  status?: string;
+  progress?: number;
+  effortType?: string;
+  estimatedHours?: number;
+  actualMinutes?: number;
+  totalTasks?: number;
+  doneTasks?: number;
+  milestoneTotal?: number;
+  milestoneDone?: number;
+  keyTotal?: number;
+  keyDone?: number;
+  weight?: number;
+  contributionType?: ProjectContributionType;
+  isMandatory?: boolean;
+  sortOrder?: number;
+  notes?: string;
+}
+
+export type GoalHealthState = 'on_track' | 'at_risk' | 'off_track' | 'needs_review';
+export type CompletionPolicy = 'threshold' | 'threshold_plus_mandatory' | 'metric_plus_mandatory' | 'all_projects' | 'threshold_plus_milestones';
+
+export interface GoalSignalWeights {
+  projectProgressWeight: number;
+  milestoneWeight: number;
+  keyTaskWeight: number;
+  trackedTimeWeight: number;
+  metricWeight: number;
+}
+
+export interface GoalSnapshot {
+  progressPct: number;
+  healthState: GoalHealthState;
+  detail?: any;
+  healthDetail?: any;
 }
 
 export interface MetricLog {
   id: string;
-  date: string; // YYYY-MM-DD
+  date: string;
   value: number;
   note?: string;
 }
 
-export interface GoalMetric {
-  name: string; // e.g., 'وزن', 'ساعت مطالعه'
-  targetValue: number; // e.g., 84
-  startValue: number; // e.g., 95
-  currentValue: number; // e.g., 88
-  unit: string; // e.g., 'کیلوگرم', 'ساعت', 'صفحه'
-  logs: MetricLog[];
-  autoTrackSource?: 'workout_count' | 'workout_calories' | 'workout_distance' | 'strength_max_weight' | 'sleep_hours' | 'sleep_quality' | 'meditation_minutes' | 'journal_mood' | 'bank_balance' | 'composite_health' | 'none'; // منبع ردیابی خودکار سنجه
-  autoTrackExerciseName?: string; // نام تمرین باشگاه برای ردیابی رکورد وزنه
+export interface BankAccount {
+  id: string;
+  bankName: string;
+  accountName: string;
+  balance: number;
+  cardNumber?: string;
+  color?: string;
+  isCredit?: boolean;
+  creditLimit?: number;
+  creditDebt?: number;
+  creditDueDate?: string;
 }
 
-export interface KeyResult {
-  id: string;
-  title: string;
-  startValue: number;
+export interface GoalMetric {
+  name: string;
   targetValue: number;
+  startValue: number;
   currentValue: number;
   unit: string;
+  logs: MetricLog[];
+  autoTrackSource?: 'workout_count' | 'workout_calories' | 'workout_distance' | 'strength_max_weight' | 'sleep_hours' | 'sleep_quality' | 'meditation_minutes' | 'journal_mood' | 'bank_balance' | 'composite_health' | 'none';
+  autoTrackExerciseName?: string;
 }
 
 export interface Goal {
@@ -122,49 +210,135 @@ export interface Goal {
   title: string;
   description: string;
   category: GoalCategory;
-  targetDate: string; // YYYY-MM-DD
+  goalType?: GoalType;
+  progressMode?: ProgressMode;
+  areaId?: string;
+  targetDate: string;
   milestones: Milestone[];
   createdAt: string;
   completed: boolean;
   projects?: Project[];
   habits?: Habit[];
-  linkedBankAccountId?: string; // Optional linked bank account for financial goals
-  metric?: GoalMetric; // Optional quantitative progress metrics
+  linkedBankAccountId?: string;
+  metric?: GoalMetric;
   
-  // ارتقای OKR و درخت اهداف و برد تصویرسازی
-  keyResults?: KeyResult[];
-  visionImages?: string[]; // آدرس تصاویر انگیزشی
-  visionAffirmation?: string; // جمله انگیزشی اختصاصی
-  parentGoalId?: string; // شناسه هدف بالاتر (درخت اهداف)
-  goalLevel?: 'annual' | 'quarterly' | 'monthly' | 'none'; // سطح هدف
-}
-
-export interface SubTask {
-  id: string;
-  title: string;
-  completed: boolean;
+  // Advanced goal fields
+  parentGoalId?: string;
+  goalLevel?: 'annual' | 'quarterly' | 'monthly' | 'custom';
+  targetValue?: number;
+  currentValue?: number;
+  unit?: string;
+  progressPercent?: number;
+  derivedProgressDetail?: string;
+  priority?: 'low' | 'medium' | 'high' | 'urgent';
+  color?: string;
+  icon?: string;
+  startDate?: string;
+  status?: string;
+  privacy?: GoalPrivacy;
+  members?: GoalMemberItem[];
+  
+  // Habit links
+  linkedHabits?: GoalHabitLink[];
+  
+  // Finance links
+  linkedFinanceAccounts?: GoalFinanceLink[];
+  
+  // Linked projects (from backend) — rich with weights
+  linkedProjects?: GoalLinkedProject[];
+  
+  // Project signal weights
+  projectProgressWeight?: number;
+  milestoneWeight?: number;
+  keyTaskWeight?: number;
+  trackedTimeWeight?: number;
+  metricWeight?: number;
+  
+  // Health
+  healthState?: GoalHealthState;
+  healthDetail?: any;
+  
+  // Completion policy
+  completionPolicy?: CompletionPolicy;
+  completionThreshold?: number;
+  
+  // Snapshot
+  lastSnapshot?: GoalSnapshot;
+  lastSnapshotAt?: string;
+  
+  keyResults?: { id: string; title: string; completed: boolean; targetValue?: number; currentValue?: number }[];
+  visionImages?: string[];
+  visionAffirmation?: string;
+  noteBlocks?: import('../notes/types').Block[];
 }
 
 export interface Task {
   id: string;
   title: string;
   completed: boolean;
+  status?: 'inbox' | 'not_started' | 'next' | 'today' | 'in_progress' | 'done' | 'on_hold' | 'someday' | 'dropped';
   createdAt: string;
   description?: string;
   dueDate?: string; // YYYY-MM-DD
-  priority?: 'low' | 'medium' | 'high';
+  scheduledDate?: string; // YYYY-MM-DD
+  scheduledTime?: string; // HH:MM
+  priority?: 'low' | 'medium' | 'high' | 'urgent';
   category?: 'work' | 'personal' | 'health' | 'finance' | 'learning' | 'other';
-  subTasks?: SubTask[];
-  totalTimeSpent?: number; // Total spent time in seconds
+  totalTimeSpent?: number; // Total spent time in seconds (derived from sessions)
   isTracking?: boolean;
   trackingStartTime?: number; // Epoch timestamp in ms when tracker started
   milestoneId?: string;
   googleTaskId?: string;
   
-  // ویژگی‌های جدید
+  // Planner hierarchy & dependencies
   projectId?: string; // پیوند به پروژه
+  parentTaskId?: string; // پیوند به تسک والد
+  childTaskIds?: string[]; // شناسه تسک‌های فرزند
+  blockedBy?: string[]; // شناسه تسک‌های پیش‌نیاز
+  blocking?: string[]; // شناسه تسک‌هایی که این تسک مانع آنهاست
+  isBlocked?: boolean; // derived
   isDailyHighlight?: boolean; // تسک برجسته روزانه
-  dependencies?: string[]; // پیش‌نیازها (شناسه تسک‌های دیگر)
+  importance?: 'normal' | 'key' | 'milestone'; // اهمیت تسک (عادی/کلیدی/نقطه‌عطف)
+  noteBlocks?: import('../notes/types').Block[]; // Notion-like rich text blocks
+  
+  // Session tracking
+  actualMinutes?: number; // derived from backend sessions
+  estimatedMinutes?: number; // planned effort
+  activeSessionId?: string;
+  
+  // Area relation (direct or inherited from project)
+  areaId?: string;
+  
+  // Effort type
+  effortType?: 'fixed' | 'variable';
+  
+  // Goal linkage (direct or inherited from project)
+  goalId?: string;
+  
+  // Impact awareness — derived fields for task detail context
+  impactGoalTitle?: string; // title of linked goal (if any)
+  impactGoalHealth?: string; // health state of linked goal
+  impactGoalProgress?: number; // progress % of linked goal
+  impactProjectTitle?: string; // title of linked project
+  impactProjectContributionType?: string; // contribution_type of project to goal
+  impactProjectProgress?: number; // progress % of linked project
+  
+  // Blocked resolution
+  blockedByTitles?: string[]; // titles of blocking tasks (for UX display)
+  blockedByStatuses?: Record<string, string>; // task_id → status of blockers
+  
+  // Impact score — derived by backend, used for prioritization
+  impactScore?: number; // 0-100, higher = more impactful
+}
+
+export interface TaskSession {
+  id: string;
+  taskId: string;
+  startedAt: string;
+  stoppedAt?: string;
+  durationMinutes: number;
+  status: 'active' | 'paused' | 'completed';
+  notes?: string;
 }
 
 export type MoodType = 'excited' | 'happy' | 'neutral' | 'tired' | 'sad' | 'stressed';
@@ -443,6 +617,130 @@ export interface Contact {
   interactionLogs?: ContactInteractionLog[];
   relationshipScore?: number; // 1-100 score of frequency of communication
   closenessTier?: 'inner' | 'outer' | 'acquaintance'; // طلایی (حلقه اول)، نقره‌ای، معمولی
+  relations?: ContactRelation[];
+}
+
+export type ContactRelationType = 'family' | 'spouse_partner' | 'friend' | 'colleague' | 'manager' | 'mentor' | 'client' | 'introduced_by' | 'custom';
+export type ContactRelationDirection = 'mutual' | 'directed';
+export type ContactDirectionLabel = 'mutual' | 'outgoing' | 'incoming';
+export type RelationshipHealth = 'healthy' | 'needs_attention' | 'cold' | 'new';
+
+export interface ContactRelation {
+  name: string;
+  fromContact: string;
+  toContact: string;
+  relationType: ContactRelationType;
+  directionality: ContactRelationDirection;
+  directionLabel: ContactDirectionLabel;
+  otherContactId: string;
+  otherContactName: string;
+  otherContactPhoto?: string;
+  otherContactCategory?: string;
+  strengthScore: number;
+  sinceDate?: string;
+  notes: string;
+  sortOrder: number;
+}
+
+export interface ContactSummary {
+  name: string;
+  fullName: string;
+  contactCategory: string;
+  closenessTier: string;
+  lastInteractionDate?: string;
+  relationshipScore: number;
+  photoUrl?: string;
+  relationCount: number;
+  relationTypes: Record<string, number>;
+  health: RelationshipHealth;
+}
+
+export type ContactLinkEntityType = 'goal' | 'project' | 'task' | 'occasion' | 'document' | 'finance';
+export type ContactLinkRole = 'owner' | 'collaborator' | 'mentor' | 'accountability' | 'stakeholder' | 'family' | 'vendor' | 'client' | 'introduced_by' | 'related_person';
+
+export interface ContactLink {
+  name: string;
+  contact: string;
+  contactName: string;
+  contactPhoto?: string;
+  entityType: ContactLinkEntityType;
+  entity: string;
+  entityTitle: string;
+  role: ContactLinkRole;
+  contextNote: string;
+  status: string;
+  sortOrder: number;
+}
+
+// Phase 6: Partner Connection types
+export type PartnerConnectionStatus = 'فعال' | 'حذف‌شده' | 'بلاک‌شده';
+export type PartnerInviteStatus = 'در_انتظار' | 'پذیرفته‌شده' | 'ردشده' | 'منقضی‌شده' | 'cancelled';
+export type GoalPrivacy = 'خصوصی' | 'اشتراکی' | 'گروهی';
+export type GoalMemberRole = 'مالک' | 'پارتنر' | 'عضو';
+
+export interface PartnerInfo {
+  email: string;
+  fullName: string;
+  username: string | null;
+  avatarUrl: string | null;
+}
+
+export interface PartnerConnection {
+  id: string;
+  partner: PartnerInfo;
+  connectedSince: string | null;
+  notes: string;
+  sharedGoalsCount: number;
+}
+
+export interface PartnerInviteItem {
+  id: string;
+  inviteCode: string;
+  status: PartnerInviteStatus;
+  goal?: string;
+  message?: string;
+  expiresAt?: string;
+  createdAt: string;
+  inviteeInfo?: PartnerInfo;
+  inviterInfo?: PartnerInfo;
+}
+
+export interface GoalMemberItem {
+  membershipId: string | null;
+  user: PartnerInfo;
+  role: GoalMemberRole;
+  joinedAt: string | null;
+}
+
+// Phase 7: Comments & Reactions
+export interface CommentItem {
+  id: string;
+  userInfo: PartnerInfo;
+  body: string;
+  createdAt: string;
+}
+
+export interface ReactionGroup {
+  emoji: string;
+  count: number;
+  users: PartnerInfo[];
+  myReaction: boolean;
+}
+
+// Phase 8: Proof Uploads
+export type ProofMediaType = 'photo' | 'video' | 'text';
+export type ProofVisibility = 'خصوصی' | 'اشتراکی' | 'گروهی';
+
+export interface ProofUploadItem {
+  id: string;
+  userInfo: PartnerInfo;
+  mediaType: ProofMediaType;
+  fileUrl: string;
+  caption: string;
+  reflection: string;
+  visibility: ProofVisibility;
+  createdAt: string;
+  isMine: boolean;
 }
 
 export interface MoodLog {
@@ -454,7 +752,32 @@ export interface MoodLog {
   mentalFocus: number; // 1-10
   triggers: string[]; // e.g., ["work", "exercise", "sleep", "family"]
   notes?: string;
+  gratitude?: string;
   weather?: 'sunny' | 'cloudy' | 'rainy' | 'windy';
+}
+
+export interface Area {
+  id: string;
+  title: string;
+  description?: string;
+  color?: string;
+  icon?: string;
+  status?: 'active' | 'inactive' | 'archived';
+  sortOrder?: number;
+  projectCount?: number;
+  activeProjectCount?: number;
+  taskCount?: number;
+  goalCount?: number;
+  completedTasks?: number;
+  completedProjects?: number;
+  milestoneTotal?: number;
+  milestoneDone?: number;
+  keyTotal?: number;
+  keyDone?: number;
+  trackedMinutes?: number;
+  projects?: any[];
+  tasks?: any[];
+  goals?: any[];
 }
 
 export interface LifeData {
@@ -485,5 +808,234 @@ export interface LifeData {
   bodyMeasurementLogs?: BodyMeasurementLog[];
   installments?: Installment[];
   contacts?: Contact[];
+  contactRelations?: ContactRelation[];
   moodLogs?: MoodLog[];
+  areas?: Area[];
+  gamification?: {
+    totalPoints: number;
+    level: number;
+    currentStreakDays: number;
+    bestStreakDays: number;
+  };
+}
+
+// Phase 9: Gamification
+export interface GamificationProfile {
+  totalPoints: number;
+  level: number;
+  pointsToNextLevel: number;
+  currentStreakDays: number;
+  bestStreakDays: number;
+  badges: UserBadge[];
+  recentPoints: PointTransaction[];
+  stats: GamificationStats;
+}
+
+export interface GamificationStats {
+  tasksCompleted: number;
+  proofsUploaded: number;
+  commentsPosted: number;
+}
+
+export interface UserBadge {
+  id: string;
+  badgeId: string;
+  badgeName: string;
+  badgeNameFa: string;
+  icon: string;
+  description: string;
+  descriptionFa: string;
+  rarity: BadgeRarity;
+  pointsAwarded: number;
+  earnedAt: string;
+}
+
+export type BadgeRarity = 'Common' | 'Rare' | 'Epic' | 'Legendary';
+
+export interface BadgeDefinition {
+  badgeId: string;
+  badgeName: string;
+  badgeNameFa: string;
+  icon: string;
+  description: string;
+  descriptionFa: string;
+  criteriaType: string;
+  criteriaValue: number;
+  pointsAwarded: number;
+  rarity: BadgeRarity;
+  earned: boolean;
+}
+
+export interface PointTransaction {
+  id: string;
+  points: number;
+  reason: string;
+  entityType: string;
+  entity: string;
+  description: string;
+  createdAt: string;
+}
+
+export interface GamificationResult {
+  pointsAdded: number;
+  totalPoints: number;
+  level: number;
+  levelUp: boolean;
+  newBadges: Array<{
+    badge_id: string;
+    badge_name: string;
+    badge_name_fa: string;
+    icon: string;
+    rarity: string;
+    points_awarded: number;
+  }>;
+}
+
+// Phase 10: Daily Challenges
+export interface DailyChallenge {
+  id: string;
+  templateId: string;
+  title: string;
+  titleFa: string;
+  description: string;
+  descriptionFa: string;
+  icon: string;
+  challengeType: string;
+  difficulty: 'easy' | 'medium' | 'hard';
+  category: string;
+  status: 'active' | 'completed' | 'expired';
+  progress: number;
+  targetCount: number;
+  pointsReward: number;
+  completedAt: string | null;
+}
+
+// Phase 11: Notifications
+export interface NotificationItem {
+  id: string;
+  type: string;
+  title: string;
+  titleFa: string;
+  body: string;
+  bodyFa: string;
+  icon: string;
+  entityType: string;
+  entity: string;
+  read: boolean;
+  createdAt: string;
+}
+
+export type NotificationType =
+  | 'level_up'
+  | 'badge_earned'
+  | 'challenge_completed'
+  | 'challenge_expired'
+  | 'partner_invite'
+  | 'partner_accepted'
+  | 'goal_shared'
+  | 'comment_received'
+  | 'reaction_received'
+  | 'daily_reminder'
+  | 'streak_milestone'
+  | 'goal_deadline'
+  | 'system';
+
+// Phase 12: Admin & Moderation
+export interface BlockedUser {
+  blockId: string;
+  userInfo: { email: string; fullName: string; avatarUrl: string | null };
+  reason: string;
+  createdAt: string;
+}
+
+export interface ReportItem {
+  id: string;
+  reportedUserInfo: { email: string; fullName: string; avatarUrl: string | null };
+  entityType: string;
+  entity: string;
+  reason: string;
+  reasonLabel: string;
+  status: string;
+  createdAt: string;
+}
+
+export interface AdminReportItem {
+  id: string;
+  reporterInfo: { email: string; fullName: string; avatarUrl: string | null };
+  reportedUserInfo: { email: string; fullName: string; avatarUrl: string | null };
+  entityType: string;
+  entity: string;
+  reason: string;
+  description: string;
+  status: string;
+  reviewedBy: string;
+  actionTaken: string;
+  createdAt: string;
+}
+
+// Completion types
+export interface NotificationSettings {
+  pushEnabled: boolean;
+  levelUp: boolean;
+  badgeEarned: boolean;
+  challengeCompleted: boolean;
+  partnerInvite: boolean;
+  partnerAccepted: boolean;
+  reactionReceived: boolean;
+  nudgeReceived: boolean;
+  dailyReminder: boolean;
+  streakMilestone: boolean;
+  goalDeadline: boolean;
+  system: boolean;
+}
+
+export interface NudgeTemplate {
+  index: number;
+  icon: string;
+  messageFa: string;
+}
+
+export interface ComparisonRow {
+  field: string;
+  label: string;
+  icon: string;
+  me: number;
+  partner: number;
+  ahead: 'me' | 'partner' | 'tie';
+}
+
+export interface PartnerComparisonData {
+  me: {
+    userInfo: any;
+    totalPoints: number;
+    level: number;
+    currentStreak: number;
+    bestStreak: number;
+    tasksCompleted: number;
+    tasksThisWeek: number;
+    proofsUploaded: number;
+    commentsPosted: number;
+    habitsActive: number;
+    goalsActive: number;
+    goalsCompleted: number;
+    badgesEarned: number;
+    challengesCompleted: number;
+  };
+  partner: {
+    userInfo: any;
+    totalPoints: number;
+    level: number;
+    currentStreak: number;
+    bestStreak: number;
+    tasksCompleted: number;
+    tasksThisWeek: number;
+    proofsUploaded: number;
+    commentsPosted: number;
+    habitsActive: number;
+    goalsActive: number;
+    goalsCompleted: number;
+    badgesEarned: number;
+    challengesCompleted: number;
+  };
+  comparison: ComparisonRow[];
 }

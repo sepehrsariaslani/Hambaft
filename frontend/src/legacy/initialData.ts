@@ -14,9 +14,10 @@ export const DEFAULT_CATEGORIES: CategoryDef[] = [
   { id: 'other', name: 'سایر موارد', type: 'expense', subcategories: ['بانک و کارمزد', 'خیریه', 'سایر موارد'], color: '#DDE2D5', icon: '✨' }
 ];
 
-// The current date in our simulation is 2026-07-04. Kept as an anchor for
-// UI copy that references "today" while backend seeds real timestamps.
-export const TODAY_DATE = '2026-07-04';
+// NOTE: TODAY_DATE was previously a hardcoded simulation date.
+// It has been replaced by useToday() hook which provides the real current date.
+// Kept here only for test compatibility; do NOT use in production components.
+export const TODAY_DATE = new Date().toISOString().slice(0, 10);
 
 export const CATEGORY_LABELS: Record<string, string> = {
   salary: 'حقوق و دستمزد',
@@ -33,7 +34,7 @@ export const CATEGORY_LABELS: Record<string, string> = {
 };
 
 export const MOOD_LABELS: Record<string, { label: string, icon: string, color: string }> = {
-  excited: { label: 'پرانرژی و عالی', icon: 'Sparkles', color: 'text-amber-600 bg-amber-50 border-amber-200' },
+  excited: { label: 'پرانرژی و عالی', icon: 'Sparkles', color: 'text-[#9B6B61] bg-[#F9F1D8] border-[#EBE3C8]' },
   happy: { label: 'خوشحال و آرام', icon: 'Smile', color: 'text-emerald-600 bg-emerald-50 border-emerald-200' },
   neutral: { label: 'معمولی', icon: 'Meh', color: 'text-slate-600 bg-slate-50 border-slate-200' },
   tired: { label: 'خسته', icon: 'Moon', color: 'text-sky-600 bg-sky-50 border-sky-200' },
@@ -45,7 +46,7 @@ export const GOAL_CATEGORY_LABELS: Record<string, { label: string, color: string
   financial: { label: 'مالی', color: 'text-emerald-600 bg-emerald-50 border-emerald-200' },
   health: { label: 'سلامت و ورزش', color: 'text-rose-600 bg-rose-50 border-rose-200' },
   career: { label: 'شغل و حرفه', color: 'text-blue-600 bg-blue-50 border-blue-200' },
-  learning: { label: 'یادگیری و مهارت', color: 'text-amber-600 bg-amber-50 border-amber-200' },
+  learning: { label: 'یادگیری و مهارت', color: 'text-[#9B6B61] bg-[#F9F1D8] border-[#EBE3C8]' },
   personal: { label: 'توسعه فردی', color: 'text-purple-600 bg-purple-50 border-purple-200' },
   other: { label: 'سایر اهداف', color: 'text-slate-600 bg-slate-50 border-slate-200' }
 };

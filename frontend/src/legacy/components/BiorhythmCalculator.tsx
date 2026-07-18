@@ -97,8 +97,8 @@ export default function BiorhythmCalculator({
     if (absVal < 12) {
       return {
         label: 'بحرانی (دوران گذار و نوسان شدید)',
-        color: 'text-amber-700 bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900/40',
-        badgeColor: 'bg-amber-500 text-white',
+        color: 'text-[#5A5A40] bg-[#F9F1D8] dark:bg-[#201D13] border-[#EBE3C8] dark:border-[#3D3929]',
+        badgeColor: 'bg-[#F9F1D8]0 text-white',
         desc: type === 'p' 
           ? 'بدن در فاز تغییر قطب انرژی فیزیکی است. احتمال آسیب فیزیکی، کوفتگی یا کاهش مقاومت بدنی بالاتر است. از انجام تمرینات سنگین خودداری کنید.'
           : type === 'e' 
@@ -194,13 +194,13 @@ export default function BiorhythmCalculator({
           </div>
           
           <div className="relative pt-1">
-            <div className="overflow-hidden h-2.5 text-xs flex rounded-full bg-gray-100 dark:bg-gray-800">
+            <div className="overflow-hidden h-2.5 text-xs flex rounded-full bg-[#E6DFD3]/40 dark:bg-[#3D4133]">
               <div 
                 style={{ width: `${(physical + 100) / 2}%` }} 
                 className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-[#E26645] rounded-full transition-all duration-500"
               />
             </div>
-            <div className="absolute left-1/2 -translate-x-1/2 top-0 h-3 w-0.5 bg-gray-300 dark:bg-gray-600" />
+            <div className="absolute left-1/2 -translate-x-1/2 top-0 h-3 w-0.5 bg-[#D6CFC3] dark:bg-[#3D4133]" />
           </div>
 
           <div className={`p-2.5 rounded-xl text-[10px] font-black text-center border ${pStatus.color}`}>
@@ -224,13 +224,13 @@ export default function BiorhythmCalculator({
           </div>
 
           <div className="relative pt-1">
-            <div className="overflow-hidden h-2.5 text-xs flex rounded-full bg-gray-100 dark:bg-gray-800">
+            <div className="overflow-hidden h-2.5 text-xs flex rounded-full bg-[#E6DFD3]/40 dark:bg-[#3D4133]">
               <div 
                 style={{ width: `${(emotional + 100) / 2}%` }} 
                 className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-[#7C8363] rounded-full transition-all duration-500"
               />
             </div>
-            <div className="absolute left-1/2 -translate-x-1/2 top-0 h-3 w-0.5 bg-gray-300 dark:bg-gray-600" />
+            <div className="absolute left-1/2 -translate-x-1/2 top-0 h-3 w-0.5 bg-[#D6CFC3] dark:bg-[#3D4133]" />
           </div>
 
           <div className={`p-2.5 rounded-xl text-[10px] font-black text-center border ${eStatus.color}`}>
@@ -254,13 +254,13 @@ export default function BiorhythmCalculator({
           </div>
 
           <div className="relative pt-1">
-            <div className="overflow-hidden h-2.5 text-xs flex rounded-full bg-gray-100 dark:bg-gray-800">
+            <div className="overflow-hidden h-2.5 text-xs flex rounded-full bg-[#E6DFD3]/40 dark:bg-[#3D4133]">
               <div 
                 style={{ width: `${(intellectual + 100) / 2}%` }} 
                 className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-[#4F46E5] rounded-full transition-all duration-500"
               />
             </div>
-            <div className="absolute left-1/2 -translate-x-1/2 top-0 h-3 w-0.5 bg-gray-300 dark:bg-gray-600" />
+            <div className="absolute left-1/2 -translate-x-1/2 top-0 h-3 w-0.5 bg-[#D6CFC3] dark:bg-[#3D4133]" />
           </div>
 
           <div className={`p-2.5 rounded-xl text-[10px] font-black text-center border ${iStatus.color}`}>

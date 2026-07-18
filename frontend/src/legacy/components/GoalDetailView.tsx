@@ -1,7 +1,28 @@
-import React, { useState } from 'react';
-import { Goal, GoalCategory, Milestone, Habit, BankAccount, Project, Task, MetricLog, GoalMetric, WorkoutLog, SleepLog, MindfulnessSession, JournalEntry } from '../types';
+import React, { useState, useEffect } from 'react';
+import { Goal, GoalCategory, GoalType, ProgressMode, ContributionType, ContributionPeriod, GoalHabitLink, GoalFinanceLink, GoalLinkedProject, GoalHealthState, CompletionPolicy, GoalSignalWeights, ProjectContributionType, Milestone, Habit, BankAccount, Project, Task, MetricLog, GoalMetric, WorkoutLog, SleepLog, MindfulnessSession, JournalEntry } from '../types';
+import LinkedContacts from './LinkedContacts';
+import PartnerManager from './PartnerManager';
+import CommentReactions from './CommentReactions';
+import ProofUploader from './ProofUploader';
 import { GOAL_CATEGORY_LABELS } from '../initialData';
+import { 
+  getGoalDetail, 
+  computeGoalProgress, 
+  linkGoalHabit, 
+  unlinkGoalHabit, 
+  linkGoalFinance, 
+  unlinkGoalFinance, 
+  linkGoalProject, 
+  unlinkGoalProject,
+  updateGoalSignalWeights,
+  updateGoalCompletionPolicy,
+  getGoalSnapshots,
+  getGoalTrend,
+  updateGoalProjectWeights
+} from '../../app/hambaft-api';
 import PersianDatePicker from './PersianDatePicker';
+import EntityNoteEditor from '../../notes/components/EntityNoteEditor';
+import GoalProjectSummaryCard from './GoalProjectSummaryCard';
 import { 
   Target, 
   Calendar, 
@@ -42,7 +63,16 @@ import {
   PenTool,
   HelpCircle,
   Check,
-  LineChart as LucideLineChart
+  LineChart as LucideLineChart,
+  FileText,
+  ShieldCheck,
+  ShieldAlert,
+  ShieldX,
+  Eye,
+  BarChart3,
+  Scale,
+  Flag,
+  Clock
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -59,12 +89,14 @@ import {
 
 interface GoalDetailViewProps {
   goal: Goal;
+  goals: Goal[];
   globalHabits: Habit[];
   bankAccounts: BankAccount[];
   workoutLogs?: WorkoutLog[];
   sleepLogs?: SleepLog[];
   mindfulnessSessions?: MindfulnessSession[];
   journalEntries?: JournalEntry[];
+  contacts?: { id: string; name: string; photoUrl?: string; category?: string }[];
   onBack: () => void;
   onUpdateGoal: (updatedGoal: Goal) => void;
   onAddProjectToGoal: (goalId: string, title: string, description: string) => void;
@@ -84,6 +116,9 @@ interface GoalDetailViewProps {
   onLinkBankAccountToGoal: (goalId: string, bankAccountId: string | undefined) => void;
   onLinkHabitToGoal: (goalId: string, habitId: string) => void;
   onAddBankAccount: (bankAccount: Omit<BankAccount, 'id'>) => void;
+  onSelectProject: (projectId: string) => void;
+  onMoveProjectToGoal: (fromGoalId: string, projectId: string, toGoalId: string) => void;
+  onNavigateEntity?: (tab: string, id?: string) => void;
 }
 
 const CATEGORY_COLORS: Record<GoalCategory, string> = {
@@ -92,6 +127,7 @@ const CATEGORY_COLORS: Record<GoalCategory, string> = {
   career: 'bg-[#F4E9E4] border-[#EDDDD7] text-[#9B6B61]',
   learning: 'bg-[#E6DFD3] border-[#D6CFC3] text-[#8D7F72]',
   personal: 'bg-[#F9F1D8] border-[#EBE3C8] text-[#5A5A40]',
+  relationship: 'bg-[#F4E9E4] border-[#EDDDD7] text-[#9B6B61]',
   other: 'bg-[#FDFBF7] border-[#D6CFC3] text-[#3D3D3D]'
 };
 
@@ -107,13 +143,163 @@ function getCategoryIcon(category: GoalCategory, className = "w-4 h-4") {
       return <BookOpen className={className} />;
     case 'personal':
       return <Compass className={className} />;
+    case 'relationship':
+      return <Heart className={className} />;
     default:
       return <Target className={className} />;
   }
 }
 
+// ─── Inline editor for a linked project's contribution settings ───
+function LinkedProjectEditor({ goalId, lp, onUpdate }: {
+  goalId: string
+  lp: GoalLinkedProject
+  onUpdate: (updated: GoalLinkedProject) => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [weight, setWeight] = useState(String(lp.weight ?? 100))
+  const [contributionType, setContributionType] = useState<ProjectContributionType>(lp.contributionType || 'mandatory')
+  const [isMandatory, setIsMandatory] = useState(!!lp.isMandatory)
+  const [sortOrder, setSortOrder] = useState(String(lp.sortOrder ?? 0))
+  const [notes, setNotes] = useState(lp.notes || '')
+  const [saving, setSaving] = useState(false)
+
+  const handleSave = async () => {
+    if (goalId.startsWith('synthetic-') || goalId.startsWith('goal-')) { setEditing(false); return }
+    setSaving(true)
+    try {
+      const contribTypeBackend: Record<string, string> = { mandatory: 'اجباری', recommended: 'پیشنهادی', supporting: 'پشتیبان' }
+      await updateGoalProjectWeights(goalId, [{
+        project: lp.project,
+        weight: Number(weight) || 100,
+        is_mandatory: isMandatory ? 1 : 0,
+        contribution_type: contribTypeBackend[contributionType] || 'اجباری',
+        sort_order: Number(sortOrder) || 0,
+        notes: notes,
+      }])
+      onUpdate({
+        ...lp,
+        weight: Number(weight) || 100,
+        contributionType,
+        isMandatory,
+        sortOrder: Number(sortOrder) || 0,
+        notes,
+      })
+      setEditing(false)
+    } catch (err) {
+      console.error('Failed to update project weights:', err)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const resetAndCancel = () => {
+    setEditing(false)
+    setWeight(String(lp.weight ?? 100))
+    setContributionType(lp.contributionType || 'mandatory')
+    setIsMandatory(!!lp.isMandatory)
+    setSortOrder(String(lp.sortOrder ?? 0))
+    setNotes(lp.notes || '')
+  }
+
+  const contribBadge = (() => {
+    switch (contributionType) {
+      case 'mandatory': return 'bg-red-50 border-red-200 text-red-700'
+      case 'recommended': return 'bg-blue-50 border-blue-200 text-blue-700'
+      case 'supporting': return 'bg-[#F9F6EE] border-[#D6CFC3] text-[#8D7F72]'
+      default: return 'bg-[#F9F6EE] border-[#D6CFC3] text-[#8D7F72]'
+    }
+  })()
+
+  return (
+    <div className="bg-white p-3 rounded-2xl border border-[#E6DFD3] space-y-2 text-right">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-xs font-bold text-[#2D3025]">{lp.title}</span>
+          {editing ? (
+            <select value={contributionType} onChange={e => setContributionType(e.target.value as any)}
+              className="text-[9px] px-1.5 py-0.5 border border-[#D6CFC3] rounded-lg bg-white">
+              <option value="mandatory">اجباری</option>
+              <option value="recommended">پیشنهادی</option>
+              <option value="supporting">پشتیبان</option>
+            </select>
+          ) : (
+            <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-md border ${contribBadge}`}>
+              {contributionType === 'mandatory' ? 'اجباری' : contributionType === 'recommended' ? 'پیشنهادی' : 'پشتیبان'}
+            </span>
+          )}
+          {editing ? (
+            <label className="flex items-center gap-1 text-[9px] text-[#8D7F72]">
+              <input type="checkbox" checked={isMandatory} onChange={e => setIsMandatory(e.target.checked)} className="w-3 h-3" />
+              اجباری
+            </label>
+          ) : isMandatory && (
+            <span className="text-[7px] font-bold bg-red-50 border border-red-100 text-red-600 px-1 py-0.5 rounded">اجباری</span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {editing ? (
+            <div className="flex items-center gap-1">
+              <input type="number" min={0} max={100} value={weight} onChange={e => setWeight(e.target.value)}
+                className="w-12 px-1 py-0.5 text-[9px] border border-[#D6CFC3] rounded text-center font-mono" />
+              <span className="text-[8px] text-[#8D7F72]">%</span>
+            </div>
+          ) : lp.weight != null && (
+            <span className="text-[8px] font-bold bg-[#F9F1D8] text-[#5A5A40] px-1.5 py-0.5 rounded-md">وزن: {lp.weight}%</span>
+          )}
+          <button onClick={() => editing ? handleSave() : setEditing(true)}
+            disabled={saving}
+            className={`text-[9px] px-2 py-0.5 rounded-lg font-bold border cursor-pointer transition-all ${
+              editing ? 'bg-[#7C8363] text-white border-transparent' : 'bg-[#F9F6EE] border-[#D6CFC3] text-[#8D7F72] hover:bg-[#E6DFD3]/40'
+            }`}>
+            {saving ? '...' : editing ? 'ذخیره' : 'ویرایش'}
+          </button>
+          {editing && (
+            <button onClick={resetAndCancel}
+              className="text-[9px] px-2 py-0.5 rounded-lg border border-[#D6CFC3] text-[#8D7F72] cursor-pointer">لغو</button>
+          )}
+        </div>
+      </div>
+      {/* Stats */}
+      <div className="flex flex-wrap gap-2 text-[9px] text-[#8D7F72] font-semibold">
+        {lp.progress != null && <span>پیشرفت: {lp.progress}%</span>}
+        {lp.totalTasks != null && <span>تسک: {lp.doneTasks ?? 0}/{lp.totalTasks}</span>}
+        {lp.milestoneTotal != null && <span>نقطه‌عطف: {lp.milestoneDone ?? 0}/{lp.milestoneTotal}</span>}
+        {lp.keyTotal != null && <span>کلیدی: {lp.keyDone ?? 0}/{lp.keyTotal}</span>}
+        {lp.actualMinutes != null && <span>زمان: {lp.actualMinutes}د</span>}
+        {lp.estimatedHours != null && <span>برآورد: {lp.estimatedHours}س</span>}
+        {lp.sortOrder != null && lp.sortOrder > 0 && !editing && <span>ترتیب: {lp.sortOrder}</span>}
+      </div>
+      {/* Editable sort order and notes */}
+      {editing && (
+        <div className="flex flex-wrap gap-2 items-center">
+          <label className="flex items-center gap-1 text-[9px] text-[#8D7F72]">
+            <span>ترتیب:</span>
+            <input type="number" min={0} value={sortOrder} onChange={e => setSortOrder(e.target.value)}
+              className="w-10 px-1 py-0.5 text-[9px] border border-[#D6CFC3] rounded text-center font-mono" />
+          </label>
+          <label className="flex items-center gap-1 text-[9px] text-[#8D7F72] flex-1 min-w-[120px]">
+            <span>یادداشت:</span>
+            <input type="text" value={notes} onChange={e => setNotes(e.target.value)} placeholder="توضیحات..."
+              className="flex-1 px-1.5 py-0.5 text-[9px] border border-[#D6CFC3] rounded" />
+          </label>
+        </div>
+      )}
+      {!editing && lp.notes && (
+        <div className="text-[8px] text-[#9D978B] italic">📝 {lp.notes}</div>
+      )}
+      {lp.progress != null && (
+        <div className="w-full bg-[#E6DFD3]/40 h-1.5 rounded-full overflow-hidden">
+          <div className="bg-[#9B6B61] h-full rounded-full transition-all" style={{ width: `${Math.min(100, lp.progress)}%` }} />
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function GoalDetailView({
   goal,
+  goals,
   globalHabits,
   bankAccounts,
   workoutLogs = [],
@@ -136,10 +322,14 @@ export default function GoalDetailView({
   onToggleGoalCompletion,
   onLinkBankAccountToGoal,
   onLinkHabitToGoal,
-  onAddBankAccount
+  onAddBankAccount,
+  onSelectProject,
+  onMoveProjectToGoal,
+  contacts = [],
+  onNavigateEntity,
 }: GoalDetailViewProps) {
   
-  const [activeTab, setActiveTab] = useState<'projects' | 'habits' | 'milestones' | 'metrics' | 'vision'>('projects');
+  const [activeTab, setActiveTab] = useState<'projects' | 'habits' | 'milestones' | 'metrics' | 'vision' | 'notes' | 'config' | 'finance_links'>('projects');
   
   // Vision Board State
   const [visionInputUrl, setVisionInputUrl] = useState('');
@@ -153,7 +343,54 @@ export default function GoalDetailView({
   const [editDescription, setEditDescription] = useState(goal.description);
   const [editCategory, setEditCategory] = useState<GoalCategory>(goal.category);
   const [editTargetDate, setEditTargetDate] = useState(goal.targetDate);
-  const [editGoalLevel, setEditGoalLevel] = useState<'annual' | 'quarterly' | 'monthly' | 'none'>(goal.goalLevel || 'none');
+  const [editGoalLevel, setEditGoalLevel] = useState<string>(goal.goalLevel || 'none');
+  
+  // Advanced config states
+  const [editGoalType, setEditGoalType] = useState<GoalType>(goal.goalType || 'outcome');
+  const [editProgressMode, setEditProgressMode] = useState<ProgressMode>(goal.progressMode || 'manual');
+  const [editPriority, setEditPriority] = useState<'low' | 'medium' | 'high' | 'urgent'>(goal.priority || 'medium');
+  const [editTargetValue, setEditTargetValue] = useState(String(goal.targetValue || ''));
+  const [editCurrentValue, setEditCurrentValue] = useState(String(goal.currentValue || ''));
+  const [editUnit, setEditUnit] = useState(goal.unit || '');
+  
+  // Signal weight states
+  const [editProjectProgressWeight, setEditProjectProgressWeight] = useState(String(goal.projectProgressWeight ?? 40));
+  const [editMilestoneWeight, setEditMilestoneWeight] = useState(String(goal.milestoneWeight ?? 25));
+  const [editKeyTaskWeight, setEditKeyTaskWeight] = useState(String(goal.keyTaskWeight ?? 20));
+  const [editTrackedTimeWeight, setEditTrackedTimeWeight] = useState(String(goal.trackedTimeWeight ?? 10));
+  const [editMetricWeight, setEditMetricWeight] = useState(String(goal.metricWeight ?? 5));
+  const [isSavingWeights, setIsSavingWeights] = useState(false);
+  
+  // Completion policy states
+  const [editCompletionPolicy, setEditCompletionPolicy] = useState<CompletionPolicy>(goal.completionPolicy || 'threshold');
+  const [editCompletionThreshold, setEditCompletionThreshold] = useState(String(goal.completionThreshold ?? 80));
+  const [isSavingPolicy, setIsSavingPolicy] = useState(false);
+  
+  // Snapshot/trend states
+  const [goalSnapshots, setGoalSnapshots] = useState<any[]>([]);
+  const [goalTrend, setGoalTrend] = useState<any[]>([]);
+  const [isLoadingSnapshots, setIsLoadingSnapshots] = useState(false);
+  
+  // Goal habit link states
+  const [linkHabitId, setLinkHabitId] = useState('');
+  const [linkContributionType, setLinkContributionType] = useState<ContributionType>('completion_count');
+  const [linkContributionPeriod, setLinkContributionPeriod] = useState<ContributionPeriod>('monthly');
+  const [linkTargetValue, setLinkTargetValue] = useState('');
+  const [linkWeight, setLinkWeight] = useState('100');
+  const [isLinkingHabit, setIsLinkingHabit] = useState(false);
+  const [isUnlinkingHabit, setIsUnlinkingHabit] = useState<string | null>(null);
+  
+  // Finance link states
+  const [linkFinanceAccountId, setLinkFinanceAccountId] = useState('');
+  const [linkFinanceType, setLinkFinanceType] = useState<GoalFinanceLink['financeType']>('balance');
+  const [linkFinanceInitialAmount, setLinkFinanceInitialAmount] = useState('');
+  const [linkFinanceTargetAmount, setLinkFinanceTargetAmount] = useState('');
+  const [isLinkingFinance, setIsLinkingFinance] = useState(false);
+  const [isUnlinkingFinance, setIsUnlinkingFinance] = useState<string | null>(null);
+  
+  // Computed progress state
+  const [computedProgress, setComputedProgress] = useState<{percent: number; detail: any} | null>(null);
+  const [isComputing, setIsComputing] = useState(false);
   
   // Local states for inputs
   const [newMilestoneText, setNewMilestoneText] = useState('');
@@ -201,10 +438,209 @@ export default function GoalDetailView({
 
   const habitsTotal = goal.habits?.length || 0;
 
-  // Calculation for progress percentage
-  const percentage = milestonesTotal > 0 
-    ? Math.round((milestonesDone / milestonesTotal) * 100) 
-    : (goal.completed ? 100 : 0);
+  // Calculation for progress percentage — use backend progress_percent if available
+  const percentage = goal.progressPercent != null 
+    ? Math.round(goal.progressPercent) 
+    : (milestonesTotal > 0 
+        ? Math.round((milestonesDone / milestonesTotal) * 100) 
+        : (goal.completed ? 100 : 0));
+
+  // Handle compute progress
+  const handleComputeProgress = async () => {
+    if (goal.id.startsWith('synthetic-') || goal.id.startsWith('goal-')) return;
+    setIsComputing(true);
+    try {
+      const result = await computeGoalProgress(goal.id);
+      const data = result?.data ?? result as any;
+      if (data?.progress_percent != null) {
+        setComputedProgress({ percent: data.progress_percent, detail: data.detail });
+        // Update the goal with new progress
+        const updatedGoal: Goal = {
+          ...goal,
+          progressPercent: data.progress_percent,
+          derivedProgressDetail: JSON.stringify(data.detail),
+        };
+        if (data.goal) {
+          if (data.goal.linked_habits) {
+            updatedGoal.linkedHabits = data.goal.linked_habits.map((h: any) => ({
+              habit: h.habit,
+              habitTitle: h.habit_title,
+              contributionType: h.contribution_type,
+              weight: h.weight,
+              period: h.period,
+              targetValue: h.target_value,
+              capValue: h.cap_value,
+              isNegative: !!h.is_negative,
+              notes: h.notes,
+            }));
+          }
+          if (data.goal.linked_projects) {
+            const contribTypeMap: Record<string, 'mandatory' | 'recommended' | 'supporting'> = {
+              'اجباری': 'mandatory', 'پیشنهادی': 'recommended', 'پشتیبان': 'supporting',
+            }
+            updatedGoal.linkedProjects = data.goal.linked_projects.map((p: any) => ({
+              project: p.project || p.name,
+              title: p.title,
+              status: p.status,
+              progress: p.progress,
+              effortType: p.effort_type,
+              estimatedHours: p.estimated_hours,
+              actualMinutes: p.actual_minutes,
+              totalTasks: p.total_tasks,
+              doneTasks: p.done_tasks,
+              milestoneTotal: p.milestone_total,
+              milestoneDone: p.milestone_done,
+              keyTotal: p.key_total,
+              keyDone: p.key_done,
+              weight: p.weight,
+              contributionType: contribTypeMap[p.contribution_type] || undefined,
+              isMandatory: !!p.is_mandatory,
+              sortOrder: p.sort_order,
+              notes: p.notes,
+            }));
+          }
+          // Preserve health/completion from compute result
+          if (data.goal.health_state != null) {
+            const healthStateMap: Record<string, 'on_track' | 'at_risk' | 'off_track' | 'needs_review'> = {
+              'در_مسیر': 'on_track', 'در_خطر': 'at_risk', 'خارج_از_مسیر': 'off_track', 'نیاز_به_بررسی': 'needs_review',
+            }
+            updatedGoal.healthState = healthStateMap[data.goal.health_state] || undefined;
+            updatedGoal.healthDetail = data.goal.health_detail;
+          }
+        }
+        onUpdateGoal(updatedGoal);
+      }
+    } catch (err) {
+      console.error('Failed to compute goal progress:', err);
+    } finally {
+      setIsComputing(false);
+    }
+  };
+
+  // Handle link habit
+  const handleLinkHabit = async () => {
+    if (!linkHabitId || (goal.id.startsWith('synthetic-') || goal.id.startsWith('goal-'))) return;
+    setIsLinkingHabit(true);
+    try {
+      const contribTypeMap: Record<string, string> = {
+        completion_count: 'تعداد_انجام', completion_rate: 'نرخ_انجام', streak: 'رکورد',
+        quantity_sum: 'مجموع_مقدار', average_value: 'میانگین_مقدار', boolean_success: 'بله_خیر',
+      };
+      const periodMap: Record<string, string> = {
+        daily: 'روزانه', weekly: 'هفتگی', monthly: 'ماهانه', all: 'کل',
+      };
+      await linkGoalHabit(
+        goal.id,
+        linkHabitId,
+        contribTypeMap[linkContributionType] || 'تعداد_انجام',
+        Number(linkWeight) || 100,
+        periodMap[linkContributionPeriod] || 'ماهانه',
+        linkTargetValue ? Number(linkTargetValue) : undefined,
+      );
+      // Refresh goal detail
+      const detail = await getGoalDetail(goal.id);
+      const g = detail?.data?.goal ?? (detail as any)?.goal;
+      if (g) {
+        onUpdateGoal({
+          ...goal,
+          linkedHabits: (g.linked_habits || []).map((h: any) => ({
+            habit: h.habit,
+            habitTitle: h.habit_title,
+            contributionType: h.contribution_type,
+            weight: h.weight,
+            period: h.period,
+            targetValue: h.target_value,
+            capValue: h.cap_value,
+            isNegative: !!h.is_negative,
+            notes: h.notes,
+          })),
+        });
+      }
+      setLinkHabitId('');
+      setLinkTargetValue('');
+      setLinkWeight('100');
+    } catch (err) {
+      console.error('Failed to link habit:', err);
+    } finally {
+      setIsLinkingHabit(false);
+    }
+  };
+
+  // Handle unlink habit
+  const handleUnlinkHabit = async (habitId: string) => {
+    if (goal.id.startsWith('synthetic-') || goal.id.startsWith('goal-')) return;
+    setIsUnlinkingHabit(habitId);
+    try {
+      await unlinkGoalHabit(goal.id, habitId);
+      onUpdateGoal({
+        ...goal,
+        linkedHabits: (goal.linkedHabits || []).filter(h => h.habit !== habitId),
+      });
+    } catch (err) {
+      console.error('Failed to unlink habit:', err);
+    } finally {
+      setIsUnlinkingHabit(null);
+    }
+  };
+
+  // Handle link finance
+  const handleLinkFinance = async () => {
+    if (!linkFinanceAccountId || (goal.id.startsWith('synthetic-') || goal.id.startsWith('goal-'))) return;
+    setIsLinkingFinance(true);
+    try {
+      const finTypeMap: Record<string, string> = {
+        balance: 'موجودی_حساب', savings: 'پس‌انداز', debt: 'بدهی', investment: 'سرمایه‌گذاری', income_accumulated: 'درآمد_انباشته',
+      };
+      await linkGoalFinance(
+        goal.id,
+        linkFinanceAccountId,
+        finTypeMap[linkFinanceType] || 'موجودی_حساب',
+        linkFinanceInitialAmount ? Number(linkFinanceInitialAmount) : undefined,
+        linkFinanceTargetAmount ? Number(linkFinanceTargetAmount) : undefined,
+      );
+      const detail = await getGoalDetail(goal.id);
+      const g = detail?.data?.goal ?? (detail as any)?.goal;
+      if (g) {
+        onUpdateGoal({
+          ...goal,
+          linkedFinanceAccounts: (g.linked_finance_accounts || []).map((f: any) => ({
+            financeAccount: f.finance_account,
+            accountName: f.account_name,
+            currentBalance: f.current_balance,
+            financeType: f.finance_type,
+            initialAmount: f.initial_amount,
+            targetAmount: f.target_amount,
+            weight: f.weight,
+            notes: f.notes,
+          })),
+        });
+      }
+      setLinkFinanceAccountId('');
+      setLinkFinanceInitialAmount('');
+      setLinkFinanceTargetAmount('');
+    } catch (err) {
+      console.error('Failed to link finance:', err);
+    } finally {
+      setIsLinkingFinance(false);
+    }
+  };
+
+  // Handle unlink finance
+  const handleUnlinkFinance = async (accountId: string) => {
+    if (goal.id.startsWith('synthetic-') || goal.id.startsWith('goal-')) return;
+    setIsUnlinkingFinance(accountId);
+    try {
+      await unlinkGoalFinance(goal.id, accountId);
+      onUpdateGoal({
+        ...goal,
+        linkedFinanceAccounts: (goal.linkedFinanceAccounts || []).filter(f => f.financeAccount !== accountId),
+      });
+    } catch (err) {
+      console.error('Failed to unlink finance:', err);
+    } finally {
+      setIsUnlinkingFinance(null);
+    }
+  };
 
   // Linked bank account if any
   const linkedAccount = bankAccounts.find(acc => acc.id === goal.linkedBankAccountId);
@@ -585,7 +1021,7 @@ export default function GoalDetailView({
       description: editDescription.trim(),
       category: editCategory,
       targetDate: editTargetDate,
-      goalLevel: editGoalLevel !== 'none' ? editGoalLevel : undefined
+      goalLevel: editGoalLevel !== 'none' ? (editGoalLevel as 'annual' | 'quarterly' | 'monthly' | 'custom') : undefined
     });
 
     setShowEditGoalModal(false);
@@ -650,6 +1086,128 @@ export default function GoalDetailView({
     if (!title) return;
     onAddTaskToProject(goal.id, projectId, title);
     setNewTaskTitles(prev => ({ ...prev, [projectId]: '' }));
+  };
+
+  // Save signal weights
+  const handleSaveSignalWeights = async () => {
+    if (goal.id.startsWith('synthetic-') || goal.id.startsWith('goal-')) return;
+    setIsSavingWeights(true);
+    try {
+      await updateGoalSignalWeights(goal.id, {
+        projectProgressWeight: Number(editProjectProgressWeight) || 40,
+        milestoneWeight: Number(editMilestoneWeight) || 25,
+        keyTaskWeight: Number(editKeyTaskWeight) || 20,
+        trackedTimeWeight: Number(editTrackedTimeWeight) || 10,
+        metricWeight: Number(editMetricWeight) || 5,
+      });
+      onUpdateGoal({
+        ...goal,
+        projectProgressWeight: Number(editProjectProgressWeight) || 40,
+        milestoneWeight: Number(editMilestoneWeight) || 25,
+        keyTaskWeight: Number(editKeyTaskWeight) || 20,
+        trackedTimeWeight: Number(editTrackedTimeWeight) || 10,
+        metricWeight: Number(editMetricWeight) || 5,
+      });
+    } catch (err) {
+      console.error('Failed to save signal weights:', err);
+    } finally {
+      setIsSavingWeights(false);
+    }
+  };
+
+  // Save completion policy
+  const handleSaveCompletionPolicy = async () => {
+    if (goal.id.startsWith('synthetic-') || goal.id.startsWith('goal-')) return;
+    setIsSavingPolicy(true);
+    try {
+      const policyMap: Record<string, string> = {
+        threshold: 'آستانه_پیشرفت', threshold_plus_mandatory: 'آستانه_به_علاوه_پروژه‌های_اجباری',
+        metric_plus_mandatory: 'سنجه_به_علاوه_پروژه‌های_اجباری', all_projects: 'همه_پروژه‌ها_تکمیل',
+        threshold_plus_milestones: 'آستانه_به_علاوه_نقاط_عطف',
+      };
+      await updateGoalCompletionPolicy(
+        goal.id,
+        policyMap[editCompletionPolicy] || 'آستانه_پیشرفت',
+        Number(editCompletionThreshold) || 80
+      );
+      onUpdateGoal({
+        ...goal,
+        completionPolicy: editCompletionPolicy,
+        completionThreshold: Number(editCompletionThreshold) || 80,
+      });
+    } catch (err) {
+      console.error('Failed to save completion policy:', err);
+    } finally {
+      setIsSavingPolicy(false);
+    }
+  };
+
+  // Load snapshots
+  const handleLoadSnapshots = async () => {
+    if (goal.id.startsWith('synthetic-') || goal.id.startsWith('goal-')) return;
+    setIsLoadingSnapshots(true);
+    try {
+      const [snapRes, trendRes] = await Promise.all([
+        getGoalSnapshots(goal.id, 30),
+        getGoalTrend(goal.id, 30),
+      ]);
+      setGoalSnapshots(snapRes?.data?.snapshots || []);
+      setGoalTrend(trendRes?.data?.trend || []);
+    } catch (err) {
+      console.error('Failed to load snapshots:', err);
+    } finally {
+      setIsLoadingSnapshots(false);
+    }
+  };
+
+  // Health state helpers
+  const getHealthStateLabel = (state?: GoalHealthState) => {
+    switch (state) {
+      case 'on_track': return 'در مسیر ✓';
+      case 'at_risk': return 'در خطر ⚠';
+      case 'off_track': return 'خارج از مسیر ✗';
+      case 'needs_review': return 'نیاز به بررسی 🔍';
+      default: return 'نامشخص';
+    }
+  };
+
+  const getHealthStateColor = (state?: GoalHealthState) => {
+    switch (state) {
+      case 'on_track': return 'bg-emerald-50 border-emerald-200 text-emerald-700';
+      case 'at_risk': return 'bg-[#F9F1D8] border-[#EBE3C8] text-[#5A5A40]';
+      case 'off_track': return 'bg-red-50 border-red-200 text-red-700';
+      case 'needs_review': return 'bg-slate-50 border-slate-200 text-slate-700';
+      default: return 'bg-[#F9F6EE] border-[#D6CFC3] text-[#8D7F72]';
+    }
+  };
+
+  const getCompletionPolicyLabel = (policy?: CompletionPolicy) => {
+    switch (policy) {
+      case 'threshold': return 'آستانه پیشرفت';
+      case 'threshold_plus_mandatory': return 'آستانه + پروژه‌های اجباری';
+      case 'metric_plus_mandatory': return 'سنجه + پروژه‌های اجباری';
+      case 'all_projects': return 'همه پروژه‌ها تکمیل';
+      case 'threshold_plus_milestones': return 'آستانه + نقاط عطف';
+      default: return 'آستانه پیشرفت';
+    }
+  };
+
+  const getContributionTypeLabel = (type?: string) => {
+    switch (type) {
+      case 'mandatory': return 'اجباری';
+      case 'recommended': return 'پیشنهادی';
+      case 'supporting': return 'پشتیبان';
+      default: return 'نامشخص';
+    }
+  };
+
+  const getContributionTypeBadge = (type?: string) => {
+    switch (type) {
+      case 'mandatory': return 'bg-red-50 border-red-200 text-red-700';
+      case 'recommended': return 'bg-blue-50 border-blue-200 text-blue-700';
+      case 'supporting': return 'bg-[#F9F6EE] border-[#D6CFC3] text-[#8D7F72]';
+      default: return 'bg-[#F9F6EE] border-[#D6CFC3] text-[#8D7F72]';
+    }
   };
 
   const categoryDetails = GOAL_CATEGORY_LABELS[goal.category] || GOAL_CATEGORY_LABELS.other;
@@ -804,7 +1362,7 @@ export default function GoalDetailView({
                     </div>
                   </div>
                 ) : (
-                  <div className="text-center py-4 bg-amber-50/20 border border-dashed border-amber-200 rounded-xl text-[10px] text-[#8D7F72] flex items-center justify-center gap-1">
+                  <div className="text-center py-4 bg-[#F9F1D8]/20 border border-dashed border-[#EBE3C8] rounded-xl text-[10px] text-[#8D7F72] flex items-center justify-center gap-1">
                     <Info className="w-4 h-4 text-[#8D7F72]" />
                     <span>هیچ حسابی به این هدف متصل نیست.</span>
                   </div>
@@ -878,6 +1436,34 @@ export default function GoalDetailView({
         </div>
       )}
 
+      {/* HEALTH STATE + SNAPSHOT BANNER */}
+      {(goal.healthState || goal.completionPolicy) && (
+        <div className="bg-white p-4 rounded-3xl border border-[#E6DFD3] shadow-xs flex flex-wrap items-center gap-3 text-right">
+          {goal.healthState && (
+            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[10px] font-bold ${getHealthStateColor(goal.healthState)}`}>
+              {goal.healthState === 'on_track' && <ShieldCheck className="w-4 h-4" />}
+              {goal.healthState === 'at_risk' && <ShieldAlert className="w-4 h-4" />}
+              {goal.healthState === 'off_track' && <ShieldX className="w-4 h-4" />}
+              {goal.healthState === 'needs_review' && <Eye className="w-4 h-4" />}
+              <span>وضعیت سلامت هدف: {getHealthStateLabel(goal.healthState)}</span>
+            </div>
+          )}
+          {goal.completionPolicy && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border bg-[#F9F6EE] border-[#D6CFC3] text-[10px] font-bold text-[#5A5A40]">
+              <Scale className="w-4 h-4" />
+              <span>سیاست تکمیل: {getCompletionPolicyLabel(goal.completionPolicy)}</span>
+              {goal.completionThreshold && <span className="text-[8px] text-[#8D7F72] mr-1">({goal.completionThreshold}%)</span>}
+            </div>
+          )}
+          {goal.lastSnapshot && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border bg-[#E8ECE0]/40 border-[#DDE2D5] text-[9px] font-bold text-[#7C8363]">
+              <BarChart3 className="w-3.5 h-3.5" />
+              <span>آخرین اسنپ‌شات: {goal.lastSnapshot.progressPct?.toFixed(0)}% در {goal.lastSnapshotAt?.slice(0, 10) || '—'}</span>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* CORE WORKSPACE TABS */}
       <div className="space-y-4" id="detail-workspace-tabs">
         
@@ -942,113 +1528,91 @@ export default function GoalDetailView({
             <Image className="w-4 h-4" />
             <span>برد تصویرسازی ({(goal.visionImages || []).length})</span>
           </button>
+
+          <button
+            onClick={() => setActiveTab('notes')}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 text-xs font-extrabold rounded-xl transition-all cursor-pointer whitespace-nowrap ${
+              activeTab === 'notes'
+                ? 'bg-[#7C8363] text-white shadow-xs'
+                : 'text-[#8D7F72] hover:bg-[#E6DFD3]/40'
+            }`}
+          >
+            <FileText className="w-4 h-4" />
+            <span>یادداشت‌ها (Notion)</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('config')}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 text-xs font-extrabold rounded-xl transition-all cursor-pointer whitespace-nowrap ${
+              activeTab === 'config'
+                ? 'bg-[#7C8363] text-white shadow-xs'
+                : 'text-[#8D7F72] hover:bg-[#E6DFD3]/40'
+            }`}
+          >
+            <Layers className="w-4 h-4" />
+            <span>پیکربندی هدف</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('finance_links')}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 text-xs font-extrabold rounded-xl transition-all cursor-pointer whitespace-nowrap ${
+              activeTab === 'finance_links'
+                ? 'bg-[#7C8363] text-white shadow-xs'
+                : 'text-[#8D7F72] hover:bg-[#E6DFD3]/40'
+            }`}
+          >
+            <CreditCard className="w-4 h-4" />
+            <span>پیوند مالی ({(goal.linkedFinanceAccounts || []).length})</span>
+          </button>
         </div>
 
         {/* WORKSPACE CONTENT: PROJECTS & TASKS */}
         {activeTab === 'projects' && (
           <div className="space-y-4">
+            {/* Rich linked projects from backend (if available) */}
+            {(goal.linkedProjects || []).length > 0 && (
+              <div className="bg-[#E8ECE0]/20 p-4 rounded-3xl border border-[#DDE2D5] space-y-3">
+                <h5 className="text-xs font-black text-[#2D3025] flex items-center gap-1.5">
+                  <FolderKanban className="w-4 h-4 text-[#7C8363]" />
+                  <span>پروژه‌های پیوندی با تجزیه مشارکت ({goal.linkedProjects!.length})</span>
+                </h5>
+                <div className="space-y-2">
+                  {goal.linkedProjects!.map((lp, idx) => (
+                    <LinkedProjectEditor
+                      key={lp.project || idx}
+                      goalId={goal.id}
+                      lp={lp}
+                      onUpdate={(updatedLp) => {
+                        const newLinked = [...(goal.linkedProjects || [])];
+                        newLinked[idx] = updatedLp;
+                        onUpdateGoal({ ...goal, linkedProjects: newLinked });
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
             {goal.projects && goal.projects.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {goal.projects.map((project) => {
-                  const projectTasks = project.tasks || [];
-                  const pDone = projectTasks.filter(t => t.completed).length;
-                  const pTotal = projectTasks.length;
-                  const pPct = pTotal > 0 ? Math.round((pDone / pTotal) * 100) : 0;
-
+                  const linkedMatch = (goal.linkedProjects || []).find(lp => lp.project === project.id || lp.title === project.title);
+                  const mergedProject = {
+                    ...project,
+                    contributionType: project.contributionType || linkedMatch?.contributionType,
+                    actualMinutes: project.actualMinutes ?? linkedMatch?.actualMinutes,
+                    estimatedHours: project.estimatedHours ?? linkedMatch?.estimatedHours,
+                  };
                   return (
-                    <div key={project.id} className="bg-[#FDFBF7] p-4 rounded-3xl border border-[#E6DFD3] space-y-3 text-right">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <h5 className="text-xs font-extrabold text-[#2D3025] flex items-center gap-1.5">
-                            <span className="w-2 h-2 rounded-full bg-[#7C8363]"></span>
-                            <span>{project.title}</span>
-                          </h5>
-                          {project.description && (
-                            <p className="text-[10px] text-[#8D7F72] mt-0.5 pr-3.5 leading-relaxed">{project.description}</p>
-                          )}
-                        </div>
-
-                        <button 
-                          onClick={() => onDeleteProjectFromGoal(goal.id, project.id)}
-                          className="text-red-400 hover:text-red-600 p-1 rounded-lg hover:bg-red-50 cursor-pointer"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-
-                      {/* Progress Bar */}
-                      <div className="space-y-1 bg-[#F9F6EE] p-2 rounded-xl border border-[#E6DFD3]/40">
-                        <div className="flex justify-between items-center text-[9px] text-[#8D7F72] font-semibold">
-                          <span>میزان تکمیل پروژه: {pPct}%</span>
-                          <span>{pDone} از {pTotal} کار</span>
-                        </div>
-                        <div className="w-full h-1 bg-white rounded-full overflow-hidden">
-                          <div 
-                            className="h-full bg-[#9B6B61] transition-all rounded-full"
-                            style={{ width: `${pPct}%` }}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Tasks Checklist */}
-                      <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-                        {projectTasks.length > 0 ? (
-                          projectTasks.map((task) => (
-                            <div 
-                              key={task.id}
-                              onClick={() => onToggleTaskInProject(goal.id, project.id, task.id)}
-                              className="flex items-center justify-between p-2 bg-white hover:bg-[#E8ECE0]/20 border border-[#E6DFD3]/40 rounded-xl cursor-pointer transition-all"
-                            >
-                              <div className="flex items-center gap-2">
-                                {task.completed ? (
-                                  <CheckSquare className="w-3.5 h-3.5 text-[#7C8363] fill-[#E8ECE0]" />
-                                ) : (
-                                  <Circle className="w-3.5 h-3.5 text-[#8D7F72]" />
-                                )}
-                                <span className={`text-[10px] font-semibold ${task.completed ? 'line-through text-[#8D7F72]' : 'text-[#3D3D3D]'}`}>
-                                  {task.title}
-                                </span>
-                              </div>
-
-                              <button 
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onDeleteTaskFromProject(goal.id, project.id, task.id);
-                                }}
-                                className="text-[#8D7F72] hover:text-red-500 p-0.5 rounded-lg hover:bg-red-50"
-                              >
-                                <X className="w-3 h-3" />
-                              </button>
-                            </div>
-                          ))
-                        ) : (
-                          <div className="text-center py-4 bg-white/40 border border-dashed border-[#D6CFC3] rounded-xl text-[10px] text-[#8D7F72]">
-                            هیچ تسکی برای این پروژه تعریف نشده است.
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Add Task bar */}
-                      <div className="flex gap-1.5 pt-1.5 border-t border-[#E6DFD3]/30">
-                        <input 
-                          type="text"
-                          placeholder="تسک جدید به پروژه..."
-                          value={newTaskTitles[project.id] || ''}
-                          onChange={e => setNewTaskTitles(prev => ({ ...prev, [project.id]: e.target.value }))}
-                          onKeyDown={e => {
-                            if (e.key === 'Enter') handleCreateTask(project.id);
-                          }}
-                          className="flex-1 px-2.5 py-1.5 rounded-xl border border-[#D6CFC3] text-[10px] bg-white text-[#3D3D3D] focus:outline-none focus:border-[#7C8363]"
-                        />
-                        <button 
-                          onClick={() => handleCreateTask(project.id)}
-                          className="px-2.5 py-1.5 bg-[#9B6B61] hover:bg-[#7C5A51] text-white text-[10px] font-bold rounded-xl shrink-0 cursor-pointer"
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-
-                    </div>
+                    <GoalProjectSummaryCard
+                      key={project.id}
+                      goalId={goal.id}
+                      project={mergedProject}
+                      goals={goals}
+                      onSelectProject={onSelectProject}
+                      onMoveProjectToGoal={onMoveProjectToGoal}
+                      onDeleteProject={onDeleteProjectFromGoal}
+                    />
                   );
                 })}
               </div>
@@ -1155,7 +1719,7 @@ export default function GoalDetailView({
                             {habit.name}
                           </h5>
                           <span className="bg-[#FDFBF7] border border-[#E6DFD3] text-[#8D7F72] text-[8px] px-2 py-0.5 rounded-full font-bold flex items-center gap-0.5 shrink-0 font-mono">
-                            <Flame className="w-2.5 h-2.5 text-amber-500 fill-amber-100" />
+                            <Flame className="w-2.5 h-2.5 text-[#9B6B61] fill-[#F4E9E4]" />
                             <span>{habit.streak} روز زنجیره</span>
                           </span>
                         </div>
@@ -1554,16 +2118,16 @@ export default function GoalDetailView({
                             <div className="bg-white/80 p-2.5 rounded-xl border border-[#E6DFD3]/60 space-y-1">
                               <div className="flex items-center justify-between">
                                 <span className="text-[9px] font-bold text-[#8D7F72] flex items-center gap-1">
-                                  <PenTool className="w-3.5 h-3.5 text-amber-600" />
+                                  <PenTool className="w-3.5 h-3.5 text-[#9B6B61]" />
                                   عاطفه و ژورنال روزانه
                                 </span>
-                                <span className="text-[9px] font-black text-amber-600 font-mono">{details.journalScore}٪</span>
+                                <span className="text-[9px] font-black text-[#9B6B61] font-mono">{details.journalScore}٪</span>
                               </div>
                               <p className="text-[8px] text-[#8D7F72] leading-tight">
                                 {details.totalJournal} یادداشت ثبت شده (هدف: ۵)
                               </p>
                               <div className="w-full bg-[#E6DFD3]/40 h-1 rounded-full overflow-hidden">
-                                <div className="bg-amber-500 h-full rounded-full" style={{ width: `${details.journalScore}%` }} />
+                                <div className="bg-[#F9F1D8]0 h-full rounded-full" style={{ width: `${details.journalScore}%` }} />
                               </div>
                             </div>
                           </div>
@@ -2115,7 +2679,7 @@ export default function GoalDetailView({
                     <div className="bg-[#FDFBF7] p-4 rounded-2xl border border-[#E6DFD3]/80 space-y-3 flex flex-col justify-between text-right">
                       <div className="space-y-1.5">
                         <div className="flex items-center gap-2">
-                          <div className="p-1.5 bg-amber-50 text-amber-700 rounded-lg">
+                          <div className="p-1.5 bg-[#F9F1D8] text-[#5A5A40] rounded-lg">
                             <PenTool className="w-4 h-4" />
                           </div>
                           <h5 className="text-[11px] font-black text-[#2D3025]">خودآگاهی عاطفی و احساسات (ژورنال)</h5>
@@ -2140,7 +2704,7 @@ export default function GoalDetailView({
                             metric: initialMetric
                           });
                         }}
-                        className="w-full py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 text-[10px] font-black rounded-xl transition-all cursor-pointer"
+                        className="w-full py-1.5 bg-[#F9F1D8] hover:bg-[#F9F1D8] text-[#5A5A40] text-[10px] font-black rounded-xl transition-all cursor-pointer"
                       >
                         ⚡ فعال‌سازی سریع شمارنده ژورنال برای این هدف
                       </button>
@@ -2437,6 +3001,656 @@ export default function GoalDetailView({
               </div>
             </div>
 
+          </div>
+        )}
+
+        {/* WORKSPACE CONTENT: NOTES */}
+        {activeTab === 'notes' && (
+          <div className="space-y-4 animate-fade-in">
+            <EntityNoteEditor
+              entityId={goal.id}
+              entityType="goal"
+              title="یادداشت‌ها و جزئیات هدف (Notion)"
+              initialBlocks={goal.noteBlocks}
+              onSave={(blocks) => onUpdateGoal({ ...goal, noteBlocks: blocks })}
+            />
+          </div>
+        )}
+
+        {/* WORKSPACE CONTENT: GOAL CONFIGURATION */}
+
+        {/* Linked Contacts - shown across all tabs */}
+        {goal.id && (
+          <div className="bg-[#FDFBF7] dark:bg-[#1B1D16] p-4 rounded-2xl border border-[#E6DFD3] dark:border-[#3D4133]/30">
+            <LinkedContacts entityType="goal" entityId={goal.id} contacts={contacts} onNavigateContact={(contactId) => onNavigateEntity?.('contacts', contactId)} />
+            <div className="mt-3 pt-3 border-t border-[#E6DFD3]/40 dark:border-[#3D4133]/20">
+              <PartnerManager goalId={goal.id} />
+            </div>
+            <div className="mt-3 pt-3 border-t border-[#E6DFD3]/40 dark:border-[#3D4133]/20">
+              <CommentReactions entityType="goal" entityId={goal.id} />
+            </div>
+            <div className="mt-3 pt-3 border-t border-[#E6DFD3]/40 dark:border-[#3D4133]/20">
+              <ProofUploader entityType="goal" entityId={goal.id} />
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'config' && (
+          <div className="space-y-5 animate-fade-in" id="goal-config-panel">
+            {/* Goal Type & Progress Mode */}
+            <div className="bg-[#FDFBF7] p-5 rounded-3xl border border-[#E6DFD3] space-y-4">
+              <h4 className="text-xs font-black text-[#2D3025] flex items-center gap-1.5">
+                <Layers className="w-4 h-4 text-[#7C8363]" />
+                <span>نوع هدف و حالت محاسبه پیشرفت</span>
+              </h4>
+              <p className="text-[10px] text-[#8D7F72] leading-relaxed">
+                نوع هدف نحوه دسته‌بندی و رهگیری آن را مشخص می‌کند. حالت پیشرفت تعیین می‌کند پیشرفت هدف چگونه محاسبه شود: دستی، بر اساس سنجه عددی، تجمیع از عادت‌ها، پروژه‌ها، حساب‌های مالی یا ترکیب وزنی.
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1.5 text-right">
+                  <label className="text-[10px] font-bold text-[#8D7F72] block">نوع هدف</label>
+                  <select
+                    value={editGoalType}
+                    onChange={e => setEditGoalType(e.target.value as GoalType)}
+                    className="w-full px-3 py-2 text-xs bg-white border border-[#D6CFC3] rounded-xl focus:outline-none focus:border-[#7C8363]"
+                  >
+                    <option value="outcome">نتیجه‌ای (خروجی محور)</option>
+                    <option value="metric">سنجه‌ای (عددی کمی)</option>
+                    <option value="habit_driven">مبتنی بر عادت</option>
+                    <option value="project_delivery">تحویل پروژه</option>
+                    <option value="savings">پس‌انداز مالی</option>
+                    <option value="investment">سرمایه‌گذاری</option>
+                    <option value="debt_payoff">پرداخت بدهی</option>
+                    <option value="health">سلامت</option>
+                    <option value="learning">یادگیری</option>
+                    <option value="consistency">ثبات و استمرار</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5 text-right">
+                  <label className="text-[10px] font-bold text-[#8D7F72] block">حالت محاسبه پیشرفت</label>
+                  <select
+                    value={editProgressMode}
+                    onChange={e => setEditProgressMode(e.target.value as ProgressMode)}
+                    className="w-full px-3 py-2 text-xs bg-white border border-[#D6CFC3] rounded-xl focus:outline-none focus:border-[#7C8363]"
+                  >
+                    <option value="manual">دستی</option>
+                    <option value="metric_value">مقدار سنجه (عددی)</option>
+                    <option value="habit_rollup">تجمیع از عادت‌ها</option>
+                    <option value="project_rollup">تجمیع از پروژه‌ها</option>
+                    <option value="finance_balance">موجودی مالی</option>
+                    <option value="finance_savings">پس‌انداز مالی</option>
+                    <option value="debt_paydown">پرداخت بدهی</option>
+                    <option value="weighted_composite">ترکیب وزنی (مرکب)</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5 text-right">
+                  <label className="text-[10px] font-bold text-[#8D7F72] block">اولویت</label>
+                  <select
+                    value={editPriority}
+                    onChange={e => setEditPriority(e.target.value as any)}
+                    className="w-full px-3 py-2 text-xs bg-white border border-[#D6CFC3] rounded-xl focus:outline-none focus:border-[#7C8363]"
+                  >
+                    <option value="low">پایین</option>
+                    <option value="medium">متوسط</option>
+                    <option value="high">بالا</option>
+                    <option value="urgent">فوری</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5 text-right">
+                  <label className="text-[10px] font-bold text-[#8D7F72] block">سطح هدف</label>
+                  <select
+                    value={editGoalLevel}
+                    onChange={e => setEditGoalLevel(e.target.value as any)}
+                    className="w-full px-3 py-2 text-xs bg-white border border-[#D6CFC3] rounded-xl focus:outline-none focus:border-[#7C8363]"
+                  >
+                    <option value="none">بدون سطح‌بندی</option>
+                    <option value="annual">سالانه</option>
+                    <option value="quarterly">فصلی</option>
+                    <option value="monthly">ماهانه</option>
+                    <option value="custom">سفارشی</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Target / Current Values for metric goals */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-t border-[#E6DFD3]/40 pt-4">
+                <div className="space-y-1.5 text-right">
+                  <label className="text-[10px] font-bold text-[#8D7F72] block">مقدار هدف (تارگت)</label>
+                  <input 
+                    type="number"
+                    step="any"
+                    placeholder="مثلاً: 84"
+                    value={editTargetValue}
+                    onChange={e => setEditTargetValue(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-white border border-[#D6CFC3] rounded-xl focus:outline-none focus:border-[#7C8363] font-mono text-left"
+                  />
+                </div>
+                <div className="space-y-1.5 text-right">
+                  <label className="text-[10px] font-bold text-[#8D7F72] block">مقدار فعلی</label>
+                  <input 
+                    type="number"
+                    step="any"
+                    placeholder="مثلاً: 90"
+                    value={editCurrentValue}
+                    onChange={e => setEditCurrentValue(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-white border border-[#D6CFC3] rounded-xl focus:outline-none focus:border-[#7C8363] font-mono text-left"
+                  />
+                </div>
+                <div className="space-y-1.5 text-right">
+                  <label className="text-[10px] font-bold text-[#8D7F72] block">واحد اندازه‌گیری</label>
+                  <input 
+                    type="text"
+                    placeholder="مثلاً: کیلوگرم، ساعت، تومان"
+                    value={editUnit}
+                    onChange={e => setEditUnit(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-white border border-[#D6CFC3] rounded-xl focus:outline-none focus:border-[#7C8363]"
+                  />
+                </div>
+              </div>
+
+              <button
+                onClick={() => {
+                  onUpdateGoal({
+                    ...goal,
+                    goalType: editGoalType,
+                    progressMode: editProgressMode,
+                    priority: editPriority,
+                    goalLevel: editGoalLevel !== 'none' ? (editGoalLevel as any) : undefined,
+                    targetValue: editTargetValue ? Number(editTargetValue) : undefined,
+                    currentValue: editCurrentValue ? Number(editCurrentValue) : undefined,
+                    unit: editUnit || undefined,
+                  });
+                }}
+                className="w-full py-2.5 bg-[#7C8363] hover:bg-[#5A5A40] text-white text-xs font-black rounded-xl shadow-xs transition-all cursor-pointer"
+              >
+                ذخیره تنظیمات پیکربندی
+              </button>
+            </div>
+
+            {/* SIGNAL WEIGHTS CONFIG */}
+            <div className="bg-[#FDFBF7] p-5 rounded-3xl border border-[#E6DFD3] space-y-4">
+              <h4 className="text-xs font-black text-[#2D3025] flex items-center gap-1.5">
+                <Scale className="w-4 h-4 text-[#7C8363]" />
+                <span>وزن‌دهی سیگنال‌های پیشرفت (مرکب وزنی)</span>
+              </h4>
+              <p className="text-[10px] text-[#8D7F72] leading-relaxed">
+                وقتی حالت پیشرفت «ترکیب وزنی» باشد، این وزن‌ها تعیین می‌کنند هر سیگنال چقدر در درصد پیشرفت نهایی تأثیر داشته باشد. مجموع وزن‌ها ترجیحاً ۱۰۰ باشد.
+              </p>
+              <div className="space-y-3">
+                {[
+                  { label: 'پیشرفت پروژه‌ها', icon: FolderKanban, value: editProjectProgressWeight, setter: setEditProjectProgressWeight, color: 'text-[#7C8363]', default: 40 },
+                  { label: 'نقاط عطف (مایلستون)', icon: Flag, value: editMilestoneWeight, setter: setEditMilestoneWeight, color: 'text-emerald-600', default: 25 },
+                  { label: 'تسک‌های کلیدی', icon: CheckSquare, value: editKeyTaskWeight, setter: setEditKeyTaskWeight, color: 'text-[#9B6B61]', default: 20 },
+                  { label: 'زمان ردیابی‌شده', icon: Clock, value: editTrackedTimeWeight, setter: setEditTrackedTimeWeight, color: 'text-blue-600', default: 10 },
+                  { label: 'سنجه عددی', icon: Activity, value: editMetricWeight, setter: setEditMetricWeight, color: 'text-purple-600', default: 5 },
+                ].map((item) => (
+                  <div key={item.label} className="flex items-center gap-3">
+                    <item.icon className={`w-4 h-4 ${item.color} shrink-0`} />
+                    <span className="text-[10px] font-bold text-[#2D3025] w-32 shrink-0">{item.label}</span>
+                    <input
+                      type="range"
+                      min={0}
+                      max={100}
+                      value={Number(item.value) || item.default}
+                      onChange={e => item.setter(e.target.value)}
+                      className="flex-1 h-1.5 accent-[#7C8363]"
+                    />
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={item.value}
+                      onChange={e => item.setter(e.target.value)}
+                      className="w-14 px-2 py-1 text-xs bg-white border border-[#D6CFC3] rounded-lg text-center font-mono"
+                    />
+                    <span className="text-[9px] text-[#8D7F72] font-bold w-4">%</span>
+                  </div>
+                ))}
+              </div>
+              <div className="flex items-center justify-between pt-2 border-t border-[#E6DFD3]/40">
+                <span className="text-[10px] font-bold text-[#8D7F72]">
+                  مجموع: {(Number(editProjectProgressWeight) || 0) + (Number(editMilestoneWeight) || 0) + (Number(editKeyTaskWeight) || 0) + (Number(editTrackedTimeWeight) || 0) + (Number(editMetricWeight) || 0)}%
+                </span>
+                <button
+                  onClick={handleSaveSignalWeights}
+                  disabled={isSavingWeights}
+                  className={`px-4 py-1.5 text-xs font-bold text-white rounded-xl cursor-pointer transition-all ${isSavingWeights ? 'bg-[#D6CFC3]' : 'bg-[#7C8363] hover:bg-[#5A5A40]'}`}
+                >
+                  {isSavingWeights ? 'در حال ذخیره...' : 'ذخیره وزن‌ها'}
+                </button>
+              </div>
+            </div>
+
+            {/* COMPLETION POLICY CONFIG */}
+            <div className="bg-[#F9F1D8]/20 p-5 rounded-3xl border border-[#EBE3C8] space-y-4">
+              <h4 className="text-xs font-black text-[#2D3025] flex items-center gap-1.5">
+                <CheckCircle className="w-4 h-4 text-[#5A5A40]" />
+                <span>سیاست تکمیل هدف</span>
+              </h4>
+              <p className="text-[10px] text-[#8D7F72] leading-relaxed">
+                تعیین کنید در چه شرایطی این هدف «تکمیل‌شده» محسوب می‌شود. هر سیاست معیار متفاوتی دارد.
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1.5 text-right">
+                  <label className="text-[10px] font-bold text-[#8D7F72] block">سیاست تکمیل</label>
+                  <select
+                    value={editCompletionPolicy}
+                    onChange={e => setEditCompletionPolicy(e.target.value as CompletionPolicy)}
+                    className="w-full px-3 py-2 text-xs bg-white border border-[#D6CFC3] rounded-xl focus:outline-none focus:border-[#7C8363]"
+                  >
+                    <option value="threshold">آستانه پیشرفت (فقط درصد)</option>
+                    <option value="threshold_plus_mandatory">آستانه + پروژه‌های اجباری</option>
+                    <option value="metric_plus_mandatory">سنجه عددی + پروژه‌های اجباری</option>
+                    <option value="all_projects">همه پروژه‌ها تکمیل شوند</option>
+                    <option value="threshold_plus_milestones">آستانه + نقاط عطف پروژه</option>
+                  </select>
+                </div>
+                <div className="space-y-1.5 text-right">
+                  <label className="text-[10px] font-bold text-[#8D7F72] block">آستانه پیشرفت (درصد)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={editCompletionThreshold}
+                    onChange={e => setEditCompletionThreshold(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-white border border-[#D6CFC3] rounded-xl focus:outline-none focus:border-[#7C8363] font-mono text-left"
+                  />
+                </div>
+              </div>
+              <button
+                onClick={handleSaveCompletionPolicy}
+                disabled={isSavingPolicy}
+                className={`w-full py-2 text-xs font-bold text-white rounded-xl cursor-pointer transition-all ${isSavingPolicy ? 'bg-[#D6CFC3]' : 'bg-[#5A5A40] hover:bg-[#3D3D28]'}`}
+              >
+                {isSavingPolicy ? 'در حال ذخیره...' : 'ذخیره سیاست تکمیل'}
+              </button>
+            </div>
+
+            {/* GOAL TREND & SNAPSHOTS */}
+            <div className="bg-[#E8ECE0]/30 p-5 rounded-3xl border border-[#DDE2D5] space-y-4">
+              <div className="flex justify-between items-center">
+                <h4 className="text-xs font-black text-[#2D3025] flex items-center gap-1.5">
+                  <BarChart3 className="w-4 h-4 text-[#7C8363]" />
+                  <span>تاریخچه و روند پیشرفت هدف</span>
+                </h4>
+                <button
+                  onClick={handleLoadSnapshots}
+                  disabled={isLoadingSnapshots}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-xl cursor-pointer transition-all ${isLoadingSnapshots ? 'bg-[#D6CFC3] text-[#8D7F72]' : 'bg-[#7C8363] text-white hover:bg-[#5A5A40]'}`}
+                >
+                  {isLoadingSnapshots ? 'در حال بارگذاری...' : 'بارگذاری اسنپ‌شات‌ها'}
+                </button>
+              </div>
+
+              {goalTrend.length > 0 && (
+                <div className="bg-white p-3 rounded-2xl border border-[#E6DFD3]">
+                  <div className="flex items-center gap-1 mb-2">
+                    <TrendingUp className="w-3.5 h-3.5 text-[#7C8363]" />
+                    <span className="text-[10px] font-bold text-[#2D3025]">روند ۳۰ روز اخیر</span>
+                  </div>
+                  <div className="h-24 flex items-end gap-1" dir="ltr">
+                    {goalTrend.slice(-30).map((t, i) => {
+                      const pct = t.progress_percent ?? t.progressPct ?? 0;
+                      return (
+                        <div
+                          key={i}
+                          className="flex-1 bg-[#7C8363]/60 hover:bg-[#7C8363] rounded-t transition-all min-w-[3px]"
+                          style={{ height: `${Math.max(2, pct)}%` }}
+                          title={`${t.snapshot_date || t.date}: ${pct}%`}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {goalSnapshots.length > 0 && (
+                <div className="bg-white rounded-2xl border border-[#E6DFD3] overflow-hidden">
+                  <div className="bg-[#F9F6EE] px-3 py-2 border-b border-[#E6DFD3] flex justify-between items-center">
+                    <span className="text-[10px] font-black text-[#2D3025]">اسنپ‌شات‌های اخیر</span>
+                    <span className="text-[8px] text-[#8D7F72] font-bold">{goalSnapshots.length} ثبت</span>
+                  </div>
+                  <div className="divide-y divide-[#E6DFD3]/40 max-h-40 overflow-y-auto">
+                    {goalSnapshots.map((s, i) => (
+                      <div key={i} className="px-3 py-2 flex items-center justify-between text-right">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-black text-[#7C8363] font-mono">{(s.progress_percent ?? s.progressPct ?? 0).toFixed(0)}%</span>
+                          <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-md border ${getHealthStateColor(s.health_state ? ({'در_مسیر':'on_track','در_خطر':'at_risk','خارج_از_مسیر':'off_track','نیاز_به_بررسی':'needs_review'}[s.health_state] as GoalHealthState) : undefined)}`}>
+                            {s.health_state || '—'}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[9px] text-[#8D7F72]">{s.trigger_type || ''}</span>
+                          <span className="text-[9px] text-[#8D7F72] font-mono">{(s.snapshot_date || '').slice(0, 10)}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Computed Progress Section */}
+            <div className="bg-[#E8ECE0]/30 p-5 rounded-3xl border border-[#DDE2D5] space-y-4">
+              <div className="flex justify-between items-center">
+                <h4 className="text-xs font-black text-[#2D3025] flex items-center gap-1.5">
+                  <Activity className="w-4 h-4 text-[#7C8363]" />
+                  <span>پیشرفت محاسبه‌شده (از بک‌اند)</span>
+                </h4>
+                <button
+                  onClick={handleComputeProgress}
+                  disabled={isComputing}
+                  className={`px-4 py-1.5 text-xs font-bold text-white rounded-xl flex items-center gap-1 cursor-pointer transition-all ${
+                    isComputing ? 'bg-[#D6CFC3] cursor-not-allowed' : 'bg-[#7C8363] hover:bg-[#5A5A40]'
+                  }`}
+                >
+                  <TrendingUp className="w-3.5 h-3.5" />
+                  <span>{isComputing ? 'در حال محاسبه...' : 'محاسبه مجدد پیشرفت'}</span>
+                </button>
+              </div>
+
+              <div className="bg-white p-4 rounded-2xl border border-[#E6DFD3] space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-[10px] font-bold text-[#8D7F72]">درصد پیشرفت فعلی:</span>
+                  <span className="text-sm font-black text-[#7C8363] font-mono">{goal.progressPercent?.toFixed(1) ?? percentage}%</span>
+                </div>
+                <div className="w-full h-3 bg-[#F9F6EE] rounded-full overflow-hidden border border-[#E6DFD3]/60">
+                  <div 
+                    className="h-full bg-gradient-to-l from-[#7C8363] to-[#5A5A40] transition-all duration-700 rounded-full"
+                    style={{ width: `${Math.min(100, goal.progressPercent ?? percentage)}%` }}
+                  />
+                </div>
+
+                {computedProgress && (
+                  <div className="bg-[#F9F6EE] p-3 rounded-xl border border-[#DDE2D5] text-[9px] font-mono text-[#8D7F72] max-h-40 overflow-y-auto" dir="ltr">
+                    {JSON.stringify(computedProgress.detail, null, 2)}
+                  </div>
+                )}
+
+                {goal.derivedProgressDetail && !computedProgress && (
+                  <details className="text-[9px]">
+                    <summary className="text-[10px] font-bold text-[#8D7F72] cursor-pointer hover:text-[#5A5A40]">جزئیات محاسبه ذخیره‌شده</summary>
+                    <div className="mt-2 bg-[#F9F6EE] p-3 rounded-xl border border-[#DDE2D5] font-mono text-[#8D7F72] max-h-40 overflow-y-auto" dir="ltr">
+                      {(() => { try { return JSON.stringify(JSON.parse(goal.derivedProgressDetail), null, 2); } catch { return goal.derivedProgressDetail; } })()}
+                    </div>
+                  </details>
+                )}
+              </div>
+
+              {/* Linked Habits from backend */}
+              {(goal.linkedHabits || []).length > 0 && (
+                <div className="space-y-2">
+                  <h5 className="text-[11px] font-black text-[#2D3025] flex items-center gap-1">
+                    <Flame className="w-3.5 h-3.5 text-[#9B6B61]" />
+                    <span>عادت‌های پیوندی ({goal.linkedHabits!.length})</span>
+                  </h5>
+                  <div className="grid grid-cols-1 gap-2">
+                    {goal.linkedHabits!.map((lh, idx) => (
+                      <div key={idx} className="bg-white p-3 rounded-xl border border-[#E6DFD3] flex items-center justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs font-bold text-[#2D3025]">{lh.habitTitle || lh.habit}</span>
+                            <span className="text-[8px] font-bold bg-[#E8ECE0] text-[#7C8363] px-1.5 py-0.5 rounded-md">{lh.contributionType}</span>
+                            <span className="text-[8px] font-bold bg-[#F9F1D8] text-[#5A5A40] px-1.5 py-0.5 rounded-md">{lh.period} · وزن: {lh.weight}%</span>
+                          </div>
+                          {lh.targetValue && (
+                            <span className="text-[9px] text-[#8D7F72] block mt-0.5">هدف: {lh.targetValue} {lh.isNegative ? '(معکوس)' : ''}</span>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => handleUnlinkHabit(lh.habit)}
+                          disabled={!!isUnlinkingHabit}
+                          className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all cursor-pointer disabled:opacity-50"
+                          title="قطع پیوند عادت"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Linked Projects from backend — Rich with weights & contribution data */}
+              {(goal.linkedProjects || []).length > 0 && (
+                <div className="space-y-2">
+                  <h5 className="text-[11px] font-black text-[#2D3025] flex items-center gap-1">
+                    <FolderKanban className="w-3.5 h-3.5 text-[#9B6B61]" />
+                    <span>پروژه‌های پیوندی ({goal.linkedProjects!.length}) — تجزیه مشارکت</span>
+                  </h5>
+                  <div className="grid grid-cols-1 gap-2">
+                    {goal.linkedProjects!.map((lp, idx) => (
+                      <div key={idx} className="bg-white p-3 rounded-xl border border-[#E6DFD3] space-y-2">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs font-bold text-[#2D3025]">{lp.title}</span>
+                            {lp.contributionType && (
+                              <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-md border ${getContributionTypeBadge(lp.contributionType)}`}>
+                                {getContributionTypeLabel(lp.contributionType)}
+                              </span>
+                            )}
+                            {lp.isMandatory && (
+                              <span className="text-[8px] font-bold bg-red-50 border border-red-100 text-red-600 px-1.5 py-0.5 rounded-md">اجباری</span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {lp.progress != null && (
+                              <span className="text-[9px] text-[#8D7F72]">پیشرفت: {lp.progress}%</span>
+                            )}
+                            {lp.weight != null && (
+                              <span className="text-[8px] font-bold bg-[#F9F1D8] text-[#5A5A40] px-1.5 py-0.5 rounded-md">وزن: {lp.weight}%</span>
+                            )}
+                          </div>
+                        </div>
+                        {/* Project stats row */}
+                        <div className="flex flex-wrap gap-3 text-[9px] text-[#8D7F72] font-semibold">
+                          {lp.totalTasks != null && <span>تسک: {lp.doneTasks ?? 0}/{lp.totalTasks}</span>}
+                          {lp.milestoneTotal != null && <span>نقطه‌عطف: {lp.milestoneDone ?? 0}/{lp.milestoneTotal}</span>}
+                          {lp.keyTotal != null && <span>کلیدی: {lp.keyDone ?? 0}/{lp.keyTotal}</span>}
+                          {lp.actualMinutes != null && <span>زمان واقعی: {lp.actualMinutes} دقیقه</span>}
+                          {lp.estimatedHours != null && <span>برآورد: {lp.estimatedHours} ساعت</span>}
+                          {lp.effortType && <span>نوع: {lp.effortType === 'fixed' ? 'ثابت' : 'متغیر'}</span>}
+                        </div>
+                        {/* Progress bar */}
+                        {lp.progress != null && (
+                          <div className="w-full bg-[#E6DFD3]/40 h-1.5 rounded-full overflow-hidden">
+                            <div className="bg-[#9B6B61] h-full rounded-full transition-all" style={{ width: `${Math.min(100, lp.progress)}%` }} />
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Add Habit Link Form */}
+              <div className="bg-[#FDFBF7] p-4 rounded-2xl border border-[#E6DFD3] space-y-3">
+                <h5 className="text-[10px] font-black text-[#2D3025] flex items-center gap-1">
+                  <PlusCircle className="w-3.5 h-3.5 text-[#7C8363]" />
+                  <span>پیوند عادت جدید (با تنظیمات مشارکت)</span>
+                </h5>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="space-y-1 text-right">
+                    <label className="text-[9px] font-bold text-[#8D7F72]">انتخاب عادت</label>
+                    <select
+                      value={linkHabitId}
+                      onChange={e => setLinkHabitId(e.target.value)}
+                      className="w-full text-xs px-2.5 py-1.5 bg-white border border-[#D6CFC3] rounded-xl focus:outline-none focus:border-[#7C8363]"
+                    >
+                      <option value="">-- انتخاب عادت --</option>
+                      {globalHabits.map(h => (
+                        <option key={h.id} value={h.id}>{h.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1 text-right">
+                    <label className="text-[9px] font-bold text-[#8D7F72]">نوع مشارکت</label>
+                    <select
+                      value={linkContributionType}
+                      onChange={e => setLinkContributionType(e.target.value as ContributionType)}
+                      className="w-full text-xs px-2.5 py-1.5 bg-white border border-[#D6CFC3] rounded-xl focus:outline-none focus:border-[#7C8363]"
+                    >
+                      <option value="completion_count">تعداد انجام</option>
+                      <option value="completion_rate">نرخ انجام</option>
+                      <option value="streak">رکورد (زنجیره)</option>
+                      <option value="quantity_sum">مجموع مقدار</option>
+                      <option value="average_value">میانگین مقدار</option>
+                      <option value="boolean_success">بله/خیر</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1 text-right">
+                    <label className="text-[9px] font-bold text-[#8D7F72]">دوره سنجش</label>
+                    <select
+                      value={linkContributionPeriod}
+                      onChange={e => setLinkContributionPeriod(e.target.value as ContributionPeriod)}
+                      className="w-full text-xs px-2.5 py-1.5 bg-white border border-[#D6CFC3] rounded-xl focus:outline-none focus:border-[#7C8363]"
+                    >
+                      <option value="daily">روزانه</option>
+                      <option value="weekly">هفتگی</option>
+                      <option value="monthly">ماهانه</option>
+                      <option value="all">کل دوره</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1 text-right">
+                    <label className="text-[9px] font-bold text-[#8D7F72]">مقدار هدف (اختیاری)</label>
+                    <input 
+                      type="number" step="any" placeholder="مثلاً: 30"
+                      value={linkTargetValue}
+                      onChange={e => setLinkTargetValue(e.target.value)}
+                      className="w-full px-2.5 py-1.5 text-xs bg-white border border-[#D6CFC3] rounded-xl focus:outline-none focus:border-[#7C8363] font-mono text-left"
+                    />
+                  </div>
+                </div>
+                <button
+                  onClick={handleLinkHabit}
+                  disabled={!linkHabitId || isLinkingHabit}
+                  className={`w-full py-2 text-xs font-bold text-white rounded-xl flex items-center justify-center gap-1 cursor-pointer transition-all ${
+                    linkHabitId && !isLinkingHabit ? 'bg-[#7C8363] hover:bg-[#5A5A40]' : 'bg-[#D6CFC3] cursor-not-allowed'
+                  }`}
+                >
+                  <Link className="w-3.5 h-3.5" />
+                  <span>{isLinkingHabit ? 'در حال پیوند...' : 'پیوند عادت به هدف'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* WORKSPACE CONTENT: FINANCE LINKS */}
+        {activeTab === 'finance_links' && (
+          <div className="space-y-5 animate-fade-in" id="goal-finance-links-panel">
+            <div className="bg-[#F9F1D8]/30 p-5 rounded-3xl border border-[#EBE3C8] space-y-4">
+              <h4 className="text-xs font-black text-[#2D3025] flex items-center gap-1.5">
+                <DollarSign className="w-4 h-4 text-[#5A5A40]" />
+                <span>حساب‌های مالی پیوندی به هدف</span>
+              </h4>
+              <p className="text-[10px] text-[#8D7F72] leading-relaxed">
+                با پیوند حساب‌های مالی به این هدف، پیشرفت به صورت خودکار از روی موجودی، پس‌انداز یا پرداخت بدهی محاسبه می‌شود.
+              </p>
+
+              {/* Existing Finance Links */}
+              {(goal.linkedFinanceAccounts || []).length > 0 ? (
+                <div className="grid grid-cols-1 gap-3">
+                  {goal.linkedFinanceAccounts!.map((fl, idx) => (
+                    <div key={idx} className="bg-white p-4 rounded-2xl border border-[#E6DFD3] flex items-center justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs font-bold text-[#2D3025]">{fl.accountName || fl.financeAccount}</span>
+                          <span className="text-[8px] font-bold bg-[#E8ECE0] text-[#7C8363] px-1.5 py-0.5 rounded-md">{fl.financeType}</span>
+                          <span className="text-[8px] font-bold bg-[#F9F1D8] text-[#5A5A40] px-1.5 py-0.5 rounded-md">وزن: {fl.weight}%</span>
+                        </div>
+                        <div className="flex gap-4 mt-1 text-[9px] text-[#8D7F72]">
+                          {fl.initialAmount != null && <span>ابتدایی: {fl.initialAmount.toLocaleString('fa-IR')}</span>}
+                          {fl.targetAmount != null && <span>هدف: {fl.targetAmount.toLocaleString('fa-IR')}</span>}
+                          {fl.currentBalance != null && <span>موجودی فعلی: {fl.currentBalance.toLocaleString('fa-IR')}</span>}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleUnlinkFinance(fl.financeAccount)}
+                        disabled={!!isUnlinkingFinance}
+                        className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all cursor-pointer disabled:opacity-50"
+                        title="قطع پیوند حساب مالی"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-6 bg-white/40 border border-dashed border-[#D6CFC3] rounded-3xl text-[10px] text-[#8D7F72]">
+                  هنوز حساب مالی به این هدف پیوند نخورده است.
+                </div>
+              )}
+
+              {/* Add Finance Link Form */}
+              <div className="bg-[#FDFBF7] p-4 rounded-2xl border border-[#E6DFD3] space-y-3">
+                <h5 className="text-[10px] font-black text-[#2D3025] flex items-center gap-1">
+                  <PlusCircle className="w-3.5 h-3.5 text-[#7C8363]" />
+                  <span>پیوند حساب مالی جدید</span>
+                </h5>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="space-y-1 text-right">
+                    <label className="text-[9px] font-bold text-[#8D7F72]">انتخاب حساب</label>
+                    <select
+                      value={linkFinanceAccountId}
+                      onChange={e => setLinkFinanceAccountId(e.target.value)}
+                      className="w-full text-xs px-2.5 py-1.5 bg-white border border-[#D6CFC3] rounded-xl focus:outline-none focus:border-[#7C8363]"
+                    >
+                      <option value="">-- انتخاب حساب مالی --</option>
+                      {bankAccounts.map(acc => (
+                        <option key={acc.id} value={acc.id}>{acc.bankName} - {acc.accountName}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1 text-right">
+                    <label className="text-[9px] font-bold text-[#8D7F72]">نوع ارتباط مالی</label>
+                    <select
+                      value={linkFinanceType}
+                      onChange={e => setLinkFinanceType(e.target.value as GoalFinanceLink['financeType'])}
+                      className="w-full text-xs px-2.5 py-1.5 bg-white border border-[#D6CFC3] rounded-xl focus:outline-none focus:border-[#7C8363]"
+                    >
+                      <option value="balance">موجودی حساب</option>
+                      <option value="savings">پس‌انداز</option>
+                      <option value="debt">بدهی</option>
+                      <option value="investment">سرمایه‌گذاری</option>
+                      <option value="income_accumulated">درآمد انباشته</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1 text-right">
+                    <label className="text-[9px] font-bold text-[#8D7F72]">مبلغ اولیه (اختیاری)</label>
+                    <input 
+                      type="number" step="any" placeholder="مثلاً: 50000000"
+                      value={linkFinanceInitialAmount}
+                      onChange={e => setLinkFinanceInitialAmount(e.target.value)}
+                      className="w-full px-2.5 py-1.5 text-xs bg-white border border-[#D6CFC3] rounded-xl focus:outline-none focus:border-[#7C8363] font-mono text-left"
+                    />
+                  </div>
+                  <div className="space-y-1 text-right">
+                    <label className="text-[9px] font-bold text-[#8D7F72]">مبلغ هدف (اختیاری)</label>
+                    <input 
+                      type="number" step="any" placeholder="مثلاً: 100000000"
+                      value={linkFinanceTargetAmount}
+                      onChange={e => setLinkFinanceTargetAmount(e.target.value)}
+                      className="w-full px-2.5 py-1.5 text-xs bg-white border border-[#D6CFC3] rounded-xl focus:outline-none focus:border-[#7C8363] font-mono text-left"
+                    />
+                  </div>
+                </div>
+                <button
+                  onClick={handleLinkFinance}
+                  disabled={!linkFinanceAccountId || isLinkingFinance}
+                  className={`w-full py-2 text-xs font-bold text-white rounded-xl flex items-center justify-center gap-1 cursor-pointer transition-all ${
+                    linkFinanceAccountId && !isLinkingFinance ? 'bg-[#7C8363] hover:bg-[#5A5A40]' : 'bg-[#D6CFC3] cursor-not-allowed'
+                  }`}
+                >
+                  <CreditCard className="w-3.5 h-3.5" />
+                  <span>{isLinkingFinance ? 'در حال پیوند...' : 'پیوند حساب مالی'}</span>
+                </button>
+              </div>
+            </div>
           </div>
         )}
 

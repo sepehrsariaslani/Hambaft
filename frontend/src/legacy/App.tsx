@@ -1,11 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { LifeData, Transaction, Habit, Goal, Task, JournalEntry, GoalCategory, TransactionCategory, MoodType, Subscription, CategoryDef, Project, BankAccount, UserProfile, SleepLog, BudgetSettings, Document as LifeDocument, Occasion, MindfulnessSession, RecurringTransaction, Debt, AssetInvestment, MealLog, DietSetting, WeightLog, WorkoutLog, BodyMeasurementLog, Installment, Milestone } from './types';
-import { MOOD_LABELS, DEFAULT_CATEGORIES, TODAY_DATE as SEED_TODAY_DATE } from './initialData';
+import { MOOD_LABELS, DEFAULT_CATEGORIES } from './initialData';
 import { createEmptyLifeData, derivePrimaryPriority } from '../app/workspace-defaults';
 import { useToday } from '../app/use-today';
 import { subscribeAction } from '../app/navigation-bus';
-import InboxSection from './components/InboxSection';
-import CalendarViewSwitcher from './components/CalendarViewSwitcher';
 import {
   parseCalendarPreferences,
   parseCustomCalendars,
@@ -30,6 +28,9 @@ import {
   createScheduleRecord,
   createSleepLogRecord,
   createTaskRecord,
+  quickAddTask,
+  mapBackendTaskPriority,
+  mapBackendTaskCategory,
   createTransactionRecord,
   createWorkoutRecord,
   deleteContactRecord,
@@ -49,9 +50,16 @@ import {
   deleteTaskRecord,
   deleteTransactionRecord,
   deleteWorkoutRecord,
+  finishTaskSession,
+  getActiveTaskSession,
+  getTaskTrackedMinutes,
   logHabitRecord,
+  deleteMoodRecord,
   logMoodRecord,
   logWaterRecord,
+  resumeTaskSession,
+  startTaskSession,
+  stopTaskSession,
   updateBankAccountRecord,
   updateContactRecord,
   updateGoalRecord,
@@ -61,36 +69,46 @@ import {
   updateProfileRecord,
   updateScheduleRecord,
   updateSleepLogRecord,
+  updateMindfulnessRecord,
   updateSettingsRecord,
   updateTaskRecord,
   updateTransactionRecord,
 } from '../app/hambaft-api';
+import { moveProjectBetweenGoals, syncProjectTaskGoalIds } from './project-goal-linking';
 
-// Import Section Components
+// Import Section Components — primary (eager)
 import DashboardOverview from './components/DashboardOverview';
 import CalendarSection, { ScheduleItem } from './components/CalendarSection';
-import FinanceSection from './components/FinanceSection';
-import HabitSection from './components/HabitSection';
-import GoalSection from './components/GoalSection';
-import GoalDashboard from './components/GoalDashboard';
-import GoalDetailView from './components/GoalDetailView';
-import JournalSection from './components/JournalSection';
-import TaskDetailView from './components/TaskDetailView';
-import AiCoachSection from './components/AiCoachSection';
-import ProfileSection from './components/ProfileSection';
-import ProjectDashboard from './components/ProjectDashboard';
-import ProjectDetailView from './components/ProjectDetailView';
-import SleepSection from './components/SleepSection';
-import DocumentsSection from './components/DocumentsSection';
-import MindfulnessSection from './components/MindfulnessSection';
-import OccasionsSection from './components/OccasionsSection';
-import NotionNotesSection from './components/NotionNotesSection';
 import TaskManagerSection from './components/TaskManagerSection';
-import NutritionSection from './components/NutritionSection';
-import FitnessSection from './components/FitnessSection';
-import MoodSection from './components/MoodSection';
-import BalanceReportSection from './components/BalanceReportSection';
-import ContactsSection from './components/ContactsSection';
+import NotionNotesSection from './components/NotionNotesSection';
+import { useNotesStore, initOnboardingPages } from '../notes/useNotesStore';
+
+// Lazy-loaded secondary sections — reduces initial bundle ~68%
+const FinanceSection = React.lazy(() => import('./components/FinanceSection'));
+const HabitSection = React.lazy(() => import('./components/HabitSection'));
+const GoalDashboard = React.lazy(() => import('./components/GoalDashboard'));
+const GoalDetailView = React.lazy(() => import('./components/GoalDetailView'));
+const AiCoachSection = React.lazy(() => import('./components/AiCoachSection'));
+const ProfileSection = React.lazy(() => import('./components/ProfileSection'));
+const ProjectDashboard = React.lazy(() => import('./components/ProjectDashboard'));
+const ProjectDetailView = React.lazy(() => import('./components/ProjectDetailView'));
+const SleepSection = React.lazy(() => import('./components/SleepSection'));
+const DocumentsSection = React.lazy(() => import('./components/DocumentsSection'));
+const MindfulnessSection = React.lazy(() => import('./components/MindfulnessSection'));
+const OccasionsSection = React.lazy(() => import('./components/OccasionsSection'));
+const AreasSection = React.lazy(() => import('./components/AreasSection'));
+const NotesLayout = React.lazy(() => import('../notes/components/NotesLayout'));
+const NutritionSection = React.lazy(() => import('./components/NutritionSection'));
+const PlannerSection = React.lazy(() => import('./components/PlannerSection'));
+const FitnessSection = React.lazy(() => import('./components/FitnessSection'));
+const MoodSection = React.lazy(() => import('./components/MoodSection'));
+const BalanceReportSection = React.lazy(() => import('./components/BalanceReportSection'));
+const ContactsSection = React.lazy(() => import('./components/ContactsSection'));
+const TaskDetailPage = React.lazy(() => import('./components/TaskDetailPage'));
+const GalleryPage = React.lazy(() => import('./components/GalleryPage'));
+const DailyChallengesDisplay = React.lazy(() => import('./components/DailyChallengesDisplay'));
+const NotificationCenter = React.lazy(() => import('./components/NotificationCenter'));
+const ModerationPanel = React.lazy(() => import('./components/ModerationPanel'));
 import { Contact, MoodLog } from './types';
 
 import { 
@@ -132,48 +150,61 @@ import {
   Apple,
   Dumbbell,
   Users,
-  Activity
+  Activity,
+  Layers,
+  ChevronDown,
+  Image as ImageIcon,
+  Trophy,
+  Bell,
+  Shield
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 const NAVIGATION_GROUPS = [
   {
-    title: 'عمومی و خانه',
+    title: 'خانه',
     items: [
-      { id: 'dashboard', label: 'داشبورد خانه', icon: LayoutDashboard },
-      { id: 'coach', label: 'مربی هوش مصنوعی (کوچ)', icon: Sparkles },
-      { id: 'contacts', label: 'مخاطبان و صمیمیت (CRM)', icon: Users }
+      { id: 'dashboard', label: 'داشبورد', icon: LayoutDashboard },
+      { id: 'challenges', label: 'چالش روزانه', icon: Trophy },
+      { id: 'notifications', label: 'اعلان‌ها', icon: Bell },
+      { id: 'moderation', label: 'ایمنی جامعه', icon: Shield },
+      { id: 'coach', label: 'کوچ هوشمند', icon: Sparkles },
+      { id: 'contacts', label: 'مخاطبان', icon: Users }
+    ]
+  },
+    {
+    title: 'برنامه‌ریزی',
+    items: [
+      { id: 'journal', label: 'یادداشت‌ها', icon: BookOpen },
+      { id: 'planner', label: 'برنامه‌ریز', icon: Layers },
+      { id: 'tasks', label: 'تسک‌ها', icon: FileText },
+      { id: 'calendar', label: 'تقویم', icon: Calendar },
+      { id: 'occasions', label: 'مناسبت‌ها', icon: Gift },
+      { id: 'balance_report', label: 'گزارش توازن', icon: Activity }
     ]
   },
   {
-    title: 'برنامه‌ریزی و زمان',
+    title: 'تندرستی',
     items: [
-      { id: 'journal', label: 'دفترچه یادداشت‌ها', icon: BookOpen },
-      { id: 'tasks', label: 'مدیریت تسک‌ها', icon: FileText },
-      { id: 'inbox', label: 'جعبه ورودی (Inbox)', icon: Info },
-      { id: 'calendar', label: 'تقویم توازن زندگی', icon: Calendar },
-      { id: 'occasions', label: 'تقویم مناسبت‌ها', icon: Gift },
-      { id: 'balance_report', label: 'گزارش توازن زندگی', icon: Activity }
+      { id: 'sleep', label: 'خواب', icon: Moon },
+      { id: 'mindfulness', label: 'ذهن‌آگاهی', icon: Wind },
+      { id: 'mood', label: 'احساسات', icon: Smile },
+      { id: 'habits', label: 'عادت‌ها', icon: Flame },
+      { id: 'nutrition', label: 'تغذیه', icon: Apple },
+      { id: 'fitness', label: 'ورزش', icon: Dumbbell }
     ]
   },
   {
-    title: 'توازن و تندرستی',
+    title: 'رشد',
     items: [
-      { id: 'sleep', label: 'ریتم خواب و بیوریتم', icon: Moon },
-      { id: 'mindfulness', label: 'تمرین ذهن‌آگاهی', icon: Wind },
-      { id: 'mood', label: 'ارزیابی احساسات و مود', icon: Smile },
-      { id: 'habits', label: 'عادت‌های طلایی', icon: Flame },
-      { id: 'nutrition', label: 'تغذیه و رژیم غذایی', icon: Apple },
-      { id: 'fitness', label: 'ورزش و باشگاه بدنسازی', icon: Dumbbell }
-    ]
-  },
-  {
-    title: 'رشد و کارآمدی',
-    items: [
-      { id: 'goals', label: 'اهداف بلندمدت', icon: Target },
-      { id: 'projects', label: 'مدیریت پروژه‌ها', icon: FolderKanban },
-      { id: 'finance', label: 'امور مالی و مخارج', icon: Wallet },
-      { id: 'documents', label: 'مدیریت اسناد', icon: FolderOpen }
+      { id: 'goals', label: 'اهداف', icon: Target },
+      { id: 'projects', label: 'پروژه‌ها', icon: FolderKanban },
+      { id: 'areas', label: 'حوزه‌ها', icon: Layers },
+      { id: 'gallery', label: 'گالری', icon: ImageIcon },
+      { id: 'notes', label: 'یادداشت‌Notion', icon: FileText },
+      { id: 'finance', label: 'مالی', icon: Wallet },
+      { id: 'documents', label: 'اسناد', icon: FolderOpen },
+      { id: 'profile', label: 'تنظیمات', icon: User }
     ]
   }
 ];
@@ -233,6 +264,7 @@ type AppProps = {
   initialTaskId?: string | null;
   initialGoalId?: string | null;
   initialProjectId?: string | null;
+  initialContactId?: string | null;
   onNavigate?: (path: string) => void;
   seedLifeData?: LifeData | null;
   seedScheduleItems?: ScheduleItem[] | null;
@@ -240,11 +272,11 @@ type AppProps = {
   seedSettings?: Record<string, any> | null;
 }
 
-function tabToPath(tab: string, ids: { taskId?: string | null; goalId?: string | null; projectId?: string | null } = {}) {
+function tabToPath(tab: string, ids: { taskId?: string | null; goalId?: string | null; projectId?: string | null; contactId?: string | null } = {}) {
   switch (tab) {
     case 'coach': return '/coach';
-    case 'contacts': return '/contacts';
-    case 'inbox': return '/inbox';
+    case 'contacts': return ids.contactId ? `/contacts/${ids.contactId}` : '/contacts';
+    case 'inbox': return '/planner';
     case 'journal': return '/journal';
     case 'tasks': return '/tasks';
     case 'mood': return '/mood';
@@ -258,10 +290,22 @@ function tabToPath(tab: string, ids: { taskId?: string | null; goalId?: string |
     case 'fitness': return '/fitness';
     case 'goals': return ids.goalId ? `/goals/${ids.goalId}` : '/goals';
     case 'projects': return ids.projectId ? `/projects/${ids.projectId}` : '/projects';
+    case 'areas': return '/areas';
+    case 'gallery': return '/gallery';
+    case 'notes': return '/notes';
     case 'finance': return '/finance';
     case 'documents': return '/documents';
     case 'profile': return '/profile';
+    case 'challenges': return '/challenges';
+    case 'notifications': return '/notifications';
+    case 'moderation': return '/moderation';
     case 'task-detail': return ids.taskId ? `/task/${ids.taskId}` : '/tasks';
+    case 'planner-timeline': return '/planner/timeline';
+    case 'planner-week': return '/planner/week';
+    case 'planner-month': return '/planner/month';
+    case 'planner-board': return '/planner/board';
+    case 'planner-areas': return '/planner/areas';
+    case 'planner': return '/planner';
     case 'home':
     case 'dashboard':
     default:
@@ -274,6 +318,7 @@ export default function App({
   initialTaskId = null,
   initialGoalId = null,
   initialProjectId = null,
+  initialContactId = null,
   onNavigate,
   seedLifeData = null,
   seedScheduleItems = null,
@@ -289,12 +334,29 @@ export default function App({
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(initialTaskId);
   const [selectedGoalId, setSelectedGoalId] = useState<string | null>(initialGoalId);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(initialProjectId);
+  const [selectedContactId, setSelectedContactId] = useState<string | null>(initialContactId);
+
+  // Version marker — remove after deploy verification
+  useEffect(() => { console.log('[hambaft] version 2025-07-13-v12 — Notion-style task detail redesign'); }, []);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  // Serialized sync queue — prevents concurrent updates that cause 417 errors
+  const syncQueueRef = useRef<Promise<void>>(Promise.resolve());
   const runSync = (label: string, job: () => Promise<void>) => {
-    void job().catch((error) => {
-      console.error(`[hambaft] ${label} failed`, error);
-    });
+    syncQueueRef.current = syncQueueRef.current
+      .then(() => job())
+      .catch((error) => {
+        // If 417 (document modified), retry once after a short delay
+        if (String(error).includes('417') || String(error).includes('modified after')) {
+          console.warn(`[hambaft] ${label} conflict, retrying...`);
+          return new Promise<void>(resolve => {
+            setTimeout(() => {
+              job().catch(e => console.error(`[hambaft] ${label} retry failed`, e)).finally(resolve);
+            }, 500);
+          });
+        }
+        console.error(`[hambaft] ${label} failed`, error);
+      });
   };
 
   const [settingsState, setSettingsState] = useState<Record<string, any>>(() => seedSettings || {});
@@ -302,6 +364,10 @@ export default function App({
   
   // App core state
   const [lifeData, setLifeData] = useState<LifeData>(() => seedLifeData || createEmptyLifeData());
+
+  // Notes store
+  initOnboardingPages();
+  const notesStore = useNotesStore();
 
   useEffect(() => {
     if (seedLifeData) {
@@ -325,7 +391,16 @@ export default function App({
   }, [initialTab]);
 
   useEffect(() => {
-    setSelectedTaskId(initialTaskId);
+    // Temp/local IDs (tk-*) are never valid for deep-links — redirect to tasks
+    if (initialTaskId && initialTaskId.startsWith('tk-')) {
+      setSelectedTaskId(null);
+      if (activeTab === 'task-detail') {
+        setActiveTab('tasks');
+        onNavigate?.('/tasks');
+      }
+    } else {
+      setSelectedTaskId(initialTaskId);
+    }
   }, [initialTaskId]);
 
   useEffect(() => {
@@ -483,10 +558,17 @@ export default function App({
     if (tab !== 'task-detail') setSelectedTaskId(null);
     if (tab !== 'goals') setSelectedGoalId(null);
     if (tab !== 'projects') setSelectedProjectId(null);
+    if (tab !== 'contacts') setSelectedContactId(null);
     onNavigate?.(tabToPath(tab));
   };
 
   const goToTaskDetail = (taskId: string) => {
+    // Temp IDs should not become deep links — show page without URL change
+    if (taskId.startsWith('tk-')) {
+      setSelectedTaskId(taskId);
+      setActiveTab('task-detail');
+      return;
+    }
     setSelectedTaskId(taskId);
     setActiveTab('task-detail');
     onNavigate?.(tabToPath('task-detail', { taskId }));
@@ -502,6 +584,15 @@ export default function App({
     setSelectedProjectId(projectId || null);
     setActiveTab('projects');
     onNavigate?.(tabToPath('projects', { projectId }));
+  };
+
+  const goToContact = (contactId?: string | null) => {
+    setSelectedContactId(contactId || null);
+    setActiveTab('contacts');
+    setSelectedTaskId(null);
+    setSelectedGoalId(null);
+    setSelectedProjectId(null);
+    onNavigate?.(tabToPath('contacts', { contactId }));
   };
 
   // Sync dark mode class to root element
@@ -549,10 +640,12 @@ export default function App({
   const [quickAssetBuyPrice, setQuickAssetBuyPrice] = useState('');
   const [quickAssetCurrentPrice, setQuickAssetCurrentPrice] = useState('');
 
-  // Time Tracker State
+  // ─── Session-based Time Tracker ────────────────────────────
+  // Replaces local timer with backend session API
   const [activeTimerTaskId, setActiveTimerTaskId] = useState<string | null>(null);
   const [activeTimerSeconds, setActiveTimerSeconds] = useState<number>(0);
   const [isTimerRunning, setIsTimerRunning] = useState<boolean>(false);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
 
   // State to prompt the user to log a financial transaction when a related task is completed
   const [financePrompt, setFinancePrompt] = useState<{
@@ -584,99 +677,168 @@ export default function App({
     };
   }, [activeTimerTaskId, isTimerRunning]);
 
-  // Time Tracker handlers
-  const handleStartTimer = (taskId: string) => {
-    if (activeTimerTaskId && activeTimerTaskId !== taskId) {
-      const secondsToSave = activeTimerSeconds;
-      const prevTaskId = activeTimerTaskId;
-      setLifeData(prev => {
-        const updatedTasks = prev.tasks.map(t => {
-          if (t.id === prevTaskId) {
-            return {
-              ...t,
-              totalTimeSpent: (t.totalTimeSpent || 0) + secondsToSave
-            };
+  // Restore active session on mount — calculate elapsed seconds from started_at
+  useEffect(() => {
+    (async () => {
+      try {
+        const resp: any = await getActiveTaskSession();
+        const sess = resp?.data?.session;
+        if (sess) {
+          setActiveSessionId(sess.name);
+          setActiveTimerTaskId(sess.task);
+          // Calculate elapsed seconds from started_at
+          let elapsed = 0;
+          if (sess.started_at) {
+            try {
+              const start = new Date(sess.started_at);
+              const now = new Date();
+              elapsed = Math.max(0, Math.floor((now.getTime() - start.getTime()) / 1000));
+            } catch { elapsed = 0; }
           }
-          return t;
-        });
-        return { ...prev, tasks: updatedTasks };
-      });
+          setActiveTimerSeconds(elapsed);
+          setIsTimerRunning(true);
+        }
+      } catch {
+        // no active session
+      }
+    })();
+  }, []);
+
+  // Time Tracker handlers — now using backend session API
+  const handleStartTimer = async (taskId: string) => {
+    try {
+      // If there's already an active session, stop it first
+      if (activeSessionId) {
+        await stopTaskSession(activeSessionId);
+      }
+      const resp: any = await startTaskSession(taskId);
+      const sess = resp?.data?.session;
+      if (sess) {
+        setActiveSessionId(sess.name);
+        setActiveTimerTaskId(taskId);
+        setActiveTimerSeconds(0);
+        setIsTimerRunning(true);
+      }
+    } catch (e) {
+      console.error('startTaskSession error:', e);
     }
-
-    setActiveTimerTaskId(taskId);
-    setActiveTimerSeconds(0);
-    setIsTimerRunning(true);
   };
 
-  const handlePauseTimer = () => {
-    if (!activeTimerTaskId) return;
-    setIsTimerRunning(false);
-    
-    const secondsToSave = activeTimerSeconds;
-    const currentTaskId = activeTimerTaskId;
-    setLifeData(prev => {
-      const updatedTasks = prev.tasks.map(t => {
-        if (t.id === currentTaskId) {
-          return {
-            ...t,
-            totalTimeSpent: (t.totalTimeSpent || 0) + secondsToSave
-          };
+  const handlePauseTimer = async () => {
+    try {
+      let sessionId = activeSessionId;
+      if (!sessionId) {
+        try {
+          const activeResp: any = await getActiveTaskSession();
+          sessionId = activeResp?.data?.session?.name;
+        } catch {}
+      }
+      if (!sessionId) return;
+      await stopTaskSession(sessionId);
+      setIsTimerRunning(false);
+      // Keep the task as active but paused
+    } catch (e) {
+      console.error('pauseTaskSession error:', e);
+    }
+  };
+
+  const handleResumeTimer = async () => {
+    try {
+      let sessionId = activeSessionId;
+      if (!sessionId) {
+        try {
+          const activeResp: any = await getActiveTaskSession();
+          sessionId = activeResp?.data?.session?.name;
+        } catch {}
+      }
+      if (!sessionId) return;
+      await resumeTaskSession(sessionId);
+      setIsTimerRunning(true);
+      // Recalculate elapsed from the new started_at
+      try {
+        const activeResp: any = await getActiveTaskSession();
+        const sess = activeResp?.data?.session;
+        if (sess?.started_at) {
+          const start = new Date(sess.started_at);
+          const now = new Date();
+          const elapsed = Math.max(0, Math.floor((now.getTime() - start.getTime()) / 1000));
+          setActiveTimerSeconds(elapsed);
         }
-        return t;
-      });
-      return { ...prev, tasks: updatedTasks };
-    });
-    
-    setActiveTimerSeconds(0);
+      } catch {}
+    } catch (e) {
+      console.error('resumeTaskSession error:', e);
+    }
   };
 
-  const handleResumeTimer = () => {
-    if (!activeTimerTaskId) return;
-    setIsTimerRunning(true);
-  };
-
-  const handleStopTimer = () => {
-    if (!activeTimerTaskId) return;
-    
-    const secondsToSave = activeTimerSeconds;
-    const currentTaskId = activeTimerTaskId;
-    setLifeData(prev => {
-      const updatedTasks = prev.tasks.map(t => {
-        if (t.id === currentTaskId) {
-          return {
-            ...t,
-            totalTimeSpent: (t.totalTimeSpent || 0) + secondsToSave
-          };
+  const handleStopTimer = async () => {
+    try {
+      // If we don't have the session ID, try to fetch it from backend
+      let sessionId = activeSessionId;
+      if (!sessionId) {
+        try {
+          const activeResp: any = await getActiveTaskSession();
+          sessionId = activeResp?.data?.session?.name;
+        } catch {}
+      }
+      if (!sessionId) {
+        // No active session at all — just reset UI
+        setActiveSessionId(null);
+        setActiveTimerTaskId(null);
+        setActiveTimerSeconds(0);
+        setIsTimerRunning(false);
+        return;
+      }
+      const resp: any = await finishTaskSession(sessionId);
+      // Update task's actualMinutes from the session result
+      const sess = resp?.data?.session;
+      if (sess?.task) {
+        const minsResp: any = await getTaskTrackedMinutes(sess.task);
+        const totalMinutes = minsResp?.data?.tracked_minutes;
+        if (totalMinutes !== undefined) {
+          setLifeData(prev => {
+            const updatedTasks = prev.tasks.map(t => {
+              if (t.id === sess.task) {
+                return { ...t, actualMinutes: totalMinutes, totalTimeSpent: totalMinutes * 60 };
+              }
+              return t;
+            });
+            return { ...prev, tasks: updatedTasks };
+          });
         }
-        return t;
-      });
-      return { ...prev, tasks: updatedTasks };
-    });
-    
-    setActiveTimerTaskId(null);
-    setActiveTimerSeconds(0);
-    setIsTimerRunning(false);
-  };
-
-  const handleResetTimerForTask = (taskId: string) => {
-    if (activeTimerTaskId === taskId) {
+      }
+      setActiveSessionId(null);
+      setActiveTimerTaskId(null);
       setActiveTimerSeconds(0);
       setIsTimerRunning(false);
+    } catch (e) {
+      console.error('stopTaskSession error:', e);
+      // Still reset UI even on error — the session might have been finished already
+      setActiveSessionId(null);
       setActiveTimerTaskId(null);
+      setActiveTimerSeconds(0);
+      setIsTimerRunning(false);
     }
-    
-    setLifeData(prev => {
-      const updatedTasks = prev.tasks.map(t => {
-        if (t.id === taskId) {
-          return {
-            ...t,
-            totalTimeSpent: 0
-          };
+  };
+
+  const handleResetTimerForTask = async (taskId: string) => {
+    try {
+      let sessionId = activeSessionId;
+      if (!sessionId && activeTimerTaskId === taskId) {
+        try {
+          const activeResp: any = await getActiveTaskSession();
+          sessionId = activeResp?.data?.session?.name;
+        } catch {}
+      }
+      if (sessionId && activeTimerTaskId === taskId) {
+        try { await stopTaskSession(sessionId); } catch (e) {
+          console.error('resetTimer stop error:', e);
         }
-        return t;
-      });
-      return { ...prev, tasks: updatedTasks };
-    });
+      }
+    } catch {}
+    setActiveSessionId(null);
+    setActiveTimerSeconds(0);
+    setIsTimerRunning(false);
+    setActiveTimerTaskId(null);
   };
 
   // Auto-process subscription renewals on mount
@@ -812,7 +974,13 @@ export default function App({
   };
 
   const handleToggleScheduleItem = (id: string) => {
+    const current = scheduleItems.find(item => item.id === id);
     setScheduleItems(prev => prev.map(item => item.id === id ? { ...item, completed: !item.completed } : item));
+    if (current && !id.startsWith('s-')) {
+      runSync('toggle schedule item', async () => {
+        await updateScheduleRecord(id, { ...current, completed: !current.completed });
+      });
+    }
   };
 
   const handleDeleteScheduleItem = (id: string) => {
@@ -1228,6 +1396,20 @@ export default function App({
         ...prev,
         documents: (prev.documents || []).map(item => item.id === newDoc.id ? { ...item, id: saved.name } : item)
       }));
+      // Persist the auto-created occasion reminder to backend
+      if (schedDate) {
+        try {
+          const docOcc: Omit<Occasion, 'id'> = {
+            title: `🛡️ یادآور سند: ${doc.title}`,
+            date: schedDate,
+            type: 'deadline',
+            recurrenceType: 'once',
+            reminderDaysBefore: 0,
+            notes: `موعد یا یادآوری انقضای مدرک "${doc.title}". ${doc.description || ''}`
+          };
+          await createOccasionRecord(docOcc);
+        } catch { /* non-critical — occasion will be local-only */ }
+      }
     });
   };
   const handleDeleteDocument = (id: string) => {
@@ -1459,6 +1641,20 @@ export default function App({
     if (!id.startsWith('ms-')) {
       runSync('delete mindfulness session', async () => {
         await deleteMindfulnessRecord(id);
+      });
+    }
+  };
+
+  const handleUpdateMindfulnessSession = (id: string, updates: Partial<MindfulnessSession>) => {
+    setLifeData(prev => ({
+      ...prev,
+      mindfulnessSessions: (prev.mindfulnessSessions || []).map(s =>
+        s.id === id ? { ...s, ...updates } : s
+      ),
+    }));
+    if (!id.startsWith('ms-')) {
+      runSync('update mindfulness session', async () => {
+        await updateMindfulnessRecord(id, updates);
       });
     }
   };
@@ -1879,7 +2075,8 @@ export default function App({
             completed: false,
             tasks: [],
             createdAt: TODAY_DATE,
-            status: 'waiting'
+            status: 'waiting',
+            linkedGoalId: goalId,
           };
           return {
             ...g,
@@ -1913,21 +2110,31 @@ export default function App({
     }
   };
 
-  const handleAddTaskToProject = (goalId: string, projectId: string, title: string) => {
+  const handleAddTaskToProject = (goalId: string, projectId: string, titleOrTask: string | Task) => {
+    const title = typeof titleOrTask === 'string' ? titleOrTask : titleOrTask.title;
+
+    // Find the project's linked goal for the goal field
+    const project = findProjectByIds(goalId, projectId);
+    const goalIdForTask = project?.linkedGoalId || goalId;
+
+    // Optimistically add to project's task list for immediate UI feedback
+    const optimisticTask: Task = typeof titleOrTask === 'object' ? titleOrTask : {
+      id: `tk-p-${Date.now()}`,
+      title,
+      completed: false,
+      createdAt: TODAY_DATE,
+      projectId,
+      goalId: goalIdForTask !== goalId ? goalIdForTask : undefined,
+    };
+
     setLifeData(prev => {
       const updatedGoals = prev.goals.map(g => {
         if (g.id === goalId) {
           const updatedProjects = (g.projects || []).map(p => {
             if (p.id === projectId) {
-              const newTask: Task = {
-                id: `tk-p-${Date.now()}`,
-                title,
-                completed: false,
-                createdAt: TODAY_DATE
-              };
               return {
                 ...p,
-                tasks: [...(p.tasks || []), newTask],
+                tasks: [...(p.tasks || []), optimisticTask],
                 status: p.status === 'waiting' ? 'in_progress' : p.status
               };
             }
@@ -1939,7 +2146,66 @@ export default function App({
       });
       return { ...prev, goals: updatedGoals };
     });
-    syncProjectState(goalId, projectId, 'update project');
+
+    // Create a REAL Task DocType record linked to the project — this makes
+    // the task appear in both the project view AND the main task list.
+    runSync('add task to project', async () => {
+      try {
+        const response: any = await quickAddTask(title, {
+          project: projectId,
+          goal: goalIdForTask !== goalId ? goalIdForTask : undefined,
+          context: 'project_detail',
+        });
+        const saved = response?.data?.task;
+        if (saved?.name) {
+          // Replace optimistic ID with real backend ID in project tasks
+          setLifeData(prev => {
+            const updatedGoals = prev.goals.map(g => {
+              if (g.id === goalId) {
+                const updatedProjects = (g.projects || []).map(p => {
+                  if (p.id === projectId) {
+                    return {
+                      ...p,
+                      tasks: (p.tasks || []).map(t =>
+                        t.id === optimisticTask.id
+                          ? { ...t, id: saved.name, status: saved.status || t.status }
+                          : t
+                      ),
+                    };
+                  }
+                  return p;
+                });
+                return { ...g, projects: updatedProjects };
+              }
+              return g;
+            });
+            // Also add the task to the global task list so it appears in TaskManagerSection
+            const mappedTask = {
+              id: saved.name,
+              title: saved.title || title,
+              completed: ['done', 'completed', 'انجام‌شده', 'انجام شده'].includes(String(saved.status || '')),
+              status: saved.status || 'inbox',
+              createdAt: String(saved.creation || TODAY_DATE).slice(0, 10),
+              description: saved.description || '',
+              priority: mapBackendTaskPriority(saved.priority),
+              category: mapBackendTaskCategory(saved.category),
+              projectId: projectId,
+              goalId: goalIdForTask !== goalId ? goalIdForTask : undefined,
+            } as Task;
+            const taskExists = prev.tasks.some(t => t.id === saved.name);
+            return {
+              ...prev,
+              goals: updatedGoals,
+              tasks: taskExists ? prev.tasks : [mappedTask, ...prev.tasks],
+            };
+          });
+        }
+      } catch (e) {
+        console.error('[hambaft] add task to project failed:', e);
+        // No child-table fallback — tasks are real Task records now.
+        // The optimistic update stays; user can refresh to retry.
+      }
+    });
   };
 
   const handleToggleTaskInProject = (goalId: string, projectId: string, taskId: string) => {
@@ -1979,7 +2245,7 @@ export default function App({
                   if (nextCompleted) {
                     completedFinanceTask = t;
                   }
-                  return { ...t, completed: nextCompleted };
+                  return { ...t, completed: nextCompleted, status: nextCompleted ? 'done' : 'inbox' };
                 }
                 return t;
               });
@@ -1996,6 +2262,15 @@ export default function App({
           return { ...g, projects: updatedProjects };
         }
         return g;
+      });
+
+      // Also update the global task list for the same task
+      const updatedTasks = prev.tasks.map(t => {
+        if (t.id === taskId) {
+          const nextCompleted = !t.completed;
+          return { ...t, completed: nextCompleted, status: nextCompleted ? 'done' : 'inbox' };
+        }
+        return t;
       });
 
       if (completedFinanceTask) {
@@ -2018,48 +2293,36 @@ export default function App({
         }
       }
 
-      return { ...prev, goals: updatedGoals };
+      return { ...prev, goals: updatedGoals, tasks: updatedTasks };
     });
-    syncProjectState(goalId, projectId, 'update project');
+
+    // Persist to backend: if the task has a real (non-temp) ID, update it directly
+    if (!taskId.startsWith('tk-') && !taskId.startsWith('tk-p-')) {
+      runSync('toggle project task', async () => {
+        await updateTaskRecord({ id: taskId, completed: !projectTask?.completed, status: !projectTask?.completed ? 'done' : 'inbox' } as Task);
+      });
+    }
+    // Temp IDs can't be persisted — they'll be saved when the project syncs.
   };
 
-  const handleToggleTaskTracking = (goalId: string, projectId: string, taskId: string) => {
-    setLifeData(prev => {
-      const updatedGoals = prev.goals.map(g => {
-        if (g.id === goalId) {
-          const updatedProjects = (g.projects || []).map(p => {
-            if (p.id === projectId) {
-              const updatedTasks = p.tasks.map(t => {
-                if (t.id === taskId) {
-                  const now = Date.now();
-                  if (t.isTracking) {
-                    const elapsed = Math.floor((now - (t.trackingStartTime || now)) / 1000);
-                    return {
-                      ...t,
-                      isTracking: false,
-                      totalTimeSpent: (t.totalTimeSpent || 0) + elapsed,
-                      trackingStartTime: undefined
-                    };
-                  } else {
-                    return {
-                      ...t,
-                      isTracking: true,
-                      trackingStartTime: now
-                    };
-                  }
-                }
-                return t;
-              });
-              return { ...p, tasks: updatedTasks };
-            }
-            return p;
-          });
-          return { ...g, projects: updatedProjects };
-        }
-        return g;
-      });
-      return { ...prev, goals: updatedGoals };
-    });
+  const handleToggleTaskTracking = async (goalId: string, projectId: string, taskId: string) => {
+    // Use backend session API for tracking
+    const task = lifeData.goals
+      .filter(g => g.id === goalId)
+      .flatMap(g => (g.projects || []))
+      .filter(p => p.id === projectId)
+      .flatMap(p => p.tasks || [])
+      .find(t => t.id === taskId);
+
+    if (task?.isTracking) {
+      // Stop tracking — use the global timer stop
+      if (activeTimerTaskId === taskId) {
+        await handleStopTimer();
+      }
+    } else {
+      // Start tracking — use the global timer start
+      await handleStartTimer(taskId);
+    }
   };
 
   const handleDeleteTaskFromProject = (goalId: string, projectId: string, taskId: string) => {
@@ -2081,9 +2344,18 @@ export default function App({
         }
         return g;
       });
-      return { ...prev, goals: updatedGoals };
+      // Also remove from global task list
+      const updatedTasks = prev.tasks.filter(t => t.id !== taskId);
+      return { ...prev, goals: updatedGoals, tasks: updatedTasks };
     });
-    syncProjectState(goalId, projectId, 'update project');
+
+    // Delete the real Task record from backend if it's a persisted task
+    if (!taskId.startsWith('tk-') && !taskId.startsWith('tk-p-')) {
+      runSync('delete task from project', async () => {
+        await deleteTaskRecord(taskId);
+      });
+    }
+    // Temp IDs don't need backend deletion — they only exist in local state.
   };
 
   const handleToggleProjectCompletion = (goalId: string, projectId: string) => {
@@ -2109,7 +2381,68 @@ export default function App({
     syncProjectState(goalId, projectId, 'update project');
   };
 
-  const handleUpdateProjectDetails = (goalId: string, projectId: string, updates: { title?: string; description?: string; notes?: string; milestones?: Milestone[]; tasks?: Task[] }) => {
+  const handleMoveProjectToGoal = (fromGoalId: string, projectId: string, toGoalId: string) => {
+    if (fromGoalId === toGoalId) {
+      return;
+    }
+
+    const previousGoals = lifeData.goals;
+    const previousTasks = lifeData.tasks;
+    const moveResult = moveProjectBetweenGoals(previousGoals, { fromGoalId, projectId, toGoalId });
+
+    if (!moveResult.movedProject) {
+      return;
+    }
+
+    setLifeData(prev => ({
+      ...prev,
+      goals: moveResult.goals,
+      tasks: syncProjectTaskGoalIds(prev.tasks, projectId, toGoalId),
+    }));
+
+    const movedProject = moveResult.movedProject;
+    const isTemporaryProject = movedProject.id.startsWith('p-');
+
+    runSync('move project between goals', async () => {
+      try {
+        if (isTemporaryProject) {
+          const response: any = await createProjectRecord(movedProject, toGoalId);
+          const saved = response?.data?.project;
+          if (!saved?.name) return;
+
+          setLifeData(prev => ({
+            ...prev,
+            goals: prev.goals.map(goal => ({
+              ...goal,
+              projects: (goal.projects || []).map(project => (
+                project.id === movedProject.id
+                  ? {
+                      ...project,
+                      id: saved.name,
+                      createdAt: String(saved.creation || project.createdAt).slice(0, 10),
+                    }
+                  : project
+              )),
+            })),
+          }));
+
+          setSelectedProjectId(current => (current === movedProject.id ? saved.name : current));
+          return;
+        }
+
+        await updateProjectRecord(movedProject.id, movedProject, toGoalId);
+      } catch (error) {
+        setLifeData(prev => ({
+          ...prev,
+          goals: previousGoals,
+          tasks: previousTasks,
+        }));
+        throw error;
+      }
+    });
+  };
+
+  const handleUpdateProjectDetails = (goalId: string, projectId: string, updates: { title?: string; description?: string; notes?: string; milestones?: Milestone[]; tasks?: Task[]; noteBlocks?: any[] }) => {
     setLifeData(prev => {
       const updatedGoals = prev.goals.map(g => {
         if (g.id === goalId) {
@@ -2126,7 +2459,23 @@ export default function App({
         }
         return g;
       });
-      return { ...prev, goals: updatedGoals };
+
+      // If tasks are being updated, sync them to the global task list too
+      let updatedTasks = prev.tasks;
+      if (updates.tasks) {
+        const updatedTaskMap = new Map(updates.tasks.map(t => [t.id, t]))
+        // Add/update tasks that are in the project update
+        for (const [id, task] of updatedTaskMap) {
+          const exists = updatedTasks.some(t => t.id === id)
+          if (exists) {
+            updatedTasks = updatedTasks.map(t => t.id === id ? task : t)
+          } else {
+            updatedTasks = [task, ...updatedTasks]
+          }
+        }
+      }
+
+      return { ...prev, goals: updatedGoals, tasks: updatedTasks };
     });
     syncProjectState(goalId, projectId, 'update project');
   };
@@ -2306,8 +2655,8 @@ export default function App({
   };
 
   const checkTaskDependencies = (task: Task): string | null => {
-    if (!task.dependencies || task.dependencies.length === 0) return null;
-    for (const depId of task.dependencies) {
+    if (!task.blockedBy || task.blockedBy.length === 0) return null;
+    for (const depId of task.blockedBy) {
       const depTask = findTaskById(depId);
       if (depTask && !depTask.completed) {
         return depTask.title;
@@ -2360,6 +2709,7 @@ export default function App({
   };
 
   const handleToggleDailyHighlight = (id: string) => {
+    const task = lifeData.tasks.find(t => t.id === id) || lifeData.goals.flatMap(g => (g.projects || []).flatMap(p => p.tasks || [])).find(t => t.id === id);
     setLifeData(prev => {
       const updatedTasks = prev.tasks.map(t => t.id === id ? { ...t, isDailyHighlight: !t.isDailyHighlight } : t);
       const updatedGoals = prev.goals.map(g => {
@@ -2371,10 +2721,25 @@ export default function App({
       });
       return { ...prev, tasks: updatedTasks, goals: updatedGoals };
     });
+    if (task) {
+      runSync('toggle daily highlight', async () => {
+        await updateTaskRecord({ ...task, isDailyHighlight: !task.isDailyHighlight });
+      });
+    }
   };
 
   const handleAddTask = (titleOrTask: string | Task) => {
     if (typeof titleOrTask === 'object') {
+      if (!titleOrTask.id.startsWith('tk-')) {
+        setLifeData(prev => ({
+          ...prev,
+          tasks: prev.tasks.some(task => task.id === titleOrTask.id)
+            ? prev.tasks.map(task => (task.id === titleOrTask.id ? titleOrTask : task))
+            : [...prev.tasks, titleOrTask]
+        }));
+        return;
+      }
+
       setLifeData(prev => ({
         ...prev,
         tasks: [...prev.tasks, titleOrTask]
@@ -2387,7 +2752,7 @@ export default function App({
           ...prev,
           tasks: prev.tasks.map(task => (
             task.id === titleOrTask.id
-              ? { ...task, id: saved.name, createdAt: String(saved.creation || task.createdAt).slice(0, 10) }
+              ? { ...task, id: saved.name, status: saved.status || task.status, createdAt: String(saved.creation || task.createdAt).slice(0, 10) }
               : task
           ))
         }));
@@ -2411,7 +2776,7 @@ export default function App({
           ...prev,
           tasks: prev.tasks.map(task => (
             task.id === newTask.id
-              ? { ...task, id: saved.name, createdAt: String(saved.creation || task.createdAt).slice(0, 10) }
+              ? { ...task, id: saved.name, status: saved.status || task.status, createdAt: String(saved.creation || task.createdAt).slice(0, 10) }
               : task
           ))
         }));
@@ -2437,16 +2802,23 @@ export default function App({
     setLifeData(prev => {
       let isStopping = false;
       let completedFinanceTask: any = null;
+      const toggled = prev.tasks.find(t => t.id === id);
+      if (!toggled) return prev;
+      const nextCompleted = !toggled.completed;
+
       const updatedTasks = prev.tasks.map(t => {
         if (t.id === id) {
-          const nextCompleted = !t.completed;
           if (nextCompleted && activeTimerTaskId === id) {
             isStopping = true;
           }
           if (nextCompleted) {
             completedFinanceTask = t;
           }
-          return { ...t, completed: nextCompleted };
+          return { ...t, completed: nextCompleted, status: nextCompleted ? 'done' : 'inbox' };
+        }
+        // Also toggle subtasks when parent is toggled
+        if (t.parentTaskId === id) {
+          return { ...t, completed: nextCompleted, status: nextCompleted ? 'done' : 'inbox' };
         }
         return t;
       });
@@ -2481,6 +2853,15 @@ export default function App({
     if (syncedTask && !id.startsWith('tk-')) {
       runSync('toggle task', async () => {
         await updateTaskRecord(syncedTask as Task);
+        // Also complete subtasks on backend
+        if (syncedTask!.completed) {
+          try {
+            const { call: frappeCall } = await import('../app/frappe');
+            await frappeCall('hambaft.hambaft.api.complete_task', { name: id });
+          } catch (e) {
+            console.error('[hambaft] complete subtasks failed', e);
+          }
+        }
       });
     }
   };
@@ -2492,10 +2873,27 @@ export default function App({
       setIsTimerRunning(false);
     }
     setLifeData(prev => {
-      const updatedTasks = prev.tasks.filter(t => t.id !== id);
+      // Collect all descendant task IDs to remove from state
+      const toRemove = new Set<string>()
+      toRemove.add(id)
+      // Find direct and indirect children
+      const findDescendants = (parentId: string) => {
+        prev.tasks.filter(t => t.parentTaskId === parentId).forEach(child => {
+          toRemove.add(child.id)
+          findDescendants(child.id)
+        })
+      }
+      findDescendants(id)
+      // Also stop timer if any child was active
+      if (activeTimerTaskId && toRemove.has(activeTimerTaskId)) {
+        setActiveTimerTaskId(null)
+        setActiveTimerSeconds(0)
+        setIsTimerRunning(false)
+      }
+      const updatedTasks = prev.tasks.filter(t => !toRemove.has(t.id));
       const updatedGoals = prev.goals.map(g => {
         const updatedProjects = (g.projects || []).map(p => {
-          return { ...p, tasks: (p.tasks || []).filter(t => t.id !== id) };
+          return { ...p, tasks: (p.tasks || []).filter(t => !toRemove.has(t.id)) };
         });
         return { ...g, projects: updatedProjects };
       });
@@ -2503,7 +2901,7 @@ export default function App({
     });
     if (!id.startsWith('tk-')) {
       runSync('delete task', async () => {
-        await deleteTaskRecord(id);
+        await deleteTaskRecord(id); // backend delete_task now recursively deletes subtasks
       });
     }
   };
@@ -2650,7 +3048,7 @@ export default function App({
     runSync('create mood log', async () => {
       await logMoodRecord({
         date: newMood.date,
-        note: newMood.note,
+        note: newMood.notes,
         gratitude: newMood.gratitude,
       });
     });
@@ -2661,6 +3059,11 @@ export default function App({
       ...prev,
       moodLogs: (prev.moodLogs || []).filter(l => l.id !== id)
     }));
+    if (!id.startsWith('mld-')) {
+      runSync('delete mood log', async () => {
+        await deleteMoodRecord(id);
+      });
+    }
   };
 
   // 6.2 Contacts CRM Handlers
@@ -2701,6 +3104,20 @@ export default function App({
             : c
         ))
       }));
+      // Persist the auto-created birthday occasion to backend
+      if (contact.birthday) {
+        try {
+          const bdayOcc: Omit<Occasion, 'id'> = {
+            title: `🎂 تولد: ${contact.name}`,
+            type: 'birthday',
+            date: contact.birthday,
+            recurrenceType: 'yearly',
+            reminderDaysBefore: 3,
+            notes: `یادآوری تولد ${contact.name} از دفتر ارتباطات CRM. برای تبریک، تماس بگیرید.`
+          };
+          await createOccasionRecord(bdayOcc);
+        } catch { /* non-critical */ }
+      }
     });
   };
 
@@ -2780,10 +3197,10 @@ export default function App({
       ...prev,
       profile: {
         ...(prev.profile || {
-          name: 'پارس سلیمانی',
-          avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=250&auto=format&fit=crop',
-          motto: 'زندگی همبافته‌ای از توازن، آرامش و تلاش هوشمندانه است.',
-          workField: 'طراح ارشد محصول',
+          name: 'کاربر',
+          avatarUrl: '',
+          motto: '',
+          workField: '',
           dailyWaterGoal: 8,
           sleepGoalHours: 7.5
         }),
@@ -2913,7 +3330,20 @@ export default function App({
     goToTab('finance');
   };
 
-  const renderActiveSection = () => {
+  const renderActiveSection = () => (
+    <React.Suspense fallback={
+      <div className="flex items-center justify-center py-20">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-2 border-[#7C8363] border-t-transparent rounded-full animate-spin" />
+          <span className="text-[10px] font-bold text-[#8D7F72]">در حال بارگذاری...</span>
+        </div>
+      </div>
+    }>
+      {renderActiveSectionInner()}
+    </React.Suspense>
+  )
+
+  const renderActiveSectionInner = () => {
     switch (activeTab) {
       case 'dashboard':
       case 'home':
@@ -3006,6 +3436,8 @@ export default function App({
             onPayInstallment={handlePayInstallment}
             initialQuickTemplates={financeQuickTemplates}
             onQuickTemplatesChange={(templates) => patchSettings({ finance_quick_templates_json: JSON.stringify(templates) })}
+            contacts={(lifeData.contacts || []).map(c => ({ id: c.id, name: c.name, photoUrl: c.photoUrl, category: c.category }))}
+            onNavigateContact={(contactId) => goToContact(contactId)}
           />
         );
       case 'habits':
@@ -3031,6 +3463,7 @@ export default function App({
           <TaskManagerSection
             tasks={lifeData.tasks}
             goals={lifeData.goals}
+            areas={lifeData.areas || []}
             onToggleTask={handleToggleTask}
             onDeleteTask={handleDeleteTask}
             onUpdateTask={handleUpdateTask}
@@ -3039,42 +3472,82 @@ export default function App({
               goToTaskDetail(id);
             }}
             todayDate={TODAY_DATE}
+            onNavigate={(tab, id) => {
+              if (tab === 'goals' && id) goToGoal(id);
+              else if (tab === 'projects' && id) goToProject(id);
+              else goToTab(tab);
+            }}
           />
         );
-      case 'task-detail':
-        const selectedTask = lifeData.tasks.find(t => t.id === selectedTaskId) || (() => {
-          for (const g of lifeData.goals) {
-            for (const p of (g.projects || [])) {
-              const pt = (p.tasks || []).find(t => t.id === selectedTaskId);
-              if (pt) return pt;
-            }
-          }
-          return null;
-        })();
-        if (!selectedTask) {
-          goToTab('tasks');
-          return null;
+      case 'planner':
+      case 'inbox':
+        return <PlannerSection initialView="buckets" onNavigate={(tab, id) => { if (tab === 'goals' && id) goToGoal(id); else if (tab === 'projects' && id) goToProject(id); else if (tab === 'task-detail' && id) goToTaskDetail(id); else goToTab(tab); }} />;
+      case 'planner-timeline':
+        return <PlannerSection initialView="timeline" onNavigate={(tab, id) => { if (tab === 'goals' && id) goToGoal(id); else if (tab === 'projects' && id) goToProject(id); else if (tab === 'task-detail' && id) goToTaskDetail(id); else goToTab(tab); }} />;
+      case 'planner-week':
+        return <PlannerSection initialView="week" onNavigate={(tab, id) => { if (tab === 'goals' && id) goToGoal(id); else if (tab === 'projects' && id) goToProject(id); else if (tab === 'task-detail' && id) goToTaskDetail(id); else goToTab(tab); }} />;
+      case 'planner-month':
+        return <PlannerSection initialView="month" onNavigate={(tab, id) => { if (tab === 'goals' && id) goToGoal(id); else if (tab === 'projects' && id) goToProject(id); else if (tab === 'task-detail' && id) goToTaskDetail(id); else goToTab(tab); }} />;
+      case 'planner-board':
+        return <PlannerSection initialView="board" onNavigate={(tab, id) => { if (tab === 'goals' && id) goToGoal(id); else if (tab === 'projects' && id) goToProject(id); else if (tab === 'task-detail' && id) goToTaskDetail(id); else goToTab(tab); }} />;
+      case 'planner-areas':
+        return <PlannerSection initialView="areas" onNavigate={(tab, id) => { if (tab === 'goals' && id) goToGoal(id); else if (tab === 'projects' && id) goToProject(id); else if (tab === 'task-detail' && id) goToTaskDetail(id); else goToTab(tab); }} />;
+      case 'task-detail': {
+        // Full-page task detail — replaces the old side-drawer.
+        const matchedTask = selectedTaskId
+          ? lifeData.tasks.find(t => t.id === selectedTaskId)
+          : null;
+        if (!matchedTask) {
+          // No valid task selected — go back to tasks list
+          return (
+            <TaskManagerSection
+              tasks={lifeData.tasks}
+              goals={lifeData.goals}
+              areas={lifeData.areas || []}
+              onToggleTask={handleToggleTask}
+              onDeleteTask={handleDeleteTask}
+              onUpdateTask={handleUpdateTask}
+              onAddTask={handleAddTask}
+              onViewTaskDetails={(id) => goToTaskDetail(id)}
+              todayDate={TODAY_DATE}
+              onNavigate={(tab, id) => {
+                if (tab === 'goals' && id) goToGoal(id);
+                else if (tab === 'projects' && id) goToProject(id);
+                else goToTab(tab);
+              }}
+            />
+          );
         }
         return (
-          <TaskDetailView 
-            task={selectedTask}
-            allTasks={[...lifeData.tasks, ...lifeData.goals.flatMap(g => (g.projects || []).flatMap(p => p.tasks || []))]}
-            onUpdateTask={handleUpdateTask}
-            onDeleteTask={(id) => {
-              handleDeleteTask(id);
-              goToTab('tasks');
-            }}
-            onBack={() => goToTab('tasks')}
-            activeTimerTaskId={activeTimerTaskId}
-            activeTimerSeconds={activeTimerSeconds}
-            isTimerRunning={isTimerRunning}
-            onStartTimer={handleStartTimer}
-            onPauseTimer={handlePauseTimer}
-            onResumeTimer={handleResumeTimer}
-            onStopTimer={handleStopTimer}
-            onResetTimer={handleResetTimerForTask}
-          />
+          <React.Suspense fallback={<div className="text-center py-10 text-sm text-[#9D978B]">در حال بارگذاری...</div>}>
+            <TaskDetailPage
+              task={matchedTask}
+              allTasks={lifeData.tasks}
+              goals={lifeData.goals}
+              projects={lifeData.goals.flatMap(g => (g.projects || []).map(p => ({ id: p.id, title: p.title, linkedGoalId: p.linkedGoalId, areaId: p.areaId })))}
+              areas={lifeData.areas || []}
+              onUpdateTask={handleUpdateTask}
+              onAddTask={handleAddTask}
+              onDeleteTask={(id) => { handleDeleteTask(id); goToTab('tasks'); }}
+              onBack={() => goToTab('tasks')}
+              onNavigate={(tab, id) => {
+                if (tab === 'goals' && id) goToGoal(id);
+                else if (tab === 'projects' && id) goToProject(id);
+                else if (tab === 'contacts') goToContact(id);
+                else goToTab(tab);
+              }}
+              onViewTaskDetails={(id) => goToTaskDetail(id)}
+              activeTimerTaskId={activeTimerTaskId}
+              activeTimerSeconds={activeTimerSeconds}
+              isTimerRunning={isTimerRunning}
+              onStartTimer={handleStartTimer}
+              onPauseTimer={handlePauseTimer}
+              onStopTimer={handleStopTimer}
+              contacts={(lifeData.contacts || []).map(c => ({ id: c.id, name: c.name, photoUrl: c.photoUrl, category: c.category }))}
+            />
+          </React.Suspense>
         );
+      }
       case 'goals':
         if (selectedGoalId) {
           const matchedGoal = lifeData.goals.find(g => g.id === selectedGoalId);
@@ -3082,12 +3555,14 @@ export default function App({
             return (
               <GoalDetailView 
                 goal={matchedGoal}
+                goals={lifeData.goals}
                 globalHabits={lifeData.habits || []}
                 bankAccounts={lifeData.bankAccounts || []}
                 workoutLogs={lifeData.workoutLogs || []}
                 sleepLogs={lifeData.sleepLogs || []}
                 mindfulnessSessions={lifeData.mindfulnessSessions || []}
                 journalEntries={lifeData.journalEntries || []}
+                contacts={(lifeData.contacts || []).map(c => ({ id: c.id, name: c.name, photoUrl: c.photoUrl, category: c.category }))}
                 onBack={() => goToGoal(null)}
                 onUpdateGoal={handleUpdateGoal}
                 onAddProjectToGoal={handleAddProjectToGoal}
@@ -3105,6 +3580,14 @@ export default function App({
                 onLinkBankAccountToGoal={handleLinkBankAccountToGoal}
                 onLinkHabitToGoal={handleLinkHabitToGoal}
                 onAddBankAccount={handleAddBankAccount}
+                onSelectProject={goToProject}
+                onMoveProjectToGoal={handleMoveProjectToGoal}
+                onNavigateEntity={(tab, id) => {
+                  if (tab === 'goals' && id) goToGoal(id)
+                  else if (tab === 'projects' && id) goToProject(id)
+                  else if (tab === 'contacts') goToContact(id)
+                  else goToTab(tab)
+                }}
               />
             );
           }
@@ -3150,6 +3633,7 @@ export default function App({
             return (
               <ProjectDetailView 
                 project={matchedProject}
+                goals={lifeData.goals}
                 transactions={lifeData.transactions}
                 bankAccounts={lifeData.bankAccounts}
                 onAddTransaction={handleAddTransaction}
@@ -3161,6 +3645,15 @@ export default function App({
                 onDeleteTaskFromProject={handleDeleteTaskFromProject}
                 onToggleProjectCompletion={handleToggleProjectCompletion}
                 onUpdateProjectDetails={handleUpdateProjectDetails}
+                onNavigateTask={(taskId) => goToTaskDetail(taskId)}
+                onNavigateEntity={(tab, id) => {
+                  if (tab === 'goals' && id) goToGoal(id)
+                  else if (tab === 'projects' && id) goToProject(id)
+                  else if (tab === 'contacts') goToContact(id)
+                  else goToTab(tab)
+                }}
+                onMoveProjectToGoal={handleMoveProjectToGoal}
+                contacts={(lifeData.contacts || []).map(c => ({ id: c.id, name: c.name, photoUrl: c.photoUrl, category: c.category }))}
               />
             );
           }
@@ -3202,6 +3695,8 @@ export default function App({
             onDeleteDocument={handleDeleteDocument}
             bankAccounts={lifeData.bankAccounts || []}
             assets={lifeData.assets || []}
+            contacts={(lifeData.contacts || []).map(c => ({ id: c.id, name: c.name, photoUrl: c.photoUrl, category: c.category }))}
+            onNavigateContact={(contactId) => goToContact(contactId)}
           />
         );
       case 'occasions':
@@ -3213,6 +3708,8 @@ export default function App({
             onUpdateOccasion={handleUpdateOccasion}
             onAddTransaction={handleAddTransaction}
             bankAccounts={lifeData.bankAccounts || []}
+            contacts={(lifeData.contacts || []).map(c => ({ id: c.id, name: c.name, photoUrl: c.photoUrl, category: c.category }))}
+            onNavigateContact={(contactId) => goToContact(contactId)}
           />
         );
       case 'mindfulness':
@@ -3221,6 +3718,7 @@ export default function App({
             sessions={lifeData.mindfulnessSessions || []}
             onAddSession={handleAddMindfulnessSession}
             onDeleteSession={handleDeleteMindfulnessSession}
+            onUpdateSession={handleUpdateMindfulnessSession}
           />
         );
       case 'nutrition':
@@ -3274,6 +3772,7 @@ export default function App({
             sessions={lifeData.mindfulnessSessions || []}
             contacts={lifeData.contacts || []}
             todayDate={TODAY_DATE}
+            onNavigate={(section) => goToTab(section)}
           />
         );
       case 'contacts':
@@ -3284,17 +3783,91 @@ export default function App({
             onDeleteContact={handleDeleteContact}
             onUpdateContact={handleUpdateContact}
             onAddOccasion={handleAddOccasion}
+            onSelectContact={(_id: string) => { /* relation navigation handled inside ContactsSection */ }}
+            onNavigateEntity={(entityType: string, entityId: string) => {
+              if (entityType === 'goal') goToGoal(entityId);
+              else if (entityType === 'project') goToProject(entityId);
+              else if (entityType === 'task') goToTaskDetail(entityId);
+            }}
+            goals={lifeData.goals}
+            projects={lifeData.goals.flatMap(g => g.projects || [])}
+            tasks={lifeData.tasks}
+            occasions={lifeData.occasions}
             todayDate={TODAY_DATE}
+            initialContactId={selectedContactId}
           />
         );
 
+      case 'areas':
+        return (
+          <AreasSection
+            areas={lifeData.areas || []}
+            goals={lifeData.goals}
+            tasks={lifeData.tasks}
+            onSelectGoal={(id) => goToGoal(id)}
+            onSelectProject={(id) => goToProject(id)}
+            onSelectTask={(id) => goToTaskDetail(id)}
+            onUpdateAreas={(areas) => setLifeData(prev => ({ ...prev, areas }))}
+          />
+        );
+      case 'gallery':
+        return (
+          <React.Suspense fallback={<div className="flex items-center justify-center py-20"><div className="w-6 h-6 border-2 border-[#7C8363]/30 border-t-[#7C8363] rounded-full animate-spin" /></div>}>
+            <GalleryPage
+              onBack={() => goToTab('dashboard')}
+              onNavigate={(tab, id) => { if (tab === 'goals' && id) goToGoal(id); else if (tab === 'task-detail' && id) goToTaskDetail(id); else goToTab(tab); }}
+            />
+          </React.Suspense>
+        );
+      case 'notes':
+        return (
+          <NotesLayout
+            pages={notesStore.pages}
+            onAddPage={notesStore.addPage}
+            onUpdatePage={notesStore.updatePage}
+            onDeletePage={notesStore.deletePage}
+            onDuplicatePage={notesStore.duplicatePage}
+            onMovePage={notesStore.movePage}
+            onAddBlock={notesStore.addBlock}
+            onUpdateBlock={notesStore.updateBlock}
+            onDeleteBlock={notesStore.deleteBlock}
+            onMoveBlock={notesStore.moveBlock}
+            onReorderBlocks={notesStore.reorderBlocks}
+            savingState={notesStore.getSavingState()}
+          />
+        );
       case 'coach':
+        return (
+          <AiCoachSection 
+            lifeData={lifeData}
+            onImportData={handleImportData}
+          />
+        );
+      case 'profile':
         return (
           <ProfileSection 
             lifeData={lifeData}
             onUpdateProfile={handleUpdateProfile}
             onImportData={handleImportData}
           />
+        );
+      case 'challenges':
+        return (
+          <React.Suspense fallback={<div className="flex items-center justify-center py-20"><div className="w-6 h-6 border-2 border-[#4A6741] border-t-transparent rounded-full animate-spin" /></div>}>
+            <DailyChallengesDisplay />
+          </React.Suspense>
+        );
+      case 'notifications':
+        return (
+          <React.Suspense fallback={<div className="flex items-center justify-center py-20"><div className="w-6 h-6 border-2 border-[#4A6741] border-t-transparent rounded-full animate-spin" /></div>}>
+            <NotificationCenter />
+          </React.Suspense>
+        );
+      case 'moderation':
+        return (
+          <React.Suspense fallback={<div className="flex items-center justify-center py-20"><div className="w-6 h-6 border-2 border-[#4A6741] border-t-transparent rounded-full animate-spin" /></div>}>
+            <ModerationPanel />
+          </React.Suspense>
         );
       default:
         return (
@@ -3334,7 +3907,7 @@ export default function App({
             {/* Quick Profile / Score */}
             <button 
               onClick={() => {
-                goToTab('coach');
+                goToTab('profile');
               }}
               className="p-4 mx-4 my-5 rounded-2xl bg-[#3D4133] hover:bg-[#4E5342] border border-white/5 flex items-center gap-3 shrink-0 cursor-pointer transition-all hover:scale-[1.02] text-right w-[calc(100%-2rem)]"
             >
@@ -3342,8 +3915,15 @@ export default function App({
                 👨‍💻
               </div>
               <div className="text-right flex-1">
-                <h3 className="font-extrabold text-xs text-white">سلام، پارس عزیز</h3>
-                <span className="text-[9px] text-[#DDE2D5]/70 block font-semibold mt-0.5">توازن امروز: ۸۴٪ • فرکانس عالی</span>
+                <h3 className="font-extrabold text-xs text-white">سلام، {lifeData.profile?.name || 'کاربر'} عزیز</h3>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <span className="text-[9px] text-[#DDE2D5]/70 font-semibold">توازن زندگی • هم‌بافت</span>
+                  {(lifeData as any).gamification?.totalPoints > 0 && (
+                    <span className="text-[8px] bg-[#4A6741]/60 text-[#E8ECE0] px-1.5 py-0.5 rounded-md font-black">
+                      ⭐ {(lifeData as any).gamification?.level || 1} | {(lifeData as any).gamification?.totalPoints || 0}
+                    </span>
+                  )}
+                </div>
               </div>
             </button>
 
@@ -3400,25 +3980,38 @@ export default function App({
               <div>
                 <h2 className="text-base font-black text-[#2D3025] dark:text-[#E8ECE0] font-serif-elegant flex items-center gap-2">
                   <span>{
-                    activeTab === 'dashboard' || activeTab === 'home' ? 'داشبورد جامع همبافت' :
+                    activeTab === 'dashboard' || activeTab === 'home' ? 'داشبورد' :
                     activeTab === 'journal' ? 'دفترچه یادداشت‌ها' :
-                    activeTab === 'tasks' ? 'مدیریت تسک‌ها' :
-                    activeTab === 'mood' ? 'ارزیابی احساسات و مود' :
-                    activeTab === 'calendar' ? 'تقویم زندگی و زمان‌بندی توازن' :
+                    activeTab === 'tasks' ? 'تسک‌ها' :
+                    activeTab === 'mood' ? 'احساسات' :
+                    activeTab === 'calendar' ? 'تقویم' :
                     activeTab === 'occasions' ? 'تقویم مناسبت‌ها و یادآورهای مهم' :
                     activeTab === 'sleep' ? 'تنظیم بیوریتم بدنی و ردیاب علمی خواب' :
                     activeTab === 'mindfulness' ? 'تمرین ذهن‌آگاهی، مدیتیشن و تنفس' :
-                    activeTab === 'finance' ? 'امور مالی، اشتراک‌ها و هزینه‌ها' :
+                    activeTab === 'finance' ? 'امور مالی' :
                     activeTab === 'habits' ? 'ردیاب عادت‌ها و رفتارهای روزانه' :
                     activeTab === 'goals' ? 'اهداف و میانی‌های کلیدی زندگی' :
                     activeTab === 'projects' ? 'مرکز مدیریت و پیشبرد پروژه‌ها' :
-                    activeTab === 'documents' ? 'مدیریت اسناد، بیمه‌ها و مدارک' :
+                    activeTab === 'areas' ? 'حوزه‌ها' :
+                    activeTab === 'notes' ? 'یادداشت‌ها' :
+                    activeTab === 'documents' ? 'اسناد' :
                     activeTab === 'nutrition' ? 'تغذیه، رژیم غذایی و ردیاب بدنی' :
                     activeTab === 'fitness' ? 'باشگاه بدنسازی، تمرینات و هوازی' :
-                    activeTab === 'coach' ? 'کوچ هوشمند همبافت (Gemini AI)' : 'همبافت'
+                    activeTab === 'coach' ? 'کوچ هوشمند همبافت (Gemini AI)' :
+                    activeTab === 'planner' || activeTab === 'inbox' ? 'برنامه‌ریز شخصی' :
+                    activeTab === 'planner-timeline' ? 'برنامه‌ریز — تایم‌لاین' :
+                    activeTab === 'planner-week' ? 'برنامه‌ریز — هفتگی' :
+                    activeTab === 'planner-month' ? 'برنامه‌ریز — ماهانه' :
+                    activeTab === 'planner-board' ? 'برنامه‌ریز — بورد' :
+                    activeTab === 'planner-areas' ? 'برنامه‌ریز — حوزه‌ها' :
+                    activeTab === 'balance_report' ? 'گزارش توازن زندگی' :
+                    activeTab === 'challenges' ? 'چالش‌های روزانه' :
+                    activeTab === 'notifications' ? 'اعلان‌ها' :
+                    activeTab === 'moderation' ? 'ایمنی جامعه' :
+                    activeTab === 'profile' ? 'تنظیمات' : 'همبافت'
                   }</span>
                 </h2>
-                <span className="text-[10px] text-[#8D7F72] dark:text-[#9D978B] font-semibold mt-0.5 block">شنبه، ۱۴ تیر ۱۴۰۵ • زمان‌بندی هماهنگ با بیوریتم مغز شما</span>
+                <span className="text-[10px] text-[#8D7F72] dark:text-[#9D978B] font-semibold mt-0.5 block">{(() => { try { const d = new Date(); const days = ["یکشنبه","دوشنبه","سه‌شنبه","چهارشنبه","پنجشنبه","جمعه","شنبه"]; return days[d.getDay()] + " " + d.toLocaleDateString("fa-IR"); } catch { return ""; } })()} • زمان‌بندی هماهنگ با بیوریتم مغز شما</span>
               </div>
 
               {/* Mini Widget Row */}
@@ -3471,7 +4064,50 @@ export default function App({
                 {/* AI Coach Quick Tip */}
                 <div className="hidden xl:flex bg-[#FDFBF7] dark:bg-[#1B1D16] border border-[#E6DFD3] dark:border-[#3D4133]/40 px-4 py-2 rounded-xl items-center gap-2.5 max-w-sm text-[10px] text-[#8D7F72] dark:text-[#9D978B] font-semibold select-none transition-colors">
                   <span className="text-xs">💡</span>
-                  <span>کوچ هوشمند: با افزودن زیردسته‌های جدید، مدیریت هزینه‌ها دقیق‌تر می‌شود!</span>
+                  <span>{(() => {
+                    const tips: Record<string, string[]> = {
+                      home: [
+                        'شروع هر روز با یک اولویت کلیدی، بازده‌ات رو چند برابر می‌کنه!',
+                        'یک تسک کوچک انجام‌شده، بهتر از ده تسک بزرگ ناتمامه.',
+                        'امروزت رو با یک عادت مثبت شروع کن — بقیه‌اش خودش میاد.',
+                      ],
+                      planner: [
+                        'برنامه‌ریزی ۵ دقیقه‌ای صبح، تا ۲ ساعت از وقتت رو ذخیره می‌کنه.',
+                        'اول سخت‌ترین کار رو انجام بده — بقیه‌اش راحته!',
+                        'هر بلوک زمانی رو فقط برای یک کار اختصاص بده.',
+                      ],
+                      tasks: [
+                        'تسک‌های بزرگ رو به زیرتسک‌های کوچک‌تر بشکن — شروعش راحت‌تر می‌شه.',
+                        'اولویت‌بندی ذهنت رو آزاد می‌کنه — فقط انجام بده!',
+                        'انجام دادن بهتر از کامل کردنِ بی‌نقصیه.',
+                      ],
+                      habits: [
+                        'عادت‌های کوچک و پیوسته، بزرگ‌ترین تغییرات رو می‌سازن.',
+                        'هر روز یک درصد بهتر، بعد از یک سال ۳۷ برابر می‌شی!',
+                        'عادت‌ها رو به هم زنجیر کن — عادت جدید رو بعد از یه عادت قدیمی بذار.',
+                      ],
+                      goals: [
+                        'هدف‌هات رو مشخص بنویس — احتمال رسیدن بهشون ۴۲٪ بیشتر می‌شه!',
+                        'هر هدف بزرگ رو به نقاط عطف خرد کن — مسیر مشخص‌تر می‌شه.',
+                        'پیشرفت رو جشن بگیر، نه فقط نتیجه نهایی رو.',
+                      ],
+                      finance: [
+                        'هزینه‌هات رو ثبت کن — آگاهی اولین قدم مدیریت مالی‌ست.',
+                        'هر ماه اول پس‌اندازت رو جدا کن — بقیه‌اش خرج کن.',
+                        'بودجه‌بندی محدودیت نیست؛ آزادیِ انتخابه.',
+                      ],
+                      default: [
+                        'قدم‌های کوچک و پیوسته، نتایج بزرگ می‌سازن!',
+                        'روی پیشرفت تمرکز کن، نه کمال.',
+                        'هر روز فرصت جدیدیه — ازش استفاده کن.',
+                      ],
+                    };
+                    const key = tips[activeTab] ? activeTab : 'default';
+                    const pool = tips[key];
+                    // Stable pick based on day of year so tip stays consistent within a day
+                    const dayIdx = Math.floor(Date.now() / 86400000) % pool.length;
+                    return `کوچ هوشمند: ${pool[dayIdx]}`;
+                  })()}</span>
                 </div>
               </div>
             </header>
@@ -3720,7 +4356,7 @@ export default function App({
                     className="flex items-center justify-between bg-[#FDFBF7] hover:bg-white p-3 rounded-2xl cursor-pointer transition-all shadow-xs text-right"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-amber-500 text-white flex items-center justify-center shadow-xs">
+                      <div className="w-8 h-8 rounded-full bg-[#9B6B61] text-white flex items-center justify-center shadow-xs">
                         <Wallet className="w-4 h-4" />
                       </div>
                       <span className="text-[11px] font-black text-[#2D3025]">ثبت هزینه یا درآمد جدید</span>
@@ -4268,88 +4904,20 @@ export default function App({
 
       </div>
 
-      {/* Global Floating Timer Widget */}
+      {/* Global Floating Timer Widget — mini pill + expandable */}
       <AnimatePresence>
         {activeTimerTaskId && (
-          (() => {
-            const activeTaskObj = lifeData.tasks.find(t => t.id === activeTimerTaskId);
-            const activeTitle = activeTaskObj?.title || 'کار جاری';
-            return (
-              <motion.div
-                initial={{ opacity: 0, y: 50, scale: 0.95 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 50, scale: 0.95 }}
-                transition={{ type: 'spring', damping: 20, stiffness: 200 }}
-                className="fixed bottom-[88px] md:bottom-6 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] md:w-[460px] bg-[#2D3025] text-[#D6CFC3] px-4 py-3.5 rounded-[24px] shadow-2xl border border-white/10 flex items-center justify-between gap-3"
-              >
-                {/* Left: Indicator + Title + Live Clock */}
-                <div className="flex items-center gap-2.5 min-w-0 flex-1" dir="rtl">
-                  <div className="relative shrink-0 flex items-center justify-center">
-                    <span className="w-2.5 h-2.5 bg-rose-500 rounded-full animate-ping absolute" />
-                    <span className="w-2.5 h-2.5 bg-rose-500 rounded-full relative" />
-                  </div>
-                  
-                  <div className="text-right min-w-0 flex-1">
-                    <span className="text-[8px] text-[#DDE2D5]/50 block font-bold leading-none mb-1">تسک در حال ردیابی</span>
-                    <h4 className="text-[11px] font-black text-white truncate max-w-[120px] md:max-w-[180px] leading-tight">
-                      {activeTitle}
-                    </h4>
-                  </div>
-
-                  <div className="h-6 w-px bg-white/10 shrink-0 mx-1" />
-
-                  {/* Clock Display */}
-                  <div className="bg-white/5 border border-white/5 px-2.5 py-1 rounded-xl text-xs font-mono font-bold text-[#E26645] tracking-widest shrink-0">
-                    {formatTimeDigital(activeTimerSeconds)}
-                  </div>
-                </div>
-
-                {/* Right: Actions */}
-                <div className="flex items-center gap-1.5 shrink-0">
-                  {/* Play / Pause Toggle */}
-                  {isTimerRunning ? (
-                    <button
-                      onClick={handlePauseTimer}
-                      className="p-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 rounded-xl transition-all cursor-pointer active:scale-90"
-                      title="توقف موقت"
-                    >
-                      <Pause className="w-3.5 h-3.5 fill-current" />
-                    </button>
-                  ) : (
-                    <button
-                      onClick={handleResumeTimer}
-                      className="p-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 rounded-xl transition-all cursor-pointer active:scale-90"
-                      title="ادامه ردیابی"
-                    >
-                      <Play className="w-3.5 h-3.5 fill-current" />
-                    </button>
-                  )}
-
-                  {/* Stop / Complete Session */}
-                  <button
-                    onClick={handleStopTimer}
-                    className="p-2 bg-[#E26645]/20 hover:bg-[#E26645]/30 text-[#E26645] rounded-xl transition-all cursor-pointer active:scale-90"
-                    title="ثبت زمان و پایان"
-                  >
-                    <Square className="w-3.5 h-3.5 fill-current" />
-                  </button>
-
-                  {/* Reset Timer */}
-                  <button
-                    onClick={() => {
-                      if (confirm('آیا می‌خواهید زمان ردیابی شده در این جلسه را لغو کنید؟')) {
-                        handleResetTimerForTask(activeTimerTaskId);
-                      }
-                    }}
-                    className="p-2 bg-white/5 hover:bg-white/10 text-white/50 hover:text-white/80 rounded-xl transition-all cursor-pointer active:scale-90"
-                    title="لغو"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </motion.div>
-            );
-          })()
+          <FloatingTimerWidget
+            activeTimerTaskId={activeTimerTaskId}
+            activeTimerSeconds={activeTimerSeconds}
+            isTimerRunning={isTimerRunning}
+            tasks={lifeData.tasks}
+            onPause={handlePauseTimer}
+            onResume={handleResumeTimer}
+            onStop={handleStopTimer}
+            onReset={handleResetTimerForTask}
+            onGoToTask={goToTaskDetail}
+          />
         )}
       </AnimatePresence>
 
@@ -4376,7 +4944,7 @@ export default function App({
             >
               <div className="flex justify-between items-center border-b border-[#E6DFD3]/50 pb-3">
                 <div className="flex items-center gap-2">
-                  <span className="p-2 bg-amber-50 rounded-xl text-amber-600">
+                  <span className="p-2 bg-[#F9F1D8] rounded-xl text-[#9B6B61]">
                     💰
                   </span>
                   <div>
@@ -4552,5 +5120,162 @@ export default function App({
       </AnimatePresence>
 
     </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+// FloatingTimerWidget — Mini pill that expands to full controls
+// ══════════════════════════════════════════════════════════════
+function FloatingTimerWidget({
+  activeTimerTaskId,
+  activeTimerSeconds,
+  isTimerRunning,
+  tasks,
+  onPause,
+  onResume,
+  onStop,
+  onReset,
+  onGoToTask,
+}: {
+  activeTimerTaskId: string;
+  activeTimerSeconds: number;
+  isTimerRunning: boolean;
+  tasks: any[];
+  onPause: () => void;
+  onResume: () => void;
+  onStop: () => void;
+  onReset: (taskId: string) => void;
+  onGoToTask: (taskId: string) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const activeTask = tasks.find(t => t.id === activeTimerTaskId);
+  const activeTitle = activeTask?.title || 'کار جاری';
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 50 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: 50 }}
+      transition={{ type: 'spring', damping: 22, stiffness: 200 }}
+      className="fixed bottom-[88px] md:bottom-6 left-1/2 -translate-x-1/2 z-50"
+      dir="rtl"
+    >
+      {/* ── Mini pill (collapsed) ── */}
+      <AnimatePresence mode="wait">
+        {!expanded ? (
+          <motion.button
+            key="mini"
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            transition={{ duration: 0.15 }}
+            onClick={() => setExpanded(true)}
+            className="flex items-center gap-2 bg-[#2D3025] text-white pl-3 pr-2.5 py-2 rounded-full shadow-2xl border border-white/10 cursor-pointer hover:shadow-[0_0_20px_rgba(226,102,69,0.3)] transition-shadow active:scale-95"
+          >
+            {/* Pulse dot */}
+            <span className="relative flex items-center justify-center shrink-0">
+              <span className={`w-2 h-2 rounded-full absolute animate-ping ${isTimerRunning ? 'bg-rose-500' : 'bg-amber-400'}`} />
+              <span className={`w-2 h-2 rounded-full relative ${isTimerRunning ? 'bg-rose-500' : 'bg-amber-400'}`} />
+            </span>
+            {/* Time */}
+            <span className="text-[11px] font-mono font-black tracking-wide text-[#E26645]">
+              {formatTimeDigital(activeTimerSeconds)}
+            </span>
+            {/* Title — truncated */}
+            <span className="text-[9px] font-bold text-white/60 max-w-[80px] truncate hidden sm:inline">
+              {activeTitle}
+            </span>
+            {/* Play/Pause quick toggle */}
+            {isTimerRunning ? (
+              <span onClick={(e) => { e.stopPropagation(); onPause(); }} className="p-1 rounded-lg hover:bg-white/10 cursor-pointer transition-colors">
+                <Pause className="w-3 h-3 text-white/70" />
+              </span>
+            ) : (
+              <span onClick={(e) => { e.stopPropagation(); onResume(); }} className="p-1 rounded-lg hover:bg-emerald-500/20 cursor-pointer transition-colors">
+                <Play className="w-3 h-3 text-emerald-400 fill-current" />
+              </span>
+            )}
+          </motion.button>
+        ) : (
+          /* ── Expanded panel ── */
+          <motion.div
+            key="expanded"
+            initial={{ opacity: 0, scale: 0.9, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9, y: 10 }}
+            transition={{ type: 'spring', damping: 22, stiffness: 250 }}
+            className="w-[calc(100vw-2rem)] md:w-[420px] bg-[#2D3025] text-[#D6CFC3] rounded-2xl shadow-2xl border border-white/10 overflow-hidden"
+          >
+            {/* Header — clickable to go to task detail */}
+            <button
+              onClick={() => { onGoToTask(activeTimerTaskId); setExpanded(false); }}
+              className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors cursor-pointer text-right"
+            >
+              <span className="relative flex items-center justify-center shrink-0">
+                <span className={`w-2.5 h-2.5 rounded-full absolute animate-ping ${isTimerRunning ? 'bg-rose-500' : 'bg-amber-400'}`} />
+                <span className={`w-2.5 h-2.5 rounded-full relative ${isTimerRunning ? 'bg-rose-500' : 'bg-amber-400'}`} />
+              </span>
+              <div className="flex-1 min-w-0">
+                <span className="text-[8px] text-[#DDE2D5]/40 block font-bold leading-none mb-0.5">تسک در حال ردیابی — کلیک برای جزئیات</span>
+                <h4 className="text-[12px] font-black text-white truncate leading-tight">{activeTitle}</h4>
+              </div>
+              {/* Clock */}
+              <div className="bg-white/5 border border-white/5 px-3 py-1.5 rounded-xl text-sm font-mono font-black text-[#E26645] tracking-widest shrink-0">
+                {formatTimeDigital(activeTimerSeconds)}
+              </div>
+              {/* Collapse button */}
+              <span
+                onClick={(e) => { e.stopPropagation(); setExpanded(false); }}
+                className="p-1.5 rounded-lg hover:bg-white/10 cursor-pointer transition-colors shrink-0"
+              >
+                <ChevronDown className="w-4 h-4 text-white/40 rotate-180" />
+              </span>
+            </button>
+
+            {/* Controls bar */}
+            <div className="flex items-center gap-2 px-4 pb-3 pt-0.5">
+              {/* Play / Pause */}
+              {isTimerRunning ? (
+                <button
+                  onClick={onPause}
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-[#9B6B61]/20 hover:bg-[#9B6B61]/30 text-[#C59B93] rounded-xl transition-all cursor-pointer active:scale-95"
+                >
+                  <Pause className="w-3.5 h-3.5 fill-current" />
+                  <span className="text-[10px] font-bold">توقف موقت</span>
+                </button>
+              ) : (
+                <button
+                  onClick={onResume}
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 rounded-xl transition-all cursor-pointer active:scale-95"
+                >
+                  <Play className="w-3.5 h-3.5 fill-current" />
+                  <span className="text-[10px] font-bold">ادامه</span>
+                </button>
+              )}
+              {/* Stop */}
+              <button
+                onClick={onStop}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-[#E26645]/20 hover:bg-[#E26645]/30 text-[#E26645] rounded-xl transition-all cursor-pointer active:scale-95"
+              >
+                <Square className="w-3.5 h-3.5 fill-current" />
+                <span className="text-[10px] font-bold">ثبت و پایان</span>
+              </button>
+              {/* Cancel */}
+              <button
+                onClick={() => {
+                  if (confirm('آیا می‌خواهید زمان ردیابی شده در این جلسه را لغو کنید؟')) {
+                    onReset(activeTimerTaskId);
+                  }
+                }}
+                className="p-2 bg-white/5 hover:bg-white/10 text-white/40 hover:text-white/70 rounded-xl transition-all cursor-pointer active:scale-90 shrink-0"
+                title="لغو جلسه"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
   );
 }

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import DatePicker, { DateObject } from 'react-multi-date-picker';
 import persian from 'react-date-object/calendars/persian';
 import persian_fa from 'react-date-object/locales/persian_fa';
@@ -12,6 +12,8 @@ interface PersianDatePickerProps {
   placeholder?: string;
   className?: string;
   minDate?: string;
+  /** If true, the calendar popup opens automatically on mount */
+  autoOpen?: boolean;
 }
 
 export default function PersianDatePicker({
@@ -20,7 +22,21 @@ export default function PersianDatePicker({
   placeholder = 'انتخاب تاریخ...',
   className = '',
   minDate,
+  autoOpen = false,
 }: PersianDatePickerProps) {
+
+  const pickerRef = useRef<any>(null);
+
+  // Auto-open the calendar when mounted (for MetaDateRow inline usage)
+  useEffect(() => {
+    if (autoOpen && pickerRef.current) {
+      // Small delay to ensure the picker is mounted
+      const timer = setTimeout(() => {
+        try { pickerRef.current?.openCalendar?.(); } catch {}
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [autoOpen]);
 
   // Convert Gregorian string to DateObject for the picker
   const dateValue = value
@@ -55,6 +71,7 @@ export default function PersianDatePicker({
 
   return (
     <DatePicker
+      ref={pickerRef}
       value={dateValue}
       onChange={handleChange}
       calendar={persian}

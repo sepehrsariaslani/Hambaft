@@ -1,0 +1,39 @@
+{
+  "actions": [],
+  "autoname": "format:CL-{#####}",
+  "creation": "2025-01-01 00:00:00",
+  "doctype": "DocType",
+  "engine": "InnoDB",
+  "field_order": [
+    "user", "contact", "entity_type", "entity",
+    "column_break_1", "role", "context_note", "status", "sort_order"
+  ],
+  "fields": [
+    {"fieldname": "user", "fieldtype": "Link", "options": "User", "required": 1, "in_list_view": 1, "in_standard_filter": 1},
+    {"fieldname": "contact", "fieldtype": "Link", "options": "Hambaft Contact", "required": 1, "in_list_view": 1, "in_standard_filter": 1, "label": "Contact"},
+    {"fieldname": "entity_type", "fieldtype": "Select", "options": "\ngoal\nproject\ntask\noccasion\ndocument\nfinance", "required": 1, "in_list_view": 1, "in_standard_filter": 1, "label": "Entity Type"},
+    {"fieldname": "entity", "fieldtype": "Dynamic Link", "options": "entity_type", "required": 1, "in_list_view": 1, "in_standard_filter": 1, "label": "Entity"},
+    {"fieldname": "column_break_1", "fieldtype": "Column Break"},
+    {"fieldname": "role", "fieldtype": "Select", "options": "\nowner\ncollaborator\nmentor\naccountability\nstakeholder\nfamily\nvendor\nclient\nintroduced_by\nrelated_person", "required": 1, "in_list_view": 1, "label": "Role", "default": "related_person"},
+    {"fieldname": "context_note", "fieldtype": "Small Text", "label": "Context Note"},
+    {"fieldname": "status", "fieldtype": "Select", "options": "active\narchived", "required": 1, "in_standard_filter": 1, "label": "Status", "default": "active"},
+    {"fieldname": "sort_order", "fieldtype": "Int", "default": "0", "label": "Sort Order"}
+  ],
+  "index_web_pages_for_search": 0,
+  "is_submittable": 0,
+  "issingle": 0,
+  "istable": 0,
+  "links": [],
+  "modified": "2025-01-01 00:00:00",
+  "module": "Hambaft",
+  "name": "Hambaft Contact Link",
+  "naming_rule": "Expression (old style)",
+  "owner": "Administrator",
+  "permissions": [
+    {"create": 1, "delete": 1, "email": 0, "export": 0, "print": 0, "read": 1, "report": 0, "role": "All", "share": 0, "write": 1}
+  ],
+  "sort_field": "sort_order",
+  "sort_order": "ASC",
+  "states": [],
+  "title_field": "role"
+}

@@ -9,7 +9,7 @@ describe('PWA registration', () => {
 
   beforeEach(() => {
     Object.defineProperty(import.meta, 'env', {
-      value: { ...import.meta.env, DEV: false, BASE_URL: '/assets/hambaft/frontend/' },
+      value: { ...import.meta.env, DEV: false, BASE_URL: '/assets/hambaft/' },
       configurable: true,
     })
   })
@@ -28,7 +28,7 @@ describe('PWA registration', () => {
   })
 
   it('builds PWA asset urls relative to the Vite base path', () => {
-    expect(resolvePwaAssetUrl('sw.js', '/assets/hambaft/frontend/')).toBe('/assets/hambaft/frontend/sw.js')
+    expect(resolvePwaAssetUrl('sw.js', '/assets/hambaft/')).toBe('/assets/hambaft/sw.js')
   })
 
   it('rejects service worker registration when the script probe returns html', async () => {
@@ -41,7 +41,7 @@ describe('PWA registration', () => {
 
     global.fetch = fetchMock
 
-    await expect(probeServiceWorkerScript('/assets/hambaft/frontend/sw.js')).resolves.toBe(false)
-    expect(fetchMock).toHaveBeenCalledWith('/assets/hambaft/frontend/sw.js', expect.any(Object))
+    await expect(probeServiceWorkerScript('/assets/hambaft/sw.js')).resolves.toBe(false)
+    expect(fetchMock).toHaveBeenCalledWith('/assets/hambaft/sw.js', expect.any(Object))
   })
 })

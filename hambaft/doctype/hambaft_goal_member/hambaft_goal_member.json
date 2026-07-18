@@ -1,0 +1,85 @@
+{
+  "actions": [],
+  "autoname": "format:GM-{#####}",
+  "creation": "2026-07-18 12:00:00.000000",
+  "doctype": "DocType",
+  "engine": "InnoDB",
+  "field_order": [
+    "goal",
+    "user",
+    "column_break_1",
+    "role",
+    "status",
+    "permissions_json",
+    "joined_at"
+  ],
+  "fields": [
+    {
+      "fieldname": "goal",
+      "fieldtype": "Link",
+      "label": "هدف",
+      "options": "Hambaft Goal",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "user",
+      "fieldtype": "Link",
+      "label": "کاربر",
+      "options": "User",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "column_break_1",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "role",
+      "fieldtype": "Select",
+      "label": "نقش",
+      "options": "\nمالک\nپارتنر\nعضو",
+      "default": "پارتنر",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "status",
+      "fieldtype": "Select",
+      "label": "وضعیت",
+      "options": "\nفعال\nدر_انتظار\nحذف‌شده",
+      "default": "فعال",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "permissions_json",
+      "fieldtype": "JSON",
+      "label": "مجوزها"
+    },
+    {
+      "fieldname": "joined_at",
+      "fieldtype": "Date",
+      "label": "تاریخ عضویت"
+    }
+  ],
+  "index_web_pages_for_search": 0,
+  "is_single": 0,
+  "istable": 0,
+  "links": [],
+  "modified": "2026-07-18 12:00:00.000000",
+  "modified_by": "Administrator",
+  "module": "Hambaft",
+  "name": "Hambaft Goal Member",
+  "naming_rule": "Expression (old style)",
+  "owner": "Administrator",
+  "permissions": [
+    {"create": 1, "delete": 1, "email": 0, "export": 0, "print": 0, "read": 1, "report": 0, "role": "All", "share": 0, "write": 1}
+  ],
+  "sort_field": "creation",
+  "sort_order": "DESC",
+  "states": [],
+  "title_field": ""
+}

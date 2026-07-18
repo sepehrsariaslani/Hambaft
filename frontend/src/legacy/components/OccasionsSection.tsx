@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Occasion, OccasionType, BankAccount, Transaction } from '../types';
+import LinkedContacts from './LinkedContacts';
 import {
   Cake, Heart, CalendarDays, Bell, Star, Plus, Trash2, Gift, Clock, CreditCard
 } from 'lucide-react';
@@ -14,6 +15,8 @@ interface OccasionsSectionProps {
   onUpdateOccasion?: (updated: Occasion) => void;
   onAddTransaction?: (newT: Omit<Transaction, 'id'>) => void;
   bankAccounts?: BankAccount[];
+  contacts?: { id: string; name: string; photoUrl?: string; category?: string }[];
+  onNavigateContact?: (contactId: string) => void;
 }
 
 const TODAY = '2026-07-04';
@@ -22,7 +25,7 @@ const OCCASION_TYPES: Record<OccasionType, { label: string; icon: React.ReactNod
   birthday:    { label: 'تولد',       icon: <Cake className="w-4 h-4" />,        color: '#E26645', bg: 'bg-orange-50 border-orange-200' },
   anniversary: { label: 'سالگرد',     icon: <Heart className="w-4 h-4" />,       color: '#9B6B61', bg: 'bg-rose-50 border-rose-200' },
   event:       { label: 'رویداد',     icon: <CalendarDays className="w-4 h-4" />, color: '#7C8363', bg: 'bg-[#E8ECE0] border-[#DDE2D5]' },
-  deadline:    { label: 'ددلاین',     icon: <Clock className="w-4 h-4" />,       color: '#5A5A40', bg: 'bg-amber-50 border-amber-200' },
+  deadline:    { label: 'ددلاین',     icon: <Clock className="w-4 h-4" />,       color: '#5A5A40', bg: 'bg-[#F9F1D8] border-[#EBE3C8]' },
   reminder:    { label: 'یادآور',     icon: <Bell className="w-4 h-4" />,        color: '#8D7F72', bg: 'bg-[#F4E9E4] border-[#EDDDD7]' },
 };
 
@@ -61,7 +64,9 @@ export default function OccasionsSection({
   onDeleteOccasion,
   onUpdateOccasion,
   onAddTransaction,
-  bankAccounts = []
+  bankAccounts = [],
+  contacts = [],
+  onNavigateContact,
 }: OccasionsSectionProps) {
   const [showForm, setShowForm] = useState(false);
   const [filterType, setFilterType] = useState<OccasionType | 'all'>('all');
@@ -283,7 +288,7 @@ export default function OccasionsSection({
                   initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: -20 }}
                   className={`bg-[#FDFBF7] rounded-2xl border p-4 flex items-start gap-4 transition-all hover:shadow-sm ${
                     isToday ? 'border-[#E26645] bg-orange-50/30' :
-                    isSoon ? 'border-amber-300 bg-amber-50/30' :
+                    isSoon ? 'border-[#EBE3C8] bg-[#F9F1D8]/30' :
                     isPast ? 'border-[#E6DFD3] opacity-60' : 'border-[#E6DFD3]'
                   }`}>
                   {/* Date block */}
@@ -316,7 +321,7 @@ export default function OccasionsSection({
                       <div className="flex items-center gap-2">
                         <div className={`text-[10px] font-black px-2.5 py-1 rounded-full ${
                           isToday ? 'bg-[#E26645] text-white' :
-                          isSoon ? 'bg-amber-100 text-amber-700' :
+                          isSoon ? 'bg-[#F9F1D8] text-[#5A5A40]' :
                           isPast ? 'bg-[#E6DFD3] text-[#8D7F72]' : 'bg-[#E8ECE0] text-[#7C8363]'
                         }`}>
                           {isToday ? 'امروز' : isPast ? `${Math.abs(o.daysUntil)} روز پیش` : `${o.daysUntil} روز دیگر`}
@@ -337,6 +342,13 @@ export default function OccasionsSection({
 
                     {o.notes && (
                       <p className="text-[10px] text-[#8D7F72] italic mt-1">{o.notes}</p>
+                    )}
+
+                    {/* Linked Contacts */}
+                    {o.id && (
+                      <div className="mt-2 pt-2 border-t border-[#E6DFD3]/40">
+                        <LinkedContacts entityType="occasion" entityId={o.id} contacts={contacts} onNavigateContact={onNavigateContact} />
+                      </div>
                     )}
 
                     {/* Budget & Spent progress indicator */}

@@ -128,9 +128,9 @@ export default function SleepSection({
     if (val > 15 && val < 50) return { text: 'مثبت و متعادل', color: 'text-teal-600 bg-teal-50 dark:bg-teal-950/30' };
     if (val <= -50) return { 
       text: type === 'p' ? 'خستگی عضلانی (نیاز به استراحت)' : type === 'e' ? 'حساسیت عاطفی بالا (خودمراقبتی)' : 'دوره تجدید قوای ذهنی (کارهای روتین)', 
-      color: 'text-amber-600 bg-amber-50 dark:bg-amber-950/30' 
+      color: 'text-[#9B6B61] bg-[#F9F1D8] dark:bg-[#201D13]' 
     };
-    return { text: 'رو به کاهش/تخلیه انرژی', color: 'text-gray-500 bg-gray-50 dark:bg-gray-800/30' };
+    return { text: 'رو به کاهش/تخلیه انرژی', color: 'text-[#8D7F72] bg-[#F9F6EE] dark:bg-[#3D4133]/30' };
   };
 
   const generateBiorhythmData = () => {
@@ -173,7 +173,7 @@ export default function SleepSection({
         hours: c * 1.5,
         time: `${hStr}:${mStr}`,
         rating: c >= 5 ? 'خواب کامل و ایده‌آل' : 'خواب ناکافی/ سبک',
-        color: c >= 5 ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/20' : 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/20'
+        color: c >= 5 ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/20' : 'text-[#9B6B61] dark:text-[#C59B93] bg-[#F9F1D8] dark:bg-[#201D13]'
       });
     }
     return options;
@@ -193,7 +193,7 @@ export default function SleepSection({
         hours: c * 1.5,
         time: `${hStr}:${mStr}`,
         rating: c >= 5 ? 'سرحال و پرانرژی (پیشنهادی)' : 'خواب کوتاه/چرخه موقت',
-        color: c >= 5 ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/20' : 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/20'
+        color: c >= 5 ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/20' : 'text-[#9B6B61] dark:text-[#C59B93] bg-[#F9F1D8] dark:bg-[#201D13]'
       });
     }
     return options;
@@ -347,7 +347,7 @@ export default function SleepSection({
       time: `${getRecTimeStr(0.5)}`,
       description: 'با تابش نور خورشید به چشم‌ها، مغز فرمان توقف هورمون خواب ملاتونین را صادر می‌کند تا دمای بدن افزایش یابد.',
       advice: 'قرارگیری در معرض نور خورشید بلافاصله پس از بیداری و نوشیدن یک لیوان آب خنک.',
-      color: 'from-amber-400 to-amber-500 text-amber-950',
+      color: 'from-[#9B6B61] to-[#9B6B61] text-white',
       icon: '☀️'
     },
     'deep-work': {
@@ -892,7 +892,7 @@ export default function SleepSection({
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   {/* Step 1 */}
                   <div className="p-3 bg-white dark:bg-[#242721] rounded-2xl border border-[#EBE3C8] dark:border-[#3D4133]/40 space-y-2 text-right">
-                    <span className="text-[9px] font-black px-2 py-0.5 rounded bg-amber-100 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300">گام اول: روز ۱ الی ۳</span>
+                    <span className="text-[9px] font-black px-2 py-0.5 rounded bg-[#F9F1D8] dark:bg-[#201D13] text-[#5A5A40] dark:text-[#C59B93]">گام اول: روز ۱ الی ۳</span>
                     <h5 className="font-bold text-xs text-[#2D3025] dark:text-[#E8ECE0]">تعدیل مقدماتی ریتم</h5>
                     <div className="text-[10px] space-y-1 text-[#8D7F72] dark:text-[#9D978B]">
                       <div>⏰ آمار بیداری: <span className="font-bold font-mono text-[#2D3025] dark:text-[#E8ECE0]">{getMealTimeStr(avgWakeDecimal, -(avgWakeDecimal - timeToDecimal(targetWakeTime)) * 0.33)}</span></div>
@@ -956,10 +956,10 @@ export default function SleepSection({
               <div className="p-4 bg-white dark:bg-[#242721] rounded-2xl border border-[#EBE3C8] dark:border-[#3D4133]/40 space-y-2 hover:scale-[1.01] transition-transform text-right">
                 <div className="flex justify-between items-center">
                   <span className="text-lg">🍳</span>
-                  <span className="text-[9px] font-black px-2 py-0.5 rounded bg-amber-50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-400">صبحانه طلایی</span>
+                  <span className="text-[9px] font-black px-2 py-0.5 rounded bg-[#F9F1D8] dark:bg-[#201D13] text-[#5A5A40] dark:text-[#C59B93]">صبحانه طلایی</span>
                 </div>
                 <h4 className="font-bold text-xs text-[#2D3025] dark:text-[#E8ECE0]">صبحانه بیولوژیک</h4>
-                <div className="text-xs font-black text-amber-600 dark:text-amber-400 font-mono">
+                <div className="text-xs font-black text-[#9B6B61] dark:text-[#C59B93] font-mono">
                   {getMealTimeStr(wakeDecimal, 1.0)} الی {getMealTimeStr(wakeDecimal, 2.0)}
                 </div>
                 <p className="text-[9px] text-[#8D7F72] dark:text-[#9D978B] leading-relaxed">
@@ -1235,7 +1235,7 @@ export default function SleepSection({
             <button
               type="submit"
               className={`w-full py-3 rounded-xl text-white text-xs font-black shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer ${
-                editingLogId ? 'bg-amber-600 hover:bg-amber-700' : 'bg-[#E26645] hover:bg-[#C94B2A]'
+                editingLogId ? 'bg-[#9B6B61] hover:bg-[#7C4B3D]' : 'bg-[#E26645] hover:bg-[#C94B2A]'
               }`}
             >
               {editingLogId ? <Check className="w-4 h-4 stroke-[2.5]" /> : <Plus className="w-4 h-4 stroke-[2.5]" />}
@@ -1254,7 +1254,7 @@ export default function SleepSection({
                   setEnergyLevel(8);
                   setNotes('');
                 }}
-                className="w-full py-2.5 rounded-xl border border-[#D6CFC3] text-[#8D7F72] text-xs font-bold hover:bg-gray-100 dark:hover:bg-gray-800 transition-all flex items-center justify-center gap-2 cursor-pointer mt-2"
+                className="w-full py-2.5 rounded-xl border border-[#D6CFC3] text-[#8D7F72] text-xs font-bold hover:bg-[#E6DFD3]/40 dark:hover:bg-[#3D4133] transition-all flex items-center justify-center gap-2 cursor-pointer mt-2"
               >
                 <span>انصراف از ویرایش</span>
               </button>
@@ -1298,7 +1298,7 @@ export default function SleepSection({
                           <span className="font-mono font-black text-[#2D3025] dark:text-[#E8ECE0]">{log.duration}</span>
                           <span className="text-[9px] text-[#8D7F72] dark:text-[#9D978B] mr-0.5">ساعت</span>
                         </td>
-                        <td className="py-3 text-center font-mono font-bold text-amber-600 dark:text-amber-400">{log.quality}/۱۰</td>
+                        <td className="py-3 text-center font-mono font-bold text-[#9B6B61] dark:text-[#C59B93]">{log.quality}/۱۰</td>
                         <td className="py-3 text-center font-mono font-bold text-teal-600 dark:text-teal-400">{log.energyLevel}/۱۰</td>
                         <td className="py-3 text-left pl-2">
                           <div className="flex items-center justify-end gap-1">

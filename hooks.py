@@ -25,7 +25,12 @@ website_route_rules = [
 # persisted. doc_events is only for hooking OTHER apps' doctypes or
 # cross-doctype side effects, never an app's own controllers. Left empty
 # intentionally.
-doc_events = {}
+doc_events = {
+    "File": {
+        "after_insert": "hambaft.hambaft.api.on_file_after_insert",
+        "on_trash": "hambaft.hambaft.api.on_file_on_trash",
+    },
+}
 
 scheduler_events = {
     "daily": [

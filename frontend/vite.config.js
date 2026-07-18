@@ -5,21 +5,28 @@ import { resolve } from 'path'
 
 export default defineConfig({
   cacheDir: '/tmp/.vite-cache',
-  base: '/assets/hambaft/frontend/',
+  base: '/assets/hambaft/',
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src'),
     },
   },
+  // Disable Vite's automatic publicDir copy — post-build.js handles this explicitly
+  publicDir: false,
   build: {
-    outDir: resolve(__dirname, '../public/frontend'),
-    emptyOutDir: true,
+    outDir: resolve(__dirname, '../hambaft/public'),
+    // This app builds directly into Frappe's tracked public directory.
+    // In the production container that path may not be deletable by the build user,
+    // so we keep old assets around and let post-build handle lightweight cleanup.
+    emptyOutDir: false,
+    cssCodeSplit: false,
     rollupOptions: {
       output: {
-        entryFileNames: 'assets/[name].js',
-        chunkFileNames: 'assets/[name].js',
-        assetFileNames: 'assets/[name].[ext]',
+        inlineDynamicImports: true,
+        entryFileNames: 'assets/[name].[hash].js',
+        chunkFileNames: 'assets/[name].[hash].js',
+        assetFileNames: 'assets/[name].[hash].[ext]',
       },
     },
   },

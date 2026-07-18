@@ -410,7 +410,7 @@ export default function NotionNotesSection({ initialPages = FALLBACK_PAGES, onPa
                           {/* Trash action */}
                           <button
                             onClick={(e) => handleDeletePage(page.id, e)}
-                            className="p-1.5 rounded-lg bg-transparent hover:bg-rose-50 dark:hover:bg-rose-950/40 text-gray-400 hover:text-rose-600 transition-colors cursor-pointer"
+                            className="p-1.5 rounded-lg bg-transparent hover:bg-rose-50 dark:hover:bg-rose-950/40 text-[#8D7F72] hover:text-rose-600 transition-colors cursor-pointer"
                             title="حذف یادداشت"
                           >
                             <Trash2 className="w-4 h-4" />
@@ -637,7 +637,7 @@ export default function NotionNotesSection({ initialPages = FALLBACK_PAGES, onPa
                               { type: 'todo', label: 'لیست کار انجام دادنی', icon: <CheckSquare className="w-3.5 h-3.5 text-[#E26645]" /> },
                               { type: 'bullet', label: 'مورد لیست نشانه‌دار', icon: <List className="w-3.5 h-3.5" /> },
                               { type: 'quote', label: 'نقل قول برجسته', icon: <Quote className="w-3.5 h-3.5 text-[#9B6B61]" /> },
-                              { type: 'code', label: 'بلوک کد فنی', icon: <Code className="w-3.5 h-3.5 text-gray-500" /> }
+                              { type: 'code', label: 'بلوک کد فنی', icon: <Code className="w-3.5 h-3.5 text-[#8D7F72]" /> }
                             ].map((opt) => (
                               <button
                                 key={opt.type}
@@ -791,7 +791,7 @@ export default function NotionNotesSection({ initialPages = FALLBACK_PAGES, onPa
                           <div className="absolute top-full right-4 mt-1 bg-white dark:bg-[#151713] border border-[#E6DFD3] dark:border-[#2D3025] rounded-2xl shadow-xl p-1.5 w-52 z-50 flex flex-col gap-0.5">
                             <div className="px-2 py-1.5 border-b border-[#E6DFD3]/50 dark:border-[#2D3025]/50 flex justify-between items-center mb-1">
                               <span className="text-[9px] text-[#7C8363] dark:text-[#9ECE9A] font-black">⌨ افزودن کامپوننت پویا (Slash)</span>
-                              <button onClick={() => setActiveSlashBlockId(null)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                              <button onClick={() => setActiveSlashBlockId(null)} className="text-[#8D7F72] hover:text-[#8D7F72] dark:hover:text-[#D6CFC3]">
                                 <X className="w-3 h-3" />
                               </button>
                             </div>
@@ -802,7 +802,7 @@ export default function NotionNotesSection({ initialPages = FALLBACK_PAGES, onPa
                               { type: 'todo', label: 'لیست کار انجام دادنی (Todo)', icon: <CheckSquare className="w-3.5 h-3.5 text-[#E26645]" /> },
                               { type: 'bullet', label: 'مورد لیست نشانه‌دار (Bullet)', icon: <List className="w-3.5 h-3.5" /> },
                               { type: 'quote', label: 'نقل قول برگزیده (Quote)', icon: <Quote className="w-3.5 h-3.5 text-[#9B6B61]" /> },
-                              { type: 'code', label: 'بلوک کد فنی (Code block)', icon: <Code className="w-3.5 h-3.5 text-gray-500" /> }
+                              { type: 'code', label: 'بلوک کد فنی (Code block)', icon: <Code className="w-3.5 h-3.5 text-[#8D7F72]" /> }
                             ].map((opt) => (
                               <button
                                 key={opt.type}

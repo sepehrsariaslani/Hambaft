@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { LifeData } from '../types';
 import { 
   Sparkles, 
@@ -10,17 +10,36 @@ import {
   Flame, 
   Download, 
   Upload,
-  RefreshCw
+  RefreshCw,
+  Plus,
+  Trash2,
+  ChevronRight,
+  Clock,
+  Archive
 } from 'lucide-react';
 import Markdown from 'react-markdown';
-import { motion } from 'motion/react';
-import { aiCoachChat } from '../../app/hambaft-api';
+import { motion, AnimatePresence } from 'motion/react';
+import { 
+  aiCoachChat, 
+  getAiConversations, 
+  getAiConversationMessages, 
+  deleteAiConversation 
+} from '../../app/hambaft-api';
 
 interface Message {
   id: string;
   role: 'user' | 'model';
   text: string;
   timestamp: string;
+}
+
+interface ConversationSummary {
+  name: string;
+  title: string;
+  ai_type: string;
+  status: string;
+  started_at: string;
+  last_message_at: string;
 }
 
 interface AiCoachSectionProps {
@@ -48,12 +67,94 @@ export default function AiCoachSection({ lifeData, onImportData }: AiCoachSectio
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
+  const [loadingHistory, setLoadingHistory] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom of chat
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
+
+  // Load conversation list on mount
+  const loadConversations = useCallback(async () => {
+    setLoadingHistory(true);
+    try {
+      const resp = await getAiConversations(30);
+      const list = (resp as any)?.data?.conversations || [];
+      setConversations(list);
+    } catch (e) {
+      console.error('loadConversations error:', e);
+    } finally {
+      setLoadingHistory(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadConversations();
+  }, [loadConversations]);
+
+  // Load a past conversation
+  const openConversation = useCallback(async (convId: string) => {
+    try {
+      setIsLoading(true);
+      const resp = await getAiConversationMessages(convId);
+      const data = (resp as any)?.data;
+      if (data?.messages) {
+        const loaded: Message[] = data.messages.map((m: any) => ({
+          id: m.name || `msg-${Date.now()}-${Math.random()}`,
+          role: m.role as 'user' | 'model',
+          text: m.content,
+          timestamp: m.timestamp || new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' }),
+        }));
+        // Prepend welcome message if conversation has content
+        setMessages([
+          {
+            id: 'm-init-loaded',
+            role: 'model',
+            text: '🔄 مکالمه قبلی بارگذاری شد. ادامه بدهید:',
+            timestamp: loaded[0]?.timestamp || new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' }),
+          },
+          ...loaded,
+        ]);
+        setConversationId(convId);
+        setShowHistory(false);
+      }
+    } catch (e) {
+      console.error('openConversation error:', e);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  // Start a new conversation
+  const startNewConversation = useCallback(() => {
+    setMessages([
+      {
+        id: `m-init-${Date.now()}`,
+        role: 'model',
+        text: `مکالمه جدید شروع شد. چطور می‌توانم کمکتان کنم؟`,
+        timestamp: new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' }),
+      },
+    ]);
+    setConversationId(null);
+  }, []);
+
+  // Delete a conversation
+  const handleDeleteConversation = useCallback(async (convId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm('این مکالمه حذف شود؟')) return;
+    try {
+      await deleteAiConversation(convId);
+      setConversations(prev => prev.filter(c => c.name !== convId));
+      if (conversationId === convId) {
+        startNewConversation();
+      }
+    } catch (err) {
+      console.error('deleteConversation error:', err);
+    }
+  }, [conversationId, startNewConversation]);
 
   const sendMessageToApi = async (userPrompt: string) => {
     setIsLoading(true);
@@ -84,6 +185,8 @@ export default function AiCoachSection({ lifeData, onImportData }: AiCoachSectio
 
       if (data?.conversation_id) {
         setConversationId(data.conversation_id);
+        // Refresh conversation list in background
+        loadConversations();
       }
 
       if (data?.text) {
@@ -102,10 +205,7 @@ export default function AiCoachSection({ lifeData, onImportData }: AiCoachSectio
       const errorMsg: Message = {
         id: `msg-err-${Date.now()}`,
         role: 'model',
-        text: `⚠️ متاسفم دوست من، ارتباطم با سرور هوش مصنوعی قطع شد. 
-
-علت خطا: ${err.message || 'مشکل در سرور یار'}.
-لطفاً اتصال اینترنت خود را چک کرده و بار دیگر تلاش کنید.`,
+        text: `⚠️ متاسفم دوست من، ارتباطم با سرور هوش مصنوعی قطع شد. \n\nعلت خطا: ${err.message || 'مشکل در سرور یار'}.\nلطفاً اتصال اینترنت خود را چک کرده و بار دیگر تلاش کنید.`,
         timestamp: new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' })
       };
       setMessages(prev => [...prev, errorMsg]);
@@ -162,6 +262,16 @@ export default function AiCoachSection({ lifeData, onImportData }: AiCoachSectio
     }
   };
 
+  const formatDate = (iso: string) => {
+    if (!iso) return '';
+    try {
+      const d = new Date(iso);
+      return d.toLocaleDateString('fa-IR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    } catch {
+      return iso;
+    }
+  };
+
   return (
     <div className="space-y-6 text-right" dir="rtl">
       
@@ -192,8 +302,80 @@ export default function AiCoachSection({ lifeData, onImportData }: AiCoachSectio
                 <span>دسترسی به داده‌ها:</span>
                 <span className="text-[#7C8363] font-bold">فعال (مالی/عادت‌ها)</span>
               </div>
+              {conversationId && (
+                <div className="flex justify-between text-[#C4BBAF]">
+                  <span>شناسه مکالمه:</span>
+                  <span className="font-bold text-[#E6DFD3] font-mono text-[9px]">{conversationId.slice(0, 8)}…</span>
+                </div>
+              )}
             </div>
           </div>
+
+          {/* New Conversation Button */}
+          <button
+            onClick={startNewConversation}
+            className="w-full py-2.5 bg-[#7C8363] hover:bg-[#5A5A40] text-white text-xs font-bold rounded-2xl flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-sm"
+          >
+            <Plus className="w-4 h-4" />
+            <span>مکالمه جدید</span>
+          </button>
+
+          {/* Conversation History Toggle */}
+          <button
+            onClick={() => setShowHistory(prev => !prev)}
+            className="w-full py-2.5 bg-[#E8ECE0] hover:bg-[#D6CFC3] text-[#2D3025] text-xs font-bold rounded-2xl flex items-center justify-center gap-1.5 transition-all cursor-pointer border border-[#D6CFC3]"
+          >
+            <Clock className="w-4 h-4" />
+            <span>تاریخچه مکالمات</span>
+            <ChevronRight className={`w-3.5 h-3.5 transition-transform ${showHistory ? 'rotate-90' : ''}`} />
+          </button>
+
+          {/* Conversation History List */}
+          <AnimatePresence>
+            {showHistory && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="overflow-hidden"
+              >
+                <div className="space-y-1.5 max-h-[280px] overflow-y-auto">
+                  {loadingHistory ? (
+                    <div className="text-[10px] text-[#8D7F72] text-center py-4">در حال بارگذاری...</div>
+                  ) : conversations.length === 0 ? (
+                    <div className="text-[10px] text-[#8D7F72] text-center py-4 bg-[#F9F6EE] rounded-xl border border-dashed border-[#D6CFC3]">
+                      هنوز مکالمه‌ای ثبت نشده
+                    </div>
+                  ) : (
+                    conversations.map(conv => (
+                      <div
+                        key={conv.name}
+                        onClick={() => openConversation(conv.name)}
+                        className={`group p-2.5 rounded-xl border cursor-pointer transition-all ${
+                          conversationId === conv.name
+                            ? 'bg-[#7C8363]/10 border-[#7C8363]/30'
+                            : 'bg-white border-[#E6DFD3] hover:border-[#7C8363]/40 hover:bg-[#F9F6EE]'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-1.5">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[10px] font-bold text-[#2D3025] truncate">{conv.title}</p>
+                            <p className="text-[8px] text-[#8D7F72] mt-0.5">{formatDate(conv.last_message_at)}</p>
+                          </div>
+                          <button
+                            onClick={(e) => handleDeleteConversation(conv.name, e)}
+                            className="opacity-0 group-hover:opacity-100 p-1 text-[#D6CFC3] hover:text-red-500 rounded transition-all shrink-0"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Backup & Recovery Utilities */}
           <div className="bg-[#FDFBF7] p-5 rounded-2xl shadow-sm border border-[#E6DFD3] space-y-4">
@@ -241,7 +423,10 @@ export default function AiCoachSection({ lifeData, onImportData }: AiCoachSectio
               <Sparkles className="w-5 h-5 text-[#7C8363] animate-pulse" />
               <div className="text-right">
                 <h3 className="font-bold text-[#2D3025] text-sm font-serif-elegant">مشاوره هوشمند با یار مربی</h3>
-                <p className="text-[10px] text-[#8D7F72] font-semibold">یار به تمام تراکنش‌های مالی، اهداف و رکوردهای شما دسترسی دارد</p>
+                <p className="text-[10px] text-[#8D7F72] font-semibold">
+                  یار به تمام تراکنش‌های مالی، اهداف و رکوردهای شما دسترسی دارد
+                  {conversationId && <span className="text-[#7C8363]"> • مکالمه ذخیره‌شده</span>}
+                </p>
               </div>
             </div>
           </div>

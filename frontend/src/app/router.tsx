@@ -74,7 +74,6 @@ function RouteHydrateFallback() {
 export const workspaceRoutes: RouteObject[] = [
   ...buildWorkspaceRoutes(),
   { path: 'settings/security', element: <SecurityPage /> },
-  { path: 'tasks', element: redirectTo('/journal') },
   { path: 'app/:pathMatch(.*)/*', element: redirectTo('/') },
   { path: 'hambaft/:pathMatch(.*)/*', element: redirectTo('/') },
 ]

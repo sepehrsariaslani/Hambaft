@@ -19,19 +19,20 @@ import type {
   WeightLog,
   WorkoutLog,
 } from '../legacy/types'
-import { call, checkFrappeSession, createDoc, deleteDoc, updateDoc } from './frappe'
+import { call, callGet, checkFrappeSession, createDoc, deleteDoc, updateDoc } from './frappe'
 
 const taskPriorityToBackend: Record<string, string> = {
   low: 'پایین',
   medium: 'متوسط',
   high: 'بالا',
+  urgent: 'فوری',
 }
 
 const taskPriorityFromBackend: Record<string, Task['priority']> = {
   پایین: 'low',
   متوسط: 'medium',
   بالا: 'high',
-  فوری: 'high',
+  فوری: 'urgent',
 }
 
 const taskCategoryToBackend: Record<string, string> = {
@@ -57,7 +58,8 @@ const goalCategoryToBackend: Record<string, string> = {
   career: 'شغلی',
   learning: 'آموزشی',
   personal: 'شخصی',
-  other: 'شخصی',
+  relationship: 'رابطه',
+  other: 'سفارشی',
 }
 
 const goalCategoryFromBackend: Record<string, Goal['category']> = {
@@ -66,6 +68,8 @@ const goalCategoryFromBackend: Record<string, Goal['category']> = {
   شغلی: 'career',
   آموزشی: 'learning',
   شخصی: 'personal',
+  رابطه: 'relationship',
+  سفارشی: 'other',
 }
 
 const habitCategoryToBackend: Record<string, string> = {
@@ -223,29 +227,199 @@ export function mapEventToScheduleItem(event: any): ScheduleItem {
   }
 }
 
+export function mapBackendTaskRecord(item: any): Task {
+  return {
+    id: item.name,
+    title: item.title || item.subject || item.name,
+    completed: ['done', 'completed', 'انجام‌شده', 'انجام شده'].includes(String(item.status || '')),
+    status: item.status || undefined,
+    createdAt: (item.creation || item.modified || new Date().toISOString()).slice(0, 10),
+    description: item.description || '',
+    dueDate: item.due_date ? String(item.due_date).slice(0, 10) : undefined,
+    scheduledDate: item.scheduled_date ? String(item.scheduled_date) : undefined,
+    scheduledTime: item.scheduled_time ? String(item.scheduled_time).slice(0, 5) : undefined,
+    priority: mapBackendTaskPriority(item.priority),
+    category: mapBackendTaskCategory(item.category),
+    projectId: item.project || undefined,
+    blockedBy: item.blocked_by_json ? JSON.parse(item.blocked_by_json) : [],
+    blocking: item.blocking_json ? JSON.parse(item.blocking_json) : [],
+    isDailyHighlight: !!item.is_daily_highlight,
+    importance: item.importance === 'کلیدی' ? 'key' : item.importance === 'نقطه‌عطف' ? 'milestone' : item.importance === 'عادی' ? 'normal' : undefined,
+    actualMinutes: item.actual_minutes || undefined,
+    estimatedMinutes: item.estimated_minutes || undefined,
+    areaId: item.area || undefined,
+    effortType: item.effort_type === 'fixed' || item.effort_type === 'ثابت' ? 'fixed' : 'variable',
+    noteBlocks: item.noteBlocks || item.note_blocks_json || [],
+    goalId: item.goal || undefined,
+    parentTaskId: item.parent_task || undefined,
+    impactGoalTitle: item.impact_goal_title || undefined,
+    impactGoalHealth: item.impact_goal_health || undefined,
+    impactGoalProgress: item.impact_goal_progress || undefined,
+    impactScore: item.impact_score || undefined,
+    impactProjectTitle: item.impact_project_title || undefined,
+    impactProjectContributionType: item.impact_project_contribution_type || undefined,
+    impactProjectProgress: item.impact_project_progress || undefined,
+    blockedByTitles: item.blocked_by_titles || undefined,
+    blockedByStatuses: item.blocked_by_statuses || undefined,
+  }
+}
+
 export function toTaskPayload(task: Task): Record<string, unknown> {
+  const importanceMap: Record<string, string> = {
+    normal: 'عادی',
+    key: 'کلیدی',
+    milestone: 'نقطه‌عطف',
+  }
   return {
     title: task.title,
     description: task.description || '',
     due_date: combineDateTime(task.dueDate, '09:00'),
+    scheduled_date: task.scheduledDate || null,
+    scheduled_time: task.scheduledTime || null,
     priority: taskPriorityToBackend[task.priority || 'medium'] || 'متوسط',
     category: taskCategoryToBackend[task.category || 'other'] || 'شخصی',
-    status: task.completed ? 'انجام‌شده' : 'انجام‌نشده',
+    status: task.status || (task.completed ? 'done' : 'inbox'),
+    project: task.projectId || null,
+    parent_task: task.parentTaskId || null,
+    blocked_by_json: JSON.stringify(task.blockedBy || []),
+    importance: importanceMap[task.importance || 'normal'] || 'عادی',
+    is_daily_highlight: task.isDailyHighlight ? 1 : 0,
+    estimated_minutes: task.estimatedMinutes || null,
+    effort_type: task.effortType === 'fixed' ? 'ثابت' : 'متغیر',
+    area: task.areaId || null,
+    goal: task.goalId || null,
+    noteBlocks: task.noteBlocks || [],
   }
+}
+
+export function toTaskUpdatePayload(task: Partial<Task> & { id: string }): Record<string, unknown> {
+  const importanceMap: Record<string, string> = {
+    normal: 'عادی',
+    key: 'کلیدی',
+    milestone: 'نقطه‌عطف',
+  }
+
+  const payload: Record<string, unknown> = {}
+
+  if ('title' in task && task.title !== undefined) payload.title = task.title
+  if ('description' in task) payload.description = task.description || ''
+  if ('dueDate' in task) payload.due_date = task.dueDate ? combineDateTime(task.dueDate, '09:00') : null
+  if ('scheduledDate' in task) payload.scheduled_date = task.scheduledDate || null
+  if ('scheduledTime' in task) payload.scheduled_time = task.scheduledTime || null
+  if ('priority' in task && task.priority !== undefined) payload.priority = taskPriorityToBackend[task.priority || 'medium'] || 'متوسط'
+  if ('category' in task && task.category !== undefined) payload.category = taskCategoryToBackend[task.category || 'other'] || 'شخصی'
+  if ('status' in task || 'completed' in task) {
+    payload.status = task.status || (task.completed ? 'done' : 'inbox')
+  }
+  if ('projectId' in task) payload.project = task.projectId || null
+  if ('parentTaskId' in task) payload.parent_task = task.parentTaskId || null
+  if ('blockedBy' in task) payload.blocked_by_json = JSON.stringify(task.blockedBy || [])
+  if ('importance' in task && task.importance !== undefined) {
+    payload.importance = importanceMap[task.importance || 'normal'] || 'عادی'
+  }
+  if ('isDailyHighlight' in task) payload.is_daily_highlight = task.isDailyHighlight ? 1 : 0
+  if ('estimatedMinutes' in task) payload.estimated_minutes = task.estimatedMinutes || null
+  if ('effortType' in task && task.effortType !== undefined) {
+    payload.effort_type = task.effortType === 'fixed' ? 'ثابت' : 'متغیر'
+  }
+  if ('areaId' in task) payload.area = task.areaId || null
+  if ('goalId' in task) payload.goal = task.goalId || null
+  if ('noteBlocks' in task) payload.noteBlocks = task.noteBlocks || []
+
+  return payload
 }
 
 export function toGoalPayload(goal: Goal): Record<string, unknown> {
   const metric = goal.metric
+  const goalTypeMap: Record<string, string> = {
+    outcome: 'نتیجه‌ای', metric: 'سنجه‌ای', habit_driven: 'مبتنی‌بر_عادت',
+    project_delivery: 'تحویل_پروژه', savings: 'پس‌انداز_مالی', investment: 'سرمایه‌گذاری',
+    debt_payoff: 'پرداخت_بدهی', health: 'سلامت', learning: 'یادگیری', consistency: 'ثبات',
+  }
+  const progressModeMap: Record<string, string> = {
+    manual: 'دستی', metric_value: 'مقدار_سنجه', habit_rollup: 'تجمیع_عادت',
+    project_rollup: 'تجمیع_پروژه', finance_balance: 'موجودی_مالی', finance_savings: 'پس‌انداز_مالی',
+    debt_paydown: 'پرداخت_بدهی', weighted_composite: 'مرکب_وزنی',
+  }
+  const priorityMap: Record<string, string> = {
+    low: 'پایین', medium: 'متوسط', high: 'بالا', urgent: 'فوری',
+  }
+  const goalLevelMap: Record<string, string> = {
+    annual: 'سالانه', quarterly: 'فصلی', monthly: 'ماهانه', custom: 'سفارشی',
+  }
+  const contribTypeMap: Record<string, string> = {
+    completion_count: 'تعداد_انجام', completion_rate: 'نرخ_انجام', streak: 'رکورد',
+    quantity_sum: 'مجموع_مقدار', average_value: 'میانگین_مقدار', boolean_success: 'بله_خیر',
+  }
+  const contribPeriodMap: Record<string, string> = {
+    daily: 'روزانه', weekly: 'هفتگی', monthly: 'ماهانه', all: 'کل',
+  }
+  const finTypeMap: Record<string, string> = {
+    balance: 'موجودی_حساب', savings: 'پس‌انداز', debt: 'بدهی', investment: 'سرمایه‌گذاری', income_accumulated: 'درآمد_انباشته',
+  }
+
+  const contribTypeProjectMap: Record<string, string> = {
+    mandatory: 'اجباری', recommended: 'پیشنهادی', supporting: 'پشتیبان',
+  }
+  const completionPolicyMap: Record<string, string> = {
+    threshold: 'آستانه_پیشرفت', threshold_plus_mandatory: 'آستانه_به_علاوه_پروژه‌های_اجباری',
+    metric_plus_mandatory: 'سنجه_به_علاوه_پروژه‌های_اجباری', all_projects: 'همه_پروژه‌ها_تکمیل',
+    threshold_plus_milestones: 'آستانه_به_علاوه_نقاط_عطف',
+  }
+
   return {
     title: goal.title,
     description: goal.description || '',
     category: goalCategoryToBackend[goal.category || 'personal'] || 'شخصی',
+    goal_type: goalTypeMap[goal.goalType || 'outcome'] || 'نتیجه‌ای',
+    progress_mode: progressModeMap[goal.progressMode || 'manual'] || 'دستی',
+    area: goal.areaId || null,
+    parent_goal: goal.parentGoalId || null,
+    goal_level: goalLevelMap[goal.goalLevel || 'annual'] || 'سالانه',
     target_date: goal.targetDate || null,
-    status: goal.completed ? 'تکمیل‌شده' : 'فعال',
-    target_value: metric?.targetValue ?? null,
-    current_value: metric?.currentValue ?? null,
-    unit: metric?.unit ?? null,
+    start_date: goal.startDate || null,
+    status: goal.status || (goal.completed ? 'تکمیل‌شده' : 'فعال'),
+    target_value: goal.targetValue ?? metric?.targetValue ?? null,
+    current_value: goal.currentValue ?? metric?.currentValue ?? null,
+    unit: goal.unit ?? metric?.unit ?? null,
+    priority: priorityMap[goal.priority || 'medium'] || 'متوسط',
+    color: goal.color || undefined,
+    icon: goal.icon || undefined,
     notes: goal.visionAffirmation || '',
+    noteBlocks: goal.noteBlocks || [],
+    project_progress_weight: goal.projectProgressWeight ?? undefined,
+    milestone_weight: goal.milestoneWeight ?? undefined,
+    key_task_weight: goal.keyTaskWeight ?? undefined,
+    tracked_time_weight: goal.trackedTimeWeight ?? undefined,
+    metric_weight: goal.metricWeight ?? undefined,
+    completion_policy: goal.completionPolicy ? (completionPolicyMap[goal.completionPolicy] || undefined) : undefined,
+    completion_threshold: goal.completionThreshold ?? undefined,
+    linked_habits: (goal.linkedHabits || []).map(h => ({
+      habit: h.habit,
+      contribution_type: contribTypeMap[h.contributionType] || 'تعداد_انجام',
+      weight: h.weight ?? 100,
+      period: contribPeriodMap[h.period || 'monthly'] || 'ماهانه',
+      target_value: h.targetValue ?? null,
+      cap_value: h.capValue ?? null,
+      is_negative: h.isNegative ? 1 : 0,
+      notes: h.notes || '',
+    })),
+    linked_finance_accounts: (goal.linkedFinanceAccounts || []).map(f => ({
+      finance_account: f.financeAccount,
+      finance_type: finTypeMap[f.financeType] || 'موجودی_حساب',
+      initial_amount: f.initialAmount ?? null,
+      target_amount: f.targetAmount ?? null,
+      weight: f.weight ?? 100,
+      notes: f.notes || '',
+    })),
+    linked_projects: (goal.linkedProjects || []).map(p => ({
+      project: p.project,
+      contribution_type: contribTypeProjectMap[p.contributionType || 'mandatory'] || 'اجباری',
+      weight: p.weight ?? 100,
+      is_mandatory: p.isMandatory ? 1 : 0,
+      sort_order: p.sortOrder ?? 0,
+      notes: p.notes || '',
+    })),
   }
 }
 
@@ -322,11 +496,18 @@ export async function createTaskRecord(task: Task) {
 }
 
 export async function updateTaskRecord(task: Task) {
-  return call('hambaft.hambaft.api.update_task', { name: task.id, data: toTaskPayload(task) })
+  return call('hambaft.hambaft.api.update_task', { name: task.id, data: toTaskUpdatePayload(task) })
 }
 
 export async function deleteTaskRecord(name: string) {
   return call('hambaft.hambaft.api.delete_task', { name })
+}
+
+export async function bulkUpdateTasks(names: string[], updates: Record<string, any>) {
+  return call('hambaft.hambaft.api.bulk_update_tasks', {
+    names: JSON.stringify(names),
+    updates: JSON.stringify(updates),
+  })
 }
 
 export async function createHabitRecord(name: string, description: string, extras?: Partial<Habit>) {
@@ -369,6 +550,10 @@ export async function deleteGoalRecord(name: string) {
   return call('hambaft.hambaft.api.delete_goal', { name })
 }
 
+export async function getAreaRecords() {
+  return callGet<{ data?: { areas?: any[] } }>('hambaft.hambaft.api.get_areas')
+}
+
 export async function createJournalRecord(entry: Omit<JournalEntry, 'id'>) {
   return call('hambaft.hambaft.api.create_note', { data: toJournalPayload(entry) })
 }
@@ -383,6 +568,10 @@ export async function logMoodRecord(entry: { date: string; note?: string; gratit
     note: entry.note || '',
     gratitude: entry.gratitude || '',
   })
+}
+
+export async function deleteMoodRecord(name: string) {
+  return call('hambaft.hambaft.api.delete_mood_log', { name })
 }
 
 export async function createTransactionRecord(tx: Omit<Transaction, 'id'>) {
@@ -492,24 +681,37 @@ export function toProjectPayload(project: Project, goalId?: string | null) {
       ? project.linkedGoalId
       : null
 
+  // Tasks are now real Task records linked via project=projectId.
+  // We send the tasks array so the backend can _sync_project_tasks(),
+  // but the child table is no longer the source of truth.
   return {
     title: project.title,
     description: project.description || '',
     notes: project.notes || '',
     goal: normalizedGoalId,
+    area: project.areaId || null,
+    parent_project: project.parentProjectId || null,
     status: project.status ? projectStatusToBackend[project.status] || 'فعال' : (project.completed ? 'تکمیل‌شده' : 'فعال'),
     priority: 'متوسط',
     start_date: project.createdAt || undefined,
     target_date: undefined,
     progress: project.tasks?.length ? Math.round((project.tasks.filter((task) => task.completed).length / project.tasks.length) * 100) : 0,
+    noteBlocks: project.noteBlocks || [],
+    effort_type: project.effortType || undefined,
+    estimated_hours: project.estimatedHours || undefined,
+    blocked_by_json: project.blockedByJson || undefined,
     tasks: (project.tasks || []).map((task) => ({
       id: task.id,
       title: task.title,
       description: task.description || '',
       completed: task.completed,
+      status: task.completed ? 'done' : (task.status || 'inbox'),
       dueDate: task.dueDate,
-      priority: task.priority || 'medium',
-      status: task.completed ? 'انجام‌شده' : 'انجام‌نشده',
+      priority: taskPriorityToBackend[task.priority || 'medium'] || 'متوسط',
+      importance: task.importance === 'key' ? 'کلیدی' : task.importance === 'milestone' ? 'نقطه‌عطف' : 'عادی',
+      isDailyHighlight: task.isDailyHighlight || false,
+      estimatedMinutes: task.estimatedMinutes || undefined,
+      actualMinutes: task.actualMinutes || undefined,
     })),
   }
 }
@@ -660,6 +862,83 @@ export async function deleteContactRecord(id: string) {
   return call('hambaft.hambaft.api.delete_contact', { name: id })
 }
 
+// ─── Contact Relations ─────────────────────────────────────
+
+export async function getContactsSummary() {
+  return callGet<{ data?: { contacts?: any[] } }>(
+    'hambaft.hambaft.api.get_contacts_summary'
+  )
+}
+
+export async function getContactRelations(contactId: string) {
+  return callGet<{ data?: { relations?: any[]; contact_not_ready?: boolean } }>(
+    `hambaft.hambaft.api.get_contact_relations?contact_id=${encodeURIComponent(contactId)}`
+  )
+}
+
+export async function createContactRelation(data: {
+  from_contact: string;
+  to_contact: string;
+  relation_type?: string;
+  directionality?: string;
+  strength_score?: number;
+  since_date?: string;
+  notes?: string;
+}) {
+  return call('hambaft.hambaft.api.create_contact_relation', { data })
+}
+
+export async function updateContactRelation(name: string, data: {
+  relation_type?: string;
+  directionality?: string;
+  strength_score?: number;
+  since_date?: string;
+  notes?: string;
+  sort_order?: number;
+  status?: string;
+}) {
+  return call('hambaft.hambaft.api.update_contact_relation', { name, data })
+}
+
+export async function deleteContactRelation(name: string) {
+  return call('hambaft.hambaft.api.delete_contact_relation', { name })
+}
+
+// ─── Contact Links (contact ↔ entity) ──────────────────────
+
+export async function getContactLinks(params: { contactId?: string; entityType?: string; entityId?: string }) {
+  const parts: string[] = []
+  if (params.contactId) parts.push(`contact_id=${encodeURIComponent(params.contactId)}`)
+  if (params.entityType) parts.push(`entity_type=${encodeURIComponent(params.entityType)}`)
+  if (params.entityId) parts.push(`entity_id=${encodeURIComponent(params.entityId)}`)
+  return callGet<{ data?: { links?: any[]; contact_link_not_ready?: boolean } }>(
+    `hambaft.hambaft.api.get_contact_links?${parts.join('&')}`
+  )
+}
+
+export async function createContactLink(data: {
+  contact: string;
+  entity_type: string;
+  entity: string;
+  role?: string;
+  context_note?: string;
+}) {
+  return call('hambaft.hambaft.api.create_contact_link', { data })
+}
+
+export async function updateContactLink(name: string, data: {
+  role?: string;
+  context_note?: string;
+  sort_order?: number;
+  status?: string;
+}) {
+  return call('hambaft.hambaft.api.update_contact_link', { name, data })
+}
+
+export async function deleteContactLink(name: string) {
+  return call('hambaft.hambaft.api.delete_contact_link', { name })
+}
+
 export async function createSleepLogRecord(log: Omit<SleepLog, 'id'>) {
   return call('hambaft.hambaft.api.create_sleep_log', {
     data: {
@@ -753,7 +1032,6 @@ export async function updateNutritionRecord(id: string, log: Partial<Omit<MealLo
       carbs: log.carbs,
       fat: log.fat,
       water_glasses: log.waterGlasses,
-      notes: log.notes,
     },
   })
 }
@@ -829,6 +1107,22 @@ export async function aiCoachChat(prompt: string, history: Array<{ role: string;
   })
 }
 
+export async function getAiConversations(limit = 20) {
+  return callGet<{ data?: { conversations?: Array<{ name: string; title: string; ai_type: string; status: string; started_at: string; last_message_at: string }> } }>(
+    `hambaft.hambaft.api.get_ai_conversations?limit=${limit}`
+  )
+}
+
+export async function getAiConversationMessages(conversationId: string, limit = 100) {
+  return call<{ data?: { messages?: Array<{ name: string; role: string; content: string; timestamp: string; model?: string }>; conversation_id?: string } }>(
+    'hambaft.hambaft.api.get_ai_conversation_messages', { conversation_id: conversationId, limit }
+  )
+}
+
+export async function deleteAiConversation(conversationId: string) {
+  return call<{ data?: { ok?: boolean } }>('hambaft.hambaft.api.delete_ai_conversation', { conversation_id: conversationId })
+}
+
 export async function loginWithFrappe(email: string, password: string) {
   return call<{ data?: { onboarding_completed?: boolean } }>('hambaft.hambaft.api.login', { email, password })
 }
@@ -858,4 +1152,1075 @@ export async function changePassword(oldPassword: string, newPassword: string) {
 
 export async function updateSettingsRecord(data: Record<string, unknown>) {
   return call('hambaft.hambaft.api.update_settings', { data })
+}
+
+// ─── Planner Task Sessions ──────────────────────────────────────
+
+export async function startTaskSession(taskId: string) {
+  return call<{ data?: { session?: any } }>('hambaft.hambaft.api.start_task_session', { task: taskId })
+}
+
+export async function stopTaskSession(sessionId: string) {
+  return call<{ data?: { session?: any } }>('hambaft.hambaft.api.stop_task_session', { session_name: sessionId })
+}
+
+export async function resumeTaskSession(sessionId: string) {
+  return call<{ data?: { session?: any } }>('hambaft.hambaft.api.resume_task_session', { session_name: sessionId })
+}
+
+export async function finishTaskSession(sessionId: string) {
+  return call<{ data?: { session?: any } }>('hambaft.hambaft.api.finish_task_session', { session_name: sessionId })
+}
+
+export async function getTaskSessions(taskId: string, limit = 50) {
+  return callGet<{ data?: { sessions?: any[] } }>('hambaft.hambaft.api.get_task_sessions', { task: taskId, limit })
+}
+
+export async function getActiveTaskSession() {
+  return callGet<{ data?: { session?: any } }>('hambaft.hambaft.api.get_active_session')
+}
+
+// ─── Task Hierarchy ─────────────────────────────────────────────
+
+export async function getTaskChildren(parentTaskId: string) {
+  return callGet<{ data?: { tasks?: any[] } }>('hambaft.hambaft.api.get_task_children', { parent_task: parentTaskId })
+}
+
+export async function getTaskHierarchy(taskId: string) {
+  return call<{ data?: { task?: any } }>('hambaft.hambaft.api.get_task_hierarchy', { task_name: taskId })
+}
+
+// ─── Task Dependencies ──────────────────────────────────────────
+
+export async function addTaskDependency(taskId: string, dependsOnTaskId: string) {
+  return call<{ data?: { blocked_by?: string[] } }>('hambaft.hambaft.api.add_task_dependency', { task_name: taskId, depends_on_task: dependsOnTaskId })
+}
+
+export async function removeTaskDependency(taskId: string, dependsOnTaskId: string) {
+  return call<{ data?: { blocked_by?: string[] } }>('hambaft.hambaft.api.remove_task_dependency', { task_name: taskId, depends_on_task: dependsOnTaskId })
+}
+
+export async function isTaskBlocked(taskId: string) {
+  return call<{ data?: { blocked?: boolean; reason?: string } }>('hambaft.hambaft.api.is_task_blocked', { task_name: taskId })
+}
+
+// ─── Planner Views ──────────────────────────────────────────────
+
+export async function getPlannerInbox(limit = 100) {
+  return call<{ data?: { tasks?: any[] } }>('hambaft.hambaft.api.get_planner_inbox', { limit })
+}
+
+export async function getPlannerToday(limit = 100) {
+  return call<{ data?: { tasks?: any[] } }>('hambaft.hambaft.api.get_planner_today', { limit })
+}
+
+export async function getPlannerNext(limit = 100) {
+  return call<{ data?: { tasks?: any[] } }>('hambaft.hambaft.api.get_planner_next', { limit })
+}
+
+export async function getPlannerScheduled(fromDate?: string, toDate?: string, limit = 100) {
+  return call<{ data?: { tasks?: any[] } }>('hambaft.hambaft.api.get_planner_scheduled', { from_date: fromDate, to_date: toDate, limit })
+}
+
+export async function getPlannerSomeday(limit = 100) {
+  return call<{ data?: { tasks?: any[] } }>('hambaft.hambaft.api.get_planner_someday', { limit })
+}
+
+export async function moveTaskToBucket(taskId: string, bucket: Task['status']) {
+  return call<{ data?: { task?: any } }>('hambaft.hambaft.api.move_task_to_bucket', { task_name: taskId, bucket })
+}
+
+export async function transitionTaskStatus(taskId: string, newStatus: Task['status']) {
+  return call<{ data?: { task?: any } }>('hambaft.hambaft.api.transition_task_status', { task_name: taskId, new_status: newStatus })
+}
+
+// ─── Area CRUD ──────────────────────────────────────────────
+
+export async function createAreaRecord(data: Record<string, unknown>) {
+  return call<{ data?: { area?: any } }>('hambaft.hambaft.api.create_area', { data })
+}
+
+export async function updateAreaRecord(name: string, data: Record<string, unknown>) {
+  return call<{ data?: { area?: any } }>('hambaft.hambaft.api.update_area', { name, data })
+}
+
+export async function deleteAreaRecord(name: string) {
+  return call<{ data?: { ok?: boolean } }>('hambaft.hambaft.api.delete_area', { name })
+}
+
+export async function getAreaSummary(name: string) {
+  return callGet<{ data?: { summary?: any } }>(`hambaft.hambaft.api.get_area_summary?name=${encodeURIComponent(name)}`)
+}
+
+export async function getAreasWithSummaries(limit = 50) {
+  return callGet<{ data?: { areas?: any[] } }>(`hambaft.hambaft.api.get_areas_with_summaries?limit=${limit}`)
+}
+
+// ─── Project Dependencies ──────────────────────────────────
+
+export async function addProjectDependency(projectName: string, dependsOn: string) {
+  return call<{ data?: { blocked_by?: string[] } }>('hambaft.hambaft.api.add_project_dependency', { project_name: projectName, depends_on_project: dependsOn })
+}
+
+export async function removeProjectDependency(projectName: string, dependsOn: string) {
+  return call<{ data?: { blocked_by?: string[] } }>('hambaft.hambaft.api.remove_project_dependency', { project_name: projectName, depends_on_project: dependsOn })
+}
+
+export async function isProjectBlocked(projectName: string) {
+  return call<{ data?: { blocked?: boolean; reason?: string } }>('hambaft.hambaft.api.is_project_blocked', { project_name: projectName })
+}
+
+export async function getProjectSubprojects(projectName: string) {
+  return call<{ data?: { projects?: any[] } }>('hambaft.hambaft.api.get_project_subprojects', { project_name: projectName })
+}
+
+export async function getProjectTrackedMinutes(projectName: string) {
+  return callGet<{ data?: { tracked_minutes?: number } }>(`hambaft.hambaft.api.get_project_tracked_minutes?project_name=${encodeURIComponent(projectName)}`)
+}
+
+// ─── Planner Calendar / Timeline Feeds ─────────────────────
+
+export async function getPlannerDailyTimeline(date?: string) {
+  const params = date ? `date=${encodeURIComponent(date)}` : ''
+  return callGet<{ data?: { date?: string; tasks?: any[]; time_blocks?: any[]; active_session?: any; events?: any[] } }>(`hambaft.hambaft.api.get_planner_daily_timeline${params ? '?' + params : ''}`)
+}
+
+export async function getPlannerWeek(startDate?: string) {
+  const params = startDate ? `start_date=${encodeURIComponent(startDate)}` : ''
+  return callGet<{ data?: { start_date?: string; days?: Record<string, any[]> } }>(`hambaft.hambaft.api.get_planner_week${params ? '?' + params : ''}`)
+}
+
+export async function getPlannerMonth(year?: number, month?: number) {
+  const params: string[] = []
+  if (year) params.push(`year=${year}`)
+  if (month) params.push(`month=${month}`)
+  return callGet<{ data?: { year?: number; month?: number; from_date?: string; to_date?: string; days?: Record<string, any[]> } }>(`hambaft.hambaft.api.get_planner_month${params.length ? '?' + params.join('&') : ''}`)
+}
+
+// ─── Project Board ─────────────────────────────────────────
+
+export async function getProjectBoard(projectName: string) {
+  return callGet<{ data?: { project?: any; status_groups?: Record<string, any[]>; total_tasks?: number; completed_tasks?: number } }>(`hambaft.hambaft.api.get_project_board?project_name=${encodeURIComponent(projectName)}`)
+}
+
+// ─── Projects by Area ─────────────────────────────────────
+
+export async function getProjectsByArea(areaName: string) {
+  return callGet<{ data?: { projects?: any[] } }>(`hambaft.hambaft.api.get_projects_by_area?area_name=${encodeURIComponent(areaName)}`)
+}
+
+// ─── Tracked Time Rollups ─────────────────────────────────
+
+export async function getTaskTrackedMinutes(taskName: string) {
+  return callGet<{ data?: { tracked_minutes?: number; subtask_tracked_minutes?: number; total_tracked_minutes?: number } }>(`hambaft.hambaft.api.get_task_tracked_minutes?task_name=${encodeURIComponent(taskName)}`)
+}
+
+export async function getAreaTrackedMinutes(areaName: string) {
+  return callGet<{ data?: { tracked_minutes?: number } }>(`hambaft.hambaft.api.get_area_tracked_minutes?area_name=${encodeURIComponent(areaName)}`)
+}
+
+// ─── Task Attachments ───────────────────────────────────────
+
+// ─── Gallery Domain ─────────────────────────────────────────
+
+export interface GalleryPin {
+  name: string
+  file: string
+  image_url: string
+  image_name: string
+  image_width?: number
+  image_height?: number
+  source_type: string
+  source_doctype?: string
+  source_name?: string
+  source_title?: string
+  caption?: string
+  sort_order: number
+}
+
+export interface GallerySection {
+  name: string
+  title: string
+  project?: string
+  sort_order: number
+  pin_count: number
+  pins: GalleryPin[]
+}
+
+export interface GalleryBoard {
+  board_id: string
+  board_title: string
+  goal_id?: string
+  cover_url?: string
+  pin_count: number
+  sections: GallerySection[]
+  board_pins: GalleryPin[]
+}
+
+export interface GalleryData {
+  boards: GalleryBoard[]
+  orphan_pins: GalleryPin[]
+  gallery_not_ready?: boolean
+}
+
+export interface TaskAttachment {
+  name: string
+  file_name: string
+  file_type: string
+  file_url: string
+  file_size: number
+  is_private: number
+  creation: string
+  pin_name?: string
+  sort_order: number
+  caption?: string
+  board_id?: string
+  section_id?: string
+  board_title?: string
+  section_title?: string
+}
+
+export async function getGalleryBoards() {
+  return callGet<{ data?: GalleryData }>('hambaft.hambaft.api.get_gallery_boards')
+}
+
+export async function getGalleryBoardDetail(boardName: string) {
+  return call('hambaft.hambaft.api.get_gallery_board_detail', { board_name: boardName })
+}
+
+export async function createGalleryPin(fileName: string, sourceDoctype?: string, sourceName?: string, board?: string, section?: string, caption?: string) {
+  return call('hambaft.hambaft.api.create_gallery_pin', {
+    file_name: fileName,
+    source_doctype: sourceDoctype || '',
+    source_name: sourceName || '',
+    board: board || '',
+    section: section || '',
+    caption: caption || '',
+  })
+}
+
+export async function uploadGalleryImage(filedata: string, filename: string, doctype?: string, docname?: string, board?: string, section?: string, caption?: string) {
+  return call('hambaft.hambaft.api.upload_gallery_image', {
+    filedata, filename,
+    doctype: doctype || '',
+    docname: docname || '',
+    board: board || '',
+    section: section || '',
+    caption: caption || '',
+  })
+}
+
+export async function moveGalleryPin(pinName: string, board?: string, section?: string) {
+  return call('hambaft.hambaft.api.move_gallery_pin', {
+    pin_name: pinName,
+    board: board || '',
+    section: section || '',
+  })
+}
+
+export async function deleteGalleryPinWithFile(pinName: string, deleteFile: boolean = false) {
+  return call('hambaft.hambaft.api.delete_gallery_pin', {
+    pin_name: pinName,
+    delete_file: deleteFile ? 1 : 0,
+  })
+}
+
+export async function reorderGalleryPins(items: Array<{ pin_name: string; sort_order: number }>) {
+  return call('hambaft.hambaft.api.reorder_gallery_pins', { items: JSON.stringify(items) })
+}
+
+export async function reorderGallerySections(boardName: string, sectionOrder: string[]) {
+  return call('hambaft.hambaft.api.reorder_gallery_sections', { board_name: boardName, section_order: JSON.stringify(sectionOrder) })
+}
+
+export async function updateGalleryPinMeta(pinName: string, caption?: string, note?: string) {
+  return call('hambaft.hambaft.api.update_gallery_pin_meta', { pin_name: pinName, caption: caption || '', note: note || '' })
+}
+
+export async function deleteGalleryPin(pinName: string) {
+  return call('hambaft.hambaft.api.delete_gallery_pin', { pin_name: pinName })
+}
+
+export async function getTaskAttachments(taskName: string) {
+  return callGet<{ data?: { attachments?: TaskAttachment[] } }>(`hambaft.hambaft.api.get_task_attachments?task_name=${encodeURIComponent(taskName)}`)
+}
+
+export async function reorderTaskAttachments(taskName: string, items: Array<{ file_name: string; sort_order: number }>) {
+  return call('hambaft.hambaft.api.reorder_task_attachments', { task_name: taskName, items: JSON.stringify(items) })
+}
+
+export async function deleteTaskAttachment(fileName: string) {
+  return call('hambaft.hambaft.api.delete_task_attachment', { file_name: fileName })
+}
+
+export async function syncGalleryFromExistingFiles() {
+  return call('hambaft.hambaft.api.sync_gallery_from_existing_files')
+}
+
+export async function migratePinOrderToDomain() {
+  return call('hambaft.hambaft.api.migrate_pin_order_to_domain')
+}
+
+// ─── Planner Board Views ──────────────────────────────────
+
+export async function getTasksByProject(limit = 100) {
+  return callGet<{ data?: { by_project?: Record<string, any[]> } }>(`hambaft.hambaft.api.get_tasks_by_project?limit=${limit}`)
+}
+
+export async function getTasksGroupedByStatus(limit = 200) {
+  return callGet<{ data?: { status_groups?: Record<string, any[]> } }>(`hambaft.hambaft.api.get_tasks_grouped_by_status?limit=${limit}`)
+}
+
+// ─── Advanced Goal APIs ──────────────────────────────────────
+
+export async function getGoalDetail(name: string) {
+  return call<{ data?: { goal?: any } }>('hambaft.hambaft.api.get_goal_detail', { name })
+}
+
+export async function computeGoalProgress(name: string) {
+  return call<{ data?: { progress_percent?: number; detail?: any; goal?: any } }>('hambaft.hambaft.api.compute_goal_progress', { name })
+}
+
+export async function linkGoalHabit(goalName: string, habit: string, contributionType?: string, weight?: number, period?: string, targetValue?: number, capValue?: number, isNegative?: number, notes?: string) {
+  return call<{ data?: { goal?: any } }>('hambaft.hambaft.api.link_goal_habit', {
+    goal_name: goalName,
+    habit,
+    contribution_type: contributionType || 'تعداد_انجام',
+    weight: weight ?? 100,
+    period: period || 'ماهانه',
+    target_value: targetValue,
+    cap_value: capValue,
+    is_negative: isNegative ?? 0,
+    notes,
+  })
+}
+
+export async function unlinkGoalHabit(goalName: string, habit: string) {
+  return call<{ data?: { goal?: any } }>('hambaft.hambaft.api.unlink_goal_habit', { goal_name: goalName, habit })
+}
+
+export async function linkGoalFinance(goalName: string, financeAccount: string, financeType?: string, initialAmount?: number, targetAmount?: number, weight?: number, notes?: string) {
+  return call<{ data?: { goal?: any } }>('hambaft.hambaft.api.link_goal_finance', {
+    goal_name: goalName,
+    finance_account: financeAccount,
+    finance_type: financeType || 'موجودی_حساب',
+    initial_amount: initialAmount,
+    target_amount: targetAmount,
+    weight: weight ?? 100,
+    notes,
+  })
+}
+
+export async function unlinkGoalFinance(goalName: string, financeAccount: string) {
+  return call<{ data?: { goal?: any } }>('hambaft.hambaft.api.unlink_goal_finance', { goal_name: goalName, finance_account: financeAccount })
+}
+
+export async function linkGoalProject(
+  goalName: string,
+  projectName: string,
+  contributionType: string = 'اجباری',
+  weight: number = 100,
+  isMandatory: boolean = true,
+  sortOrder: number = 0,
+  notes?: string,
+) {
+  return call<{ data?: { goal?: any } }>('hambaft.hambaft.api.link_goal_project', {
+    goal_name: goalName,
+    project_name: projectName,
+    contribution_type: contributionType,
+    weight,
+    is_mandatory: isMandatory ? 1 : 0,
+    sort_order: sortOrder,
+    notes,
+  })
+}
+
+export async function unlinkGoalProject(goalName: string, projectName: string) {
+  return call<{ data?: { goal?: any } }>('hambaft.hambaft.api.unlink_goal_project', { goal_name: goalName, project_name: projectName })
+}
+
+export async function updateGoalProjectWeights(goalName: string, weights: Array<{ project: string; weight?: number; is_mandatory?: number; contribution_type?: string; sort_order?: number; notes?: string }>) {
+  return call<{ data?: { goal?: any } }>('hambaft.hambaft.api.update_goal_project_weights', { goal_name: goalName, weights })
+}
+
+export async function updateGoalSignalWeights(
+  goalName: string,
+  opts: {
+    projectProgressWeight?: number
+    milestoneWeight?: number
+    keyTaskWeight?: number
+    trackedTimeWeight?: number
+    metricWeight?: number
+  }
+) {
+  return call<{ data?: { goal?: any } }>('hambaft.hambaft.api.update_goal_signal_weights', {
+    goal_name: goalName,
+    project_progress_weight: opts.projectProgressWeight,
+    milestone_weight: opts.milestoneWeight,
+    key_task_weight: opts.keyTaskWeight,
+    tracked_time_weight: opts.trackedTimeWeight,
+    metric_weight: opts.metricWeight,
+  })
+}
+
+export async function updateGoalCompletionPolicy(goalName: string, completionPolicy?: string, completionThreshold?: number) {
+  return call<{ data?: { goal?: any } }>('hambaft.hambaft.api.update_goal_completion_policy', {
+    goal_name: goalName,
+    completion_policy: completionPolicy,
+    completion_threshold: completionThreshold,
+  })
+}
+
+export async function getGoalSnapshots(goalName: string, limit = 30) {
+  return callGet<{ data?: { snapshots?: any[] } }>(`hambaft.hambaft.api.get_goal_snapshots?goal_name=${encodeURIComponent(goalName)}&limit=${limit}`)
+}
+
+export async function getGoalTrend(goalName: string, days = 30) {
+  return callGet<{ data?: { trend?: any[]; days?: number } }>(`hambaft.hambaft.api.get_goal_trend?goal_name=${encodeURIComponent(goalName)}&days=${days}`)
+}
+
+export async function getGoalsWithDetails(limit = 100) {
+  return callGet<{ data?: { goals?: any[] } }>(`hambaft.hambaft.api.get_goals_with_details?limit=${limit}`)
+}
+
+export async function recomputeAllGoalProgress() {
+  return call<{ data?: { recomputed?: number; results?: any[] } }>('hambaft.hambaft.api.recompute_all_goal_progress', {})
+}
+
+export async function getAreaDetail(name: string) {
+  return callGet<{ data?: any }>(`hambaft.hambaft.api.get_area_detail?name=${encodeURIComponent(name)}`)
+}
+
+// ─── Task Management V2 APIs ──────────────────────────────────
+
+export async function getTaskImpactDetail(taskName: string) {
+  return call<{ data?: { task?: string; importance?: string; project?: any; goal?: any; blocked_by_details?: any[] } }>(
+    'hambaft.hambaft.api.get_task_impact_detail', { task_name: taskName }
+  )
+}
+
+export async function updateTaskImportance(taskName: string, importance: 'normal' | 'key' | 'milestone') {
+  const importanceMap: Record<string, string> = { normal: 'عادی', key: 'کلیدی', milestone: 'نقطه‌عطف' }
+  return call<{ data?: { task?: any } }>(
+    'hambaft.hambaft.api.update_task_importance',
+    { task_name: taskName, importance: importanceMap[importance] || 'عادی' }
+  )
+}
+
+export async function resolveBlockedTasks() {
+  return call<{ data?: { resolvable_tasks?: any[] } }>(
+    'hambaft.hambaft.api.resolve_blocked_tasks', {}
+  )
+}
+
+// ─── Saved Planner View APIs ──────────────────────────────────
+
+export async function getOverdueTasks(limit = 100) {
+  return callGet<{ data?: { tasks?: any[] } }>(`hambaft.hambaft.api.get_overdue_tasks?limit=${limit}`)
+}
+
+export async function getKeyTasks(limit = 100) {
+  return callGet<{ data?: { tasks?: any[] } }>(`hambaft.hambaft.api.get_key_tasks?limit=${limit}`)
+}
+
+export async function getMilestoneTasks(limit = 100) {
+  return callGet<{ data?: { tasks?: any[] } }>(`hambaft.hambaft.api.get_milestone_tasks?limit=${limit}`)
+}
+
+export async function getUnscheduledTasks(limit = 100) {
+  return callGet<{ data?: { tasks?: any[] } }>(`hambaft.hambaft.api.get_unscheduled_tasks?limit=${limit}`)
+}
+
+export async function getBlockedTasksView(limit = 100) {
+  return callGet<{ data?: { tasks?: any[] } }>(`hambaft.hambaft.api.get_blocked_tasks_view?limit=${limit}`)
+}
+
+export async function getHighImpactTasks(limit = 50) {
+  return callGet<{ data?: { tasks?: any[] } }>(`hambaft.hambaft.api.get_high_impact_tasks?limit=${limit}`)
+}
+
+export async function getAreaBoard(areaName: string) {
+  return callGet<{ data?: any }>(`hambaft.hambaft.api.get_area_board?area_name=${encodeURIComponent(areaName)}`)
+}
+
+export async function getProjectDetailWithTasks(projectName: string) {
+  return callGet<{ data?: any }>(`hambaft.hambaft.api.get_project_detail_with_tasks?project_name=${encodeURIComponent(projectName)}`)
+}
+
+// ─── Quick Add Task with Context-Aware Defaults ──────────────
+
+export async function quickAddTask(
+  title: string,
+  options?: {
+    project?: string
+    area?: string
+    goal?: string
+    importance?: 'normal' | 'key' | 'milestone'
+    status?: string
+    priority?: string
+    scheduledDate?: string
+    dueDate?: string
+    context?: 'planner_today' | 'planner_inbox' | 'planner_next' | 'planner_scheduled' | 'area_board' | 'project_detail' | 'task_manager'
+  }
+) {
+  const importanceMap: Record<string, string> = { normal: 'عادی', key: 'کلیدی', milestone: 'نقطه‌عطف' }
+  const priorityMap: Record<string, string> = { low: 'پایین', medium: 'متوسط', high: 'بالا', urgent: 'فوری' }
+  const params: Record<string, string> = { title }
+  if (options?.project) params.project = options.project
+  if (options?.area) params.area = options.area
+  if (options?.goal) params.goal = options.goal
+  if (options?.importance) params.importance = importanceMap[options.importance]
+  if (options?.status) params.status = options.status
+  if (options?.priority) params.priority = priorityMap[options.priority] || options.priority
+  if (options?.scheduledDate) params.scheduled_date = options.scheduledDate
+  if (options?.dueDate) params.due_date = options.dueDate
+  if (options?.context) params.context = options.context
+  return call<{ data?: { task?: any } }>('hambaft.hambaft.api.quick_add_task', params)
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// Phase 6: Partner Connection & Social Infrastructure
+// ═══════════════════════════════════════════════════════════════
+
+export interface PartnerInfo {
+  email: string
+  full_name: string
+  username: string | null
+  avatar_url: string | null
+}
+
+export interface PartnerConnection {
+  connection_id: string
+  partner: PartnerInfo
+  connected_since: string | null
+  notes: string
+  shared_goals_count: number
+}
+
+export interface PartnerInvite {
+  name: string
+  invitee?: string
+  invitee_username: string
+  invite_code: string
+  status: string
+  goal?: string
+  message?: string
+  expires_at?: string
+  creation: string
+  invitee_info?: PartnerInfo
+  inviter?: string
+  inviter_info?: PartnerInfo
+}
+
+export interface GoalMember {
+  membership_id: string | null
+  user: PartnerInfo
+  role: string
+  joined_at: string | null
+}
+
+export async function invitePartner(data: {
+  username?: string
+  email?: string
+  goal_id?: string
+  message?: string
+  generate_code?: boolean
+}) {
+  return call<{ data?: any }>('hambaft.hambaft.api.invite_partner', { data })
+}
+
+export async function acceptPartnerInvite(data: {
+  invite_code?: string
+  invite_id?: string
+}) {
+  return call<{ data?: any }>('hambaft.hambaft.api.accept_partner_invite', { data })
+}
+
+export async function rejectPartnerInvite(data: {
+  invite_id?: string
+  invite_code?: string
+}) {
+  return call<{ data?: any }>('hambaft.hambaft.api.reject_partner_invite', { data })
+}
+
+export async function cancelPartnerInvite(inviteId: string) {
+  return call<{ data?: any }>('hambaft.hambaft.api.cancel_partner_invite', { invite_id: inviteId })
+}
+
+export async function getPartnerInvites() {
+  return callGet<{ data?: { sent?: PartnerInvite[]; received?: PartnerInvite[] } }>(
+    'hambaft.hambaft.api.get_partner_invites'
+  )
+}
+
+export async function getPartners() {
+  return callGet<{ data?: { partners?: PartnerConnection[] } }>(
+    'hambaft.hambaft.api.get_partners'
+  )
+}
+
+export async function removePartner(connectionId: string) {
+  return call<{ data?: any }>('hambaft.hambaft.api.remove_partner', { connection_id: connectionId })
+}
+
+export async function shareGoalWithPartner(data: {
+  goal_id: string
+  partner_email: string
+}) {
+  return call<{ data?: any }>('hambaft.hambaft.api.share_goal_with_partner', { data })
+}
+
+export async function getGoalMembers(goalId: string) {
+  return callGet<{ data?: { members?: GoalMember[] } }>(
+    `hambaft.hambaft.api.get_goal_members?goal_id=${encodeURIComponent(goalId)}`
+  )
+}
+
+export async function getSharedGoals() {
+  return callGet<{ data?: { shared_goals?: any[] } }>(
+    'hambaft.hambaft.api.get_shared_goals'
+  )
+}
+
+export async function removeGoalMember(data: { goal_id: string; member_email: string }) {
+  return call<{ data?: any }>('hambaft.hambaft.api.remove_goal_member', { data })
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// Phase 7: Comments & Reactions
+// ═══════════════════════════════════════════════════════════════
+
+export interface CommentItem {
+  id: string
+  user_info: PartnerInfo
+  body: string
+  created_at: string
+}
+
+export interface ReactionGroup {
+  emoji: string
+  count: number
+  users: PartnerInfo[]
+  my_reaction: boolean
+}
+
+export async function addComment(data: {
+  entity_type: string
+  entity: string
+  body: string
+}) {
+  return call<{ data?: any }>('hambaft.hambaft.api.add_comment', { data })
+}
+
+export async function getComments(entityType: string, entity: string) {
+  return callGet<{ data?: { comments?: CommentItem[] } }>(
+    `hambaft.hambaft.api.get_comments?entity_type=${encodeURIComponent(entityType)}&entity=${encodeURIComponent(entity)}`
+  )
+}
+
+export async function deleteComment(commentId: string) {
+  return call<{ data?: any }>('hambaft.hambaft.api.delete_comment', { comment_id: commentId })
+}
+
+export async function toggleReaction(data: {
+  entity_type: string
+  entity: string
+  emoji: string
+}) {
+  return call<{ data?: any }>('hambaft.hambaft.api.toggle_reaction', { data })
+}
+
+export async function getReactions(entityType: string, entity: string) {
+  return callGet<{ data?: { reactions?: ReactionGroup[] } }>(
+    `hambaft.hambaft.api.get_reactions?entity_type=${encodeURIComponent(entityType)}&entity=${encodeURIComponent(entity)}`
+  )
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// Phase 8: Proof Uploads (Photo/Video)
+// ═══════════════════════════════════════════════════════════════
+
+export interface ProofUpload {
+  id: string
+  user_info: PartnerInfo
+  media_type: 'photo' | 'video' | 'text'
+  file_url: string
+  caption: string
+  reflection: string
+  visibility: string
+  created_at: string
+  is_mine: boolean
+}
+
+export async function uploadProof(data: {
+  entity_type: string
+  entity: string
+  media_type?: 'photo' | 'video' | 'text'
+  filedata?: string
+  filename?: string
+  caption?: string
+  reflection?: string
+  visibility?: string
+}) {
+  return call<{ data?: any }>('hambaft.hambaft.api.upload_proof', { data })
+}
+
+export async function getProofs(entityType: string, entity: string) {
+  return callGet<{ data?: { proofs?: ProofUpload[] } }>(
+    `hambaft.hambaft.api.get_proofs?entity_type=${encodeURIComponent(entityType)}&entity=${encodeURIComponent(entity)}`
+  )
+}
+
+export async function deleteProof(proofId: string) {
+  return call<{ data?: any }>('hambaft.hambaft.api.delete_proof', { proof_id: proofId })
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// Phase 9: Gamification — Points, Levels, Badges
+// ═══════════════════════════════════════════════════════════════
+
+export interface GamificationProfileResponse {
+  total_points: number
+  level: number
+  points_to_next_level: number
+  current_streak_days: number
+  best_streak_days: number
+  badges: Array<{
+    id: string
+    badge_id: string
+    badge_name: string
+    badge_name_fa: string
+    icon: string
+    description: string
+    description_fa: string
+    rarity: string
+    points_awarded: number
+    earned_at: string
+  }>
+  recent_points: Array<{
+    id: string
+    points: number
+    reason: string
+    description: string
+    created_at: string
+  }>
+  stats: {
+    tasks_completed: number
+    proofs_uploaded: number
+    comments_posted: number
+  }
+}
+
+export interface AllBadgesResponse {
+  badges: Array<{
+    badge_id: string
+    badge_name: string
+    badge_name_fa: string
+    icon: string
+    description: string
+    description_fa: string
+    criteria_type: string
+    criteria_value: number
+    points_awarded: number
+    rarity: string
+    earned: boolean
+  }>
+  total: number
+  earned_count: number
+}
+
+export async function getGamificationProfile() {
+  return callGet<{ data?: GamificationProfileResponse }>(
+    'hambaft.hambaft.api.get_gamification_profile'
+  )
+}
+
+export async function getAllBadges() {
+  return callGet<{ data?: AllBadgesResponse }>(
+    'hambaft.hambaft.api.get_all_badges'
+  )
+}
+
+export async function getPointHistory(limit = 50, offset = 0) {
+  return callGet<{ data?: { transactions: any[]; total: number } }>(
+    `hambaft.hambaft.api.get_point_history?limit=${limit}&offset=${offset}`
+  )
+}
+
+export async function seedBadges() {
+  return call<{ data?: any }>('hambaft.hambaft.api.seed_badges', {})
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// Phase 10: Daily Challenges
+// ═══════════════════════════════════════════════════════════════
+
+export interface DailyChallenge {
+  id: string
+  template_id: string
+  title: string
+  title_fa: string
+  description: string
+  description_fa: string
+  icon: string
+  challenge_type: string
+  difficulty: 'easy' | 'medium' | 'hard'
+  category: string
+  status: 'فعال' | 'تکمیل‌شده' | 'منقضی‌شده'
+  progress: number
+  target_count: number
+  points_reward: number
+  completed_at: string | null
+}
+
+export interface ChallengeHistoryItem {
+  id: string
+  title: string
+  title_fa: string
+  icon: string
+  difficulty: string
+  status: string
+  progress: number
+  target_count: number
+  points_reward: number
+  challenge_date: string
+  completed_at: string | null
+}
+
+export async function getDailyChallenges() {
+  return callGet<{ data?: { challenges: DailyChallenge[]; date: string } }>(
+    'hambaft.hambaft.api.get_daily_challenges'
+  )
+}
+
+export async function getChallengeHistory(limit = 30, offset = 0) {
+  return callGet<{ data?: { challenges: ChallengeHistoryItem[] } }>(
+    `hambaft.hambaft.api.get_challenge_history?limit=${limit}&offset=${offset}`
+  )
+}
+
+export async function seedChallengeTemplates() {
+  return call<{ data?: any }>('hambaft.hambaft.api.seed_challenge_templates', {})
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// Phase 11: Notifications
+// ═══════════════════════════════════════════════════════════════
+
+export interface NotificationItem {
+  id: string
+  type: string
+  title: string
+  title_fa: string
+  body: string
+  body_fa: string
+  icon: string
+  entity_type: string
+  entity: string
+  read: number
+  created_at: string
+}
+
+export async function getNotifications(limit = 50, offset = 0, unreadOnly = false) {
+  const unreadParam = unreadOnly ? '&unread_only=1' : ''
+  return callGet<{ data?: { notifications: NotificationItem[]; unread_count: number } }>(
+    `hambaft.hambaft.api.get_notifications?limit=${limit}&offset=${offset}${unreadParam}`
+  )
+}
+
+export async function markNotificationRead(notificationId: string) {
+  return call<{ data?: any }>('hambaft.hambaft.api.mark_notification_read', { notification_id: notificationId })
+}
+
+export async function markAllNotificationsRead() {
+  return call<{ data?: any }>('hambaft.hambaft.api.mark_all_notifications_read', {})
+}
+
+export async function dismissNotification(notificationId: string) {
+  return call<{ data?: any }>('hambaft.hambaft.api.dismiss_notification', { notification_id: notificationId })
+}
+
+export async function getUnreadNotificationCount() {
+  return callGet<{ data?: { unread_count: number } }>(
+    'hambaft.hambaft.api.get_unread_notification_count'
+  )
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// Phase 12: Admin & Moderation — Reports, Blocks, Admin Panel
+// ═══════════════════════════════════════════════════════════════
+
+export async function blockUser(data: { blocked_user: string; reason?: string; notes?: string }) {
+  return call<{ data?: any }>('hambaft.hambaft.api.block_user', { data })
+}
+
+export async function unblockUser(blockedUser: string) {
+  return call<{ data?: any }>('hambaft.hambaft.api.unblock_user', { blocked_user: blockedUser })
+}
+
+export async function getBlockedUsers() {
+  return callGet<{ data?: { blocked_users: any[] } }>(
+    'hambaft.hambaft.api.get_blocked_users'
+  )
+}
+
+export async function checkUserBlocked(otherUser: string) {
+  return callGet<{ data?: { i_blocked_them: boolean; they_blocked_me: boolean; is_blocked: boolean } }>(
+    `hambaft.hambaft.api.check_user_blocked?other_user=${encodeURIComponent(otherUser)}`
+  )
+}
+
+export async function reportContent(data: {
+  reported_user: string; entity_type?: string; entity?: string; reason?: string; description?: string
+}) {
+  return call<{ data?: any }>('hambaft.hambaft.api.report_content', { data })
+}
+
+export async function getMyReports(limit = 50, offset = 0) {
+  return callGet<{ data?: { reports: any[] } }>(
+    `hambaft.hambaft.api.get_my_reports?limit=${limit}&offset=${offset}`
+  )
+}
+
+export async function adminGetReports(status?: string, limit = 50, offset = 0) {
+  const statusParam = status ? `&status=${encodeURIComponent(status)}` : ''
+  return callGet<{ data?: { reports: any[]; total: number; pending: number } }>(
+    `hambaft.hambaft.api.admin_get_reports?limit=${limit}&offset=${offset}${statusParam}`
+  )
+}
+
+export async function adminReviewReport(data: {
+  report_id: string; action: string; action_taken?: string; admin_notes?: string
+}) {
+  return call<{ data?: any }>('hambaft.hambaft.api.admin_review_report', { data })
+}
+
+export async function adminGetStats() {
+  return callGet<{ data?: Record<string, number> }>(
+    'hambaft.hambaft.api.admin_get_stats'
+  )
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// Completion: Push, Notification Settings, Nudge, Comparison,
+//            RLS, Enhanced Admin, More Challenges
+// ═══════════════════════════════════════════════════════════════
+
+// --- Notification Settings ---
+export async function getNotificationSettings() {
+  return callGet<{ data?: Record<string, number> }>(
+    'hambaft.hambaft.api.get_notification_settings'
+  )
+}
+
+export async function updateNotificationSettings(data: Record<string, number>) {
+  return call<{ data?: any }>('hambaft.hambaft.api.update_notification_settings', { data })
+}
+
+// --- Push Subscription ---
+export async function savePushSubscription(subscription: PushSubscriptionJSON) {
+  return call<{ data?: any }>('hambaft.hambaft.api.save_push_subscription', { ...subscription })
+}
+
+export async function removePushSubscription() {
+  return call<{ data?: any }>('hambaft.hambaft.api.remove_push_subscription', {})
+}
+
+// --- Nudge ---
+export interface NudgeTemplate {
+  index: number
+  icon: string
+  message_fa: string
+}
+
+export async function getNudgeTemplates() {
+  return callGet<{ data?: { templates: NudgeTemplate[] } }>(
+    'hambaft.hambaft.api.get_nudge_templates'
+  )
+}
+
+export async function sendNudge(data: { partner_email: string; message?: string; template_index?: number }) {
+  return call<{ data?: any }>('hambaft.hambaft.api.send_nudge', { data })
+}
+
+// --- Partner Comparison ---
+export interface PartnerComparison {
+  me: {
+    user_info: any
+    total_points: number
+    level: number
+    current_streak: number
+    best_streak: number
+    tasks_completed: number
+    tasks_this_week: number
+    proofs_uploaded: number
+    comments_posted: number
+    habits_active: number
+    goals_active: number
+    goals_completed: number
+    badges_earned: number
+    challenges_completed: number
+  }
+  partner: {
+    user_info: any
+    total_points: number
+    level: number
+    current_streak: number
+    best_streak: number
+    tasks_completed: number
+    tasks_this_week: number
+    proofs_uploaded: number
+    comments_posted: number
+    habits_active: number
+    goals_active: number
+    goals_completed: number
+    badges_earned: number
+    challenges_completed: number
+  }
+  comparison: Array<{
+    field: string
+    label: string
+    icon: string
+    me: number
+    partner: number
+    ahead: 'me' | 'partner' | 'tie'
+  }>
+}
+
+export async function getPartnerComparison(partnerEmail: string) {
+  return callGet<{ data?: PartnerComparison }>(
+    `hambaft.hambaft.api.get_partner_comparison?partner_email=${encodeURIComponent(partnerEmail)}`
+  )
+}
+
+// --- Enhanced Admin ---
+export async function adminGetUsers(limit = 50, offset = 0, search?: string) {
+  const searchParam = search ? `&search=${encodeURIComponent(search)}` : ''
+  return callGet<{ data?: { users: any[]; total: number } }>(
+    `hambaft.hambaft.api.admin_get_users?limit=${limit}&offset=${offset}${searchParam}`
+  )
+}
+
+export async function adminManageBadge(data: { action: string; badge_id?: string; [key: string]: any }) {
+  return call<{ data?: any }>('hambaft.hambaft.api.admin_manage_badge', { data })
+}
+
+export async function adminManageChallengeTemplate(data: { action: string; template_id?: string; [key: string]: any }) {
+  return call<{ data?: any }>('hambaft.hambaft.api.admin_manage_challenge_template', { data })
+}
+
+export async function adminAwardBadge(data: { user_email: string; badge_id: string }) {
+  return call<{ data?: any }>('hambaft.hambaft.api.admin_award_badge', { data })
+}
+
+export async function seedMoreChallenges() {
+  return call<{ data?: any }>('hambaft.hambaft.api.seed_more_challenges', {})
 }

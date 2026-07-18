@@ -1,0 +1,39 @@
+{
+  "actions": [],
+  "autoname": "format:GB-{#####}",
+  "creation": "2025-01-01 00:00:00",
+  "doctype": "DocType",
+  "engine": "InnoDB",
+  "field_order": [
+    "user", "goal", "title", "cover_file", "sort_order", "column_break_1",
+    "pin_count", "section_count", "is_auto_created"
+  ],
+  "fields": [
+    {"fieldname": "user", "fieldtype": "Link", "options": "User", "required": 1, "in_list_view": 1, "in_standard_filter": 1},
+    {"fieldname": "goal", "fieldtype": "Link", "options": "Goal", "in_list_view": 1, "in_standard_filter": 1, "description": "Goal this board represents. One board per goal."},
+    {"fieldname": "title", "fieldtype": "Data", "required": 1, "in_list_view": 1},
+    {"fieldname": "cover_file", "fieldtype": "Link", "options": "File", "description": "Cover image for the board"},
+    {"fieldname": "sort_order", "fieldtype": "Int", "default": "0"},
+    {"fieldname": "column_break_1", "fieldtype": "Column Break"},
+    {"fieldname": "pin_count", "fieldtype": "Int", "default": "0", "read_only": 1, "description": "Cached total pin count"},
+    {"fieldname": "section_count", "fieldtype": "Int", "default": "0", "read_only": 1},
+    {"fieldname": "is_auto_created", "fieldtype": "Check", "default": "0", "description": "Auto-created from goal sync"}
+  ],
+  "index_web_pages_for_search": 0,
+  "is_submittable": 0,
+  "issingle": 0,
+  "istable": 0,
+  "links": [],
+  "modified": "2025-01-01 00:00:00",
+  "module": "Hambaft",
+  "name": "Hambaft Gallery Board",
+  "naming_rule": "Expression (old style)",
+  "owner": "Administrator",
+  "permissions": [
+    {"create": 1, "delete": 1, "email": 0, "export": 0, "print": 0, "read": 1, "report": 0, "role": "All", "share": 0, "write": 1}
+  ],
+  "sort_field": "sort_order",
+  "sort_order": "ASC",
+  "states": [],
+  "title_field": "title"
+}

@@ -1,7 +1,7 @@
 import type { LifeData, Task } from '../legacy/types'
 import type { ScheduleItem } from '../legacy/components/CalendarSection'
 
-import { DEFAULT_CATEGORIES, TODAY_DATE } from '../legacy/initialData'
+import { DEFAULT_CATEGORIES } from '../legacy/initialData'
 
 export function createEmptyLifeData(): LifeData {
   return {
@@ -35,7 +35,7 @@ export function createEmptyLifeData(): LifeData {
     mealLogs: [],
     dietSetting: {
       type: 'none',
-      startDate: TODAY_DATE,
+      startDate: new Date().toISOString().slice(0, 10),
     },
     workoutLogs: [],
     bodyMeasurementLogs: [],

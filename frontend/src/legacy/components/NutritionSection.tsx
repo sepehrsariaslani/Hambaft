@@ -175,7 +175,7 @@ export default function NutritionSection({
     bmiDesc = 'وزن شما در محدوده بسیار ایده‌آل و سالم قرار دارد. همین توازن را حفظ کنید!';
   } else if (bmiVal < 30) {
     bmiCategoryName = 'اضافه وزن (Overweight)';
-    bmiColor = 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800/30';
+    bmiColor = 'text-[#9B6B61] dark:text-[#C59B93] bg-[#F9F1D8] dark:bg-[#201D13] border-[#EBE3C8] dark:border-[#3D3929]';
     bmiDesc = 'کمی اضافه وزن دارید. کاهش ملایم کالری دریافتی و افزایش فعالیت ورزشی پیشنهاد می‌شود.';
   } else {
     bmiCategoryName = 'چاقی مفرط (Obese)';
@@ -339,7 +339,7 @@ export default function NutritionSection({
         <div className="bg-white/10 backdrop-blur-md p-4 rounded-2xl flex gap-6 text-center text-xs">
           <div>
             <div className="text-white/60 font-semibold mb-1">کالری امروز</div>
-            <div className="font-mono font-black text-lg text-amber-200">
+            <div className="font-mono font-black text-lg text-[#C59B93]">
               {toPersianDigits(totalDayCalories)} <span className="text-[10px] font-normal text-white">kcal</span>
             </div>
           </div>
@@ -460,7 +460,7 @@ export default function NutritionSection({
                         className={`flex-1 h-7 rounded-lg transition-all duration-300 flex items-center justify-center ${
                           i < totalWaterGlasses 
                             ? 'bg-sky-500 text-white shadow-sm scale-105' 
-                            : 'bg-gray-100 dark:bg-gray-800 text-gray-400'
+                            : 'bg-[#E6DFD3]/40 dark:bg-[#3D4133] text-[#8D7F72]'
                         }`}
                       >
                         <span className="text-[9px]">💧</span>
@@ -491,7 +491,7 @@ export default function NutritionSection({
                         cx="72"
                         cy="72"
                         r="60"
-                        className="stroke-[#E6DFD3] dark:stroke-gray-800 fill-transparent"
+                        className="stroke-[#E6DFD3] dark:stroke-[#3D4133] fill-transparent"
                         strokeWidth="10"
                       />
                       <circle
@@ -507,7 +507,7 @@ export default function NutritionSection({
                     </svg>
                     {/* Inner content */}
                     <div className="text-center space-y-1 z-10">
-                      <Flame className="w-5 h-5 text-amber-600 mx-auto animate-pulse" />
+                      <Flame className="w-5 h-5 text-[#9B6B61] mx-auto animate-pulse" />
                       <div className="text-2xl font-black font-mono text-[#2D3025] dark:text-[#E8ECE0]">
                         {toPersianDigits(totalDayCalories)}
                       </div>
@@ -532,7 +532,7 @@ export default function NutritionSection({
                         {toPersianDigits(totalDayProtein)} / {toPersianDigits(macroTargets.protein)} گرم
                       </span>
                     </div>
-                    <div className="w-full h-2 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+                    <div className="w-full h-2 bg-[#E6DFD3]/40 dark:bg-[#3D4133] rounded-full overflow-hidden">
                       <div 
                         className="h-full bg-emerald-600 dark:bg-emerald-500 rounded-full transition-all duration-500" 
                         style={{ width: `${Math.min(100, (totalDayProtein / macroTargets.protein) * 100)}%` }}
@@ -544,13 +544,13 @@ export default function NutritionSection({
                   <div className="space-y-1">
                     <div className="flex justify-between text-xs font-bold">
                       <span className="text-[#8D7F72] dark:text-[#9D978B]">🌾 کربوهیدرات (منبع انرژی اصلی)</span>
-                      <span className="font-mono text-[#7C8363] dark:text-amber-500">
+                      <span className="font-mono text-[#7C8363] dark:text-[#C59B93]">
                         {toPersianDigits(totalDayCarbs)} / {toPersianDigits(macroTargets.carbs)} گرم
                       </span>
                     </div>
-                    <div className="w-full h-2 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+                    <div className="w-full h-2 bg-[#E6DFD3]/40 dark:bg-[#3D4133] rounded-full overflow-hidden">
                       <div 
-                        className="h-full bg-amber-500 rounded-full transition-all duration-500" 
+                        className="h-full bg-[#9B6B61] rounded-full transition-all duration-500" 
                         style={{ width: `${Math.min(100, (totalDayCarbs / macroTargets.carbs) * 100)}%` }}
                       ></div>
                     </div>
@@ -564,7 +564,7 @@ export default function NutritionSection({
                         {toPersianDigits(totalDayFat)} / {toPersianDigits(macroTargets.fat)} گرم
                       </span>
                     </div>
-                    <div className="w-full h-2 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+                    <div className="w-full h-2 bg-[#E6DFD3]/40 dark:bg-[#3D4133] rounded-full overflow-hidden">
                       <div 
                         className="h-full bg-rose-500 rounded-full transition-all duration-500" 
                         style={{ width: `${Math.min(100, (totalDayFat / macroTargets.fat) * 100)}%` }}
@@ -752,7 +752,7 @@ export default function NutritionSection({
                         // Badge Styles depending on meal type
                         const getMealBadge = (type: string) => {
                           switch (type) {
-                            case 'breakfast': return { label: 'صبحانه 🍳', color: 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300' };
+                            case 'breakfast': return { label: 'صبحانه 🍳', color: 'bg-[#F9F1D8] text-[#5A5A40] dark:bg-[#201D13] dark:text-[#C59B93]' };
                             case 'lunch': return { label: 'ناهار 🍛', color: 'bg-sky-100 text-sky-800 dark:bg-sky-950/40 dark:text-sky-300' };
                             case 'dinner': return { label: 'شام 🍲', color: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-300' };
                             default: return { label: 'میان‌وعده 🍎', color: 'bg-purple-100 text-purple-800 dark:bg-purple-950/40 dark:text-purple-300' };
@@ -790,7 +790,7 @@ export default function NutritionSection({
 
                             <div className="flex md:flex-col items-end justify-between w-full md:w-auto border-t md:border-t-0 pt-2.5 md:pt-0 border-[#E6DFD3]/40 gap-2">
                               <div className="text-left font-mono">
-                                <span className="text-sm font-black text-amber-600 dark:text-amber-400">{toPersianDigits(log.calories)}</span>
+                                <span className="text-sm font-black text-[#9B6B61] dark:text-[#C59B93]">{toPersianDigits(log.calories)}</span>
                                 <span className="text-[9px] text-[#8D7F72] mr-0.5">kcal</span>
                               </div>
                               <button
@@ -805,7 +805,7 @@ export default function NutritionSection({
                         );
                       })
                     ) : (
-                      <div className="py-12 text-center text-gray-400 space-y-2">
+                      <div className="py-12 text-center text-[#8D7F72] space-y-2">
                         <span className="text-4xl block">🥗</span>
                         <p className="text-xs font-semibold">هیچ وعده یا میان‌وعده‌ای برای امروز ثبت نشده است.</p>
                         <p className="text-[10px]">برای پایش کالری و اهداف خود اولین وعده را اضافه کنید.</p>
@@ -815,8 +815,8 @@ export default function NutritionSection({
                 </div>
 
                 {/* Daily Tip Widget */}
-                <div className="mt-6 bg-amber-50/60 dark:bg-amber-950/10 p-3.5 rounded-2xl border border-amber-200/50 dark:border-amber-900/30 flex gap-2 text-amber-800 dark:text-amber-300">
-                  <Sparkles className="w-5 h-5 shrink-0 text-amber-600 mt-0.5" />
+                <div className="mt-6 bg-[#F9F1D8]/60 dark:bg-[#201D13]/10 p-3.5 rounded-2xl border border-[#EBE3C8]/50 dark:border-[#3D3929] flex gap-2 text-[#5A5A40] dark:text-[#C59B93]">
+                  <Sparkles className="w-5 h-5 shrink-0 text-[#9B6B61] mt-0.5" />
                   <div className="text-[10px] leading-relaxed">
                     <span className="font-black block text-xs mb-0.5">نکته تغذیه طلایی:</span>
                     پروتئین بالا به شما کمک می‌کند در طی رژیم کاهش وزن توده عضلانی خود را حفظ کنید و سوخت‌وساز بالاتری داشته باشید. نوشیدن آب کافی نیز سرعت هضم مواد مغذی را بهبود می‌بخشد.
@@ -952,7 +952,7 @@ export default function NutritionSection({
                     <button 
                       type="button" 
                       onClick={() => setIsEditingDiet(false)}
-                      className="px-4 py-2 border border-[#D6CFC3] text-[#8D7F72] text-[11px] font-bold rounded-xl hover:bg-gray-50 cursor-pointer"
+                      className="px-4 py-2 border border-[#D6CFC3] text-[#8D7F72] text-[11px] font-bold rounded-xl hover:bg-[#F9F6EE] cursor-pointer"
                     >
                       انصراف
                     </button>
@@ -978,7 +978,7 @@ export default function NutritionSection({
                   </div>
                   <div className="p-4 bg-[#F9F6EE] dark:bg-[#242721] rounded-2xl border border-[#E6DFD3] dark:border-[#3D4133]/40 text-center space-y-1.5 transition-colors">
                     <span className="text-[10px] text-[#8D7F72] dark:text-[#9D978B] font-bold block">هدف کالری روزانه</span>
-                    <span className="text-sm font-black font-mono text-amber-600 dark:text-amber-400">
+                    <span className="text-sm font-black font-mono text-[#9B6B61] dark:text-[#C59B93]">
                       {toPersianDigits(targetCalories)} <span className="text-[10px] font-normal text-[#8D7F72]">kcal</span>
                     </span>
                   </div>
@@ -1058,7 +1058,7 @@ export default function NutritionSection({
                     </div>
 
                     <div className="flex gap-3 items-start">
-                      <span className="w-5 h-5 rounded-full bg-amber-100 text-amber-800 text-[10px] flex items-center justify-center font-bold">۲</span>
+                      <span className="w-5 h-5 rounded-full bg-[#F9F1D8] text-[#5A5A40] text-[10px] flex items-center justify-center font-bold">۲</span>
                       <div className="space-y-0.5">
                         <span className="text-[11px] font-extrabold text-[#2D3025] dark:text-[#E8ECE0] block">مرحله دوم (ساعات ۸ الی ۱۲): شروع چربی‌سوزی خفیف</span>
                         <p className="text-[10px] text-[#8D7F72] dark:text-[#9D978B] font-semibold leading-relaxed">گلوکزهای کبد تخلیه شده و کتون‌ها به آرامی آزاد می‌شوند. بدن شروع به سوزاندن بافت‌های انباشته چربی به عنوان سوخت اول می‌کند.</p>
@@ -1164,7 +1164,7 @@ export default function NutritionSection({
                   <div className="p-4 bg-[#F9F6EE] dark:bg-[#242721] rounded-2xl border border-[#E6DFD3] dark:border-[#3D4133]/40 flex justify-between items-center transition-colors">
                     <div className="space-y-1">
                       <span className="text-[10px] text-[#8D7F72] dark:text-[#9D978B] font-bold block">وزن هدف نهایی</span>
-                      <span className="text-lg font-black font-mono text-amber-600 dark:text-amber-400">
+                      <span className="text-lg font-black font-mono text-[#9B6B61] dark:text-[#C59B93]">
                         {toPersianDigits(weightGoal.metric?.targetValue || 0)} <span className="text-xs font-normal text-[#8D7F72]">kg</span>
                       </span>
                     </div>
@@ -1512,9 +1512,9 @@ export default function NutritionSection({
                     {toPersianDigits(avgProt)} <span className="text-xs font-normal">گرم</span>
                   </span>
                 </div>
-                <div className="p-4 bg-amber-50 dark:bg-amber-950/20 rounded-2xl border border-amber-100 dark:border-amber-900/30 text-center space-y-1">
+                <div className="p-4 bg-[#F9F1D8] dark:bg-[#201D13] rounded-2xl border border-[#EBE3C8] dark:border-[#3D3929] text-center space-y-1">
                   <span className="text-[10px] text-[#8D7F72] dark:text-[#9D978B] font-bold block">میانگین کربوهیدرات روزانه</span>
-                  <span className="text-lg font-black font-mono text-amber-700 dark:text-amber-400">
+                  <span className="text-lg font-black font-mono text-[#5A5A40] dark:text-[#C59B93]">
                     {toPersianDigits(avgCarb)} <span className="text-xs font-normal">گرم</span>
                   </span>
                 </div>

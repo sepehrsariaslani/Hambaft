@@ -1,0 +1,135 @@
+{
+ "name": "Hambaft Report",
+ "creation": "2026-01-01 00:00:00",
+ "modified": "2026-01-01 00:00:00",
+ "modified_by": "Administrator",
+ "owner": "Administrator",
+ "docstatus": 0,
+ "module": "Hambaft",
+ "autoname": "format:RPT-{#####}",
+ "fields": [
+  {
+   "fieldname": "reporter",
+   "fieldtype": "Link",
+   "label": "گزارش‌دهنده",
+   "options": "User",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "reported_user",
+   "fieldtype": "Link",
+   "label": "کاربر گزارش‌شده",
+   "options": "User",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "entity_section",
+   "fieldtype": "Section Break",
+   "label": "موجودیت گزارش‌شده"
+  },
+  {
+   "fieldname": "entity_type",
+   "fieldtype": "Select",
+   "label": "نوع موجودیت",
+   "options": "comment\nproof\nreaction\nuser\nother",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "entity",
+   "fieldtype": "Data",
+   "label": "موجودیت",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "reason_section",
+   "fieldtype": "Section Break",
+   "label": "دلیل گزارش"
+  },
+  {
+   "fieldname": "reason",
+   "fieldtype": "Select",
+   "label": "دلیل",
+   "options": "spam\nharassment\ninappropriate_content\nmisinformation\nother",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "label": "توضیحات"
+  },
+  {
+   "fieldname": "status_section",
+   "fieldtype": "Section Break",
+   "label": "وضعیت رسیدگی"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "وضعیت",
+   "options": "در_انتظار\nدر_حال_بررسی\nتأییدشده\nردشده\nبسته‌شده",
+   "default": "در_انتظار",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "reviewed_by",
+   "fieldtype": "Link",
+   "label": "بررسی‌کننده",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "reviewed_at",
+   "fieldtype": "Datetime",
+   "label": "تاریخ بررسی",
+   "read_only": 1
+  },
+  {
+   "fieldname": "admin_notes",
+   "fieldtype": "Small Text",
+   "label": "یادداشت مدیر"
+  },
+  {
+   "fieldname": "action_taken",
+   "fieldtype": "Select",
+   "label": "اقدام انجام‌شده",
+   "options": "\nهیچ\nهشدار\nحذف_محتوا\nمسدود_کاربر",
+   "default": ""
+  },
+  {
+   "fieldname": "created_at",
+   "fieldtype": "Datetime",
+   "label": "تاریخ ایجاد",
+   "read_only": 1,
+   "in_list_view": 1
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1
+  },
+  {
+   "role": "Hambaft User",
+   "read": 1,
+   "write": 0,
+   "create": 1,
+   "delete": 0
+  }
+ ],
+ "doctype": "DocType",
+ "custom": 0,
+ "istable": 0,
+ "issingle": 0
+}

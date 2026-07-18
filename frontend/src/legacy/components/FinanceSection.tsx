@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Transaction, Subscription, CategoryDef, BudgetSettings, BankAccount, RecurringTransaction, Debt, AssetInvestment, Document, Installment } from '../types';
-import { CATEGORY_LABELS, TODAY_DATE } from '../initialData';
+import { CATEGORY_LABELS } from '../initialData';
+import LinkedContacts from './LinkedContacts';
 import PersianDatePicker from './PersianDatePicker';
 import FinanceCategoryDashboard from './FinanceCategoryDashboard';
 import {
@@ -105,6 +106,8 @@ interface FinanceSectionProps {
     bankAccountId?: string;
     iconName?: string;
   }>) => void;
+  contacts?: { id: string; name: string; photoUrl?: string; category?: string }[];
+  onNavigateContact?: (contactId: string) => void;
 }
 
 type FinanceTab = 'records' | 'accounts' | 'subscriptions' | 'budget' | 'report' | 'categories' | 'debts' | 'assets';
@@ -166,19 +169,19 @@ function InstallmentDraftPayCard({ inst, bankAccounts, getNextMonthDate, onPayIn
   };
 
   return (
-    <div className="p-4 rounded-xl border border-amber-200 bg-white space-y-3 shadow-xs">
+    <div className="p-4 rounded-2xl border border-[#E6DFD3] dark:border-[#3D4133] bg-[#FDFBF7] dark:bg-[#1B1D16] space-y-3 shadow-xs transition-colors">
       <div className="flex justify-between items-start">
         <div>
           <h4 className="font-bold text-xs text-[#2D3025]">{inst.title}</h4>
-          <span className="text-[9px] text-amber-700 font-bold block mt-0.5">سررسید قسط {inst.paidMonths + 1} از {inst.totalMonths}: {dueDate}</span>
+          <span className="text-[9px] text-[#9B6B61] dark:text-[#C59B93] font-bold block mt-0.5">سررسید قسط {inst.paidMonths + 1} از {inst.totalMonths}: {dueDate}</span>
         </div>
         <span className="text-xs font-black text-[#9B6B61] font-mono">{inst.installmentAmount.toLocaleString('fa-IR')} تومان</span>
       </div>
 
-      <div className="space-y-1.5 pt-1 border-t border-gray-100">
+      <div className="space-y-1.5 pt-1 border-t border-[#E6DFD3]/40 dark:border-[#3D4133]/40">
         <label className="text-[9px] font-bold text-[#8D7F72] block">پرداخت از حساب / کارت:</label>
         <select value={payBankId} onChange={e => setPayBankId(e.target.value)}
-          className="w-full px-2.5 py-1.5 rounded-lg border border-gray-200 text-[10px] font-bold focus:outline-none bg-white">
+          className="w-full px-2.5 py-1.5 rounded-lg border border-[#E6DFD3] dark:border-[#3D4133] text-[10px] font-bold focus:outline-none bg-[#FDFBF7] dark:bg-[#1B1D16]">
           {bankAccounts.map(b => (
             <option key={b.id} value={b.id}>
               {b.bankName} ({b.accountName}) — {b.isCredit ? 'اعتبار:' : 'موجودی:'} {b.balance.toLocaleString('fa-IR')} تومان
@@ -212,7 +215,9 @@ export default function FinanceSection({
   onDeleteInstallment,
   onPayInstallment,
   initialQuickTemplates,
-  onQuickTemplatesChange
+  onQuickTemplatesChange,
+  contacts = [],
+  onNavigateContact,
 }: FinanceSectionProps) {
 
   // ── Tab ──────────────────────────────────────────────────────────────────
@@ -833,7 +838,7 @@ export default function FinanceSection({
 
   // ═════════════════════════════════════════════════════════════════════════
   return (
-    <div className="space-y-6 text-right" dir="rtl">
+    <div className="space-y-5 text-right pb-8" dir="rtl">
 
       {/* ── Tab bar ─────────────────────────────────────────────────────── */}
       <div className="bg-[#E6DFD3]/40 p-1 rounded-xl border border-[#E6DFD3] flex gap-1 w-full overflow-x-auto whitespace-nowrap scrollbar-none">
@@ -852,7 +857,7 @@ export default function FinanceSection({
               financeTab===tab.id ? 'bg-[#2D3025] text-white shadow-xs' : 'text-[#8D7F72] hover:text-[#2D3025]'
             }`}>
             {tab.id==='budget' && budgetDirty && (
-              <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-amber-400" />
+              <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-[#E26645]" />
             )}
             {tab.label}
           </button>
@@ -902,7 +907,7 @@ export default function FinanceSection({
           <div className="bg-[#FDFBF7] p-4 rounded-2xl border border-[#E6DFD3] space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-bold text-[#2D3025] flex items-center gap-1.5 font-serif-elegant">
-                <Zap className="w-4 h-4 text-amber-500 fill-amber-400 animate-pulse" />
+                <Zap className="w-4 h-4 text-[#E26645] fill-[#9B6B61] animate-pulse" />
                 <span>الگوهای ثبت سریع (کلیک برای ثبت فوری تراکنش)</span>
               </h3>
               <button type="button" onClick={() => setShowTemplateForm(p => !p)}
@@ -932,7 +937,7 @@ export default function FinanceSection({
                         element.scrollIntoView({ behavior: 'smooth', block: 'center' });
                       }
                     }}
-                    className="inline-flex items-center gap-2 px-3.5 py-2 bg-white hover:bg-[#F9F6EE] border border-[#E6DFD3] hover:border-[#7C8363] rounded-2xl shadow-2xs transition-all cursor-pointer text-xs font-bold text-[#2D3025] group shrink-0">
+                    className="inline-flex items-center gap-2 px-3.5 py-2 bg-[#FDFBF7] dark:bg-[#1B1D16] hover:bg-[#F9F6EE] border border-[#E6DFD3] hover:border-[#7C8363] rounded-2xl shadow-2xs transition-all cursor-pointer text-xs font-bold text-[#2D3025] group shrink-0">
                     <span className="text-sm flex items-center justify-center">
                       {qt.iconName ? (() => {
                         let FoundIcon: React.ComponentType<any> = Wallet;
@@ -946,7 +951,7 @@ export default function FinanceSection({
                       })() : (catObj?.icon || '💰')}
                     </span>
                     <div className="text-right">
-                      <span className="block text-[10px] text-gray-800 font-black">{qt.title}</span>
+                      <span className="block text-[10px] text-[#2D3025] dark:text-[#E8ECE0] font-black">{qt.title}</span>
                       <span className="block text-[9px] text-[#8D7F72] mt-0.5 font-bold font-mono">
                         {qt.amount.toLocaleString('fa-IR')} تومان
                       </span>
@@ -958,7 +963,7 @@ export default function FinanceSection({
                         const filtered = quickTemplates.filter(q => q.id !== qt.id);
                         setQuickTemplates(filtered);
                       }} title="حذف این الگو"
-                        className="mr-1.5 text-gray-400 hover:text-red-500 transition-colors p-1 rounded-lg hover:bg-gray-100">
+                        className="mr-1.5 text-[#9D978B] dark:text-[#7C8363] hover:text-red-500 transition-colors p-1 rounded-lg hover:bg-[#F9F6EE] dark:bg-[#1B1D16]">
                         <X className="w-3 h-3" />
                       </span>
                     )}
@@ -977,7 +982,7 @@ export default function FinanceSection({
                       <div className="space-y-1">
                         <label className="text-[9px] font-bold text-[#8D7F72]">نام الگو (عنوان دکمه)</label>
                         <input type="text" placeholder="مثال: خرید نان بربری" value={newTemplateTitle} onChange={e => setNewTemplateTitle(e.target.value)} required
-                          className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-bold focus:outline-none bg-white" />
+                          className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-bold focus:outline-none bg-[#FDFBF7] dark:bg-[#1B1D16]" />
                       </div>
 
                       <div className="space-y-1">
@@ -989,7 +994,7 @@ export default function FinanceSection({
                               const cats = categories.filter(c => c.type === t);
                               if (cats.length > 0) setNewTemplateCat(cats[0].id);
                             }}
-                              className={`flex-1 py-1 text-[9px] font-bold rounded-md transition-all cursor-pointer ${newTemplateType === t ? 'bg-white text-[#2D3025] shadow-xs' : 'text-[#8D7F72]'}`}>
+                              className={`flex-1 py-1 text-[9px] font-bold rounded-md transition-all cursor-pointer ${newTemplateType === t ? 'bg-[#FDFBF7] dark:bg-[#1B1D16] text-[#2D3025] shadow-xs' : 'text-[#8D7F72]'}`}>
                               {t === 'expense' ? 'هزینه' : 'درآمد'}
                             </button>
                           ))}
@@ -999,7 +1004,7 @@ export default function FinanceSection({
                       <div className="space-y-1">
                         <label className="text-[9px] font-bold text-[#8D7F72]">مبلغ (تومان)</label>
                         <MoneyInput value={newTemplateAmt} onChange={setNewTemplateAmt} placeholder="مثال: ۱۵۰۰۰" required
-                          className="py-2 rounded-xl border border-[#D6CFC3] text-xs focus:outline-none bg-white" />
+                          className="py-2 rounded-xl border border-[#D6CFC3] text-xs focus:outline-none bg-[#FDFBF7] dark:bg-[#1B1D16]" />
                       </div>
 
                       <div className="space-y-1">
@@ -1009,7 +1014,7 @@ export default function FinanceSection({
                           const cat = categories.find(c => c.id === e.target.value);
                           setNewTemplateSub(cat?.subcategories[0] || '');
                         }}
-                          className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-semibold focus:outline-none bg-white">
+                          className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-semibold focus:outline-none bg-[#FDFBF7] dark:bg-[#1B1D16]">
                           {categories.filter(c => c.type === newTemplateType).map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
                         </select>
                       </div>
@@ -1017,7 +1022,7 @@ export default function FinanceSection({
                       <div className="space-y-1">
                         <label className="text-[9px] font-bold text-[#8D7F72]">توضیحات پیش‌فرض (اختیاری)</label>
                         <input type="text" placeholder="مثال: خرید بربری هفتگی" value={newTemplateDesc} onChange={e => setNewTemplateDesc(e.target.value)}
-                          className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-semibold focus:outline-none bg-white" />
+                          className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-semibold focus:outline-none bg-[#FDFBF7] dark:bg-[#1B1D16]" />
                       </div>
 
                       <div className="space-y-1">
@@ -1035,7 +1040,7 @@ export default function FinanceSection({
                           })()}
                         </label>
                         <select value={newTemplateIcon} onChange={e => setNewTemplateIcon(e.target.value)}
-                          className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-semibold focus:outline-none bg-white">
+                          className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-semibold focus:outline-none bg-[#FDFBF7] dark:bg-[#1B1D16]">
                           <option value="">-- پیش‌فرض دسته‌بندی --</option>
                           {Object.entries(ICON_LIBRARIES).map(([libName, icons]) => (
                             <optgroup key={libName} label={libName}>
@@ -1051,7 +1056,7 @@ export default function FinanceSection({
                         <div className="space-y-1 sm:col-span-3">
                           <label className="text-[9px] font-bold text-[#8D7F72]">کارت یا حساب بانکی (اختیاری)</label>
                           <select value={newTemplateBank} onChange={e => setNewTemplateBank(e.target.value)}
-                            className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-semibold focus:outline-none bg-white">
+                            className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-semibold focus:outline-none bg-[#FDFBF7] dark:bg-[#1B1D16]">
                             <option value="">-- نقدی/آفلاین --</option>
                             {bankAccounts.map(b => (
                               <option key={b.id} value={b.id}>{b.bankName} ({b.accountName})</option>
@@ -1186,7 +1191,7 @@ export default function FinanceSection({
                                   <span>حساب بانکی مبدأ (برداشت وجه)</span>
                                 </label>
                                 <select value={bankAccountId} onChange={e=>setBankAccountId(e.target.value)} required
-                                  className="w-full px-3 py-2 rounded-xl border border-[#A9CCE3] text-xs font-semibold focus:outline-none bg-white">
+                                  className="w-full px-3 py-2 rounded-xl border border-[#A9CCE3] text-xs font-semibold focus:outline-none bg-[#FDFBF7] dark:bg-[#1B1D16]">
                                   <option value="">-- انتخاب حساب مبدأ --</option>
                                   {bankAccounts.map(b=>(
                                     <option key={b.id} value={b.id}>
@@ -1200,7 +1205,7 @@ export default function FinanceSection({
                                   <span>حساب بانکی مقصد (واریز وجه)</span>
                                 </label>
                                 <select value={toBankAccountId} onChange={e=>setToBankAccountId(e.target.value)} required
-                                  className="w-full px-3 py-2 rounded-xl border border-[#A9CCE3] text-xs font-semibold focus:outline-none bg-white">
+                                  className="w-full px-3 py-2 rounded-xl border border-[#A9CCE3] text-xs font-semibold focus:outline-none bg-[#FDFBF7] dark:bg-[#1B1D16]">
                                   <option value="">-- انتخاب حساب مقصد --</option>
                                   {bankAccounts.map(b=>(
                                     <option key={b.id} value={b.id}>
@@ -1234,7 +1239,7 @@ export default function FinanceSection({
                               const selectedAcc = bankAccounts.find(b => b.id === bankAccountId);
                               if (selectedAcc?.isCredit && type === 'expense') {
                                 return (
-                                  <div className="bg-amber-50/70 border border-amber-200/60 p-3 rounded-xl text-[11px] text-amber-800 dark:bg-amber-950/20 dark:border-amber-900/30 dark:text-amber-300 mt-2 flex items-center gap-2">
+                                  <div className="bg-[#FDFBF7] dark:bg-[#1B1D16]/70 border border-[#E6DFD3] dark:border-[#3D4133]/60 p-3 rounded-xl text-[11px] text-[#2D3025] dark:text-[#E8ECE0] dark:bg-[#F9F1D8] dark:bg-[#201D13]/20 dark:border-[#E6DFD3] dark:border-[#3D4133]/30 dark:text-[#8D7F72] dark:text-[#9D978B] mt-2 flex items-center gap-2">
                                     <span className="text-sm">💳</span>
                                     <span>این تراکنش به عنوان <strong>خرید اعتباری</strong> ثبت خواهد شد. بدهی کارت افزایش و اعتبار باقیمانده آن کاهش می‌یابد.</span>
                                   </div>
@@ -1273,7 +1278,7 @@ export default function FinanceSection({
                                   <select 
                                     value={txAssetType} 
                                     onChange={e => setTxAssetType(e.target.value as any)}
-                                    className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-semibold focus:outline-none bg-white text-right"
+                                    className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-semibold focus:outline-none bg-[#FDFBF7] dark:bg-[#1B1D16] text-right"
                                   >
                                     <option value="crypto">🪙 ارز دیجیتال (Crypto)</option>
                                     <option value="gold">✨ طلا، سکه و فلزات گرانبها</option>
@@ -1292,7 +1297,7 @@ export default function FinanceSection({
                                     onChange={e => setTxAssetName(e.target.value)} 
                                     placeholder="نام دارایی" 
                                     required={isAssetPurchase}
-                                    className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-bold focus:outline-none bg-white text-right" 
+                                    className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-bold focus:outline-none bg-[#FDFBF7] dark:bg-[#1B1D16] text-right" 
                                   />
                                 </div>
 
@@ -1304,7 +1309,7 @@ export default function FinanceSection({
                                     onChange={e => setTxAssetSymbol(e.target.value)} 
                                     placeholder="نماد اختصاری" 
                                     required={isAssetPurchase}
-                                    className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-bold focus:outline-none bg-white text-right" 
+                                    className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-bold focus:outline-none bg-[#FDFBF7] dark:bg-[#1B1D16] text-right" 
                                   />
                                 </div>
 
@@ -1317,7 +1322,7 @@ export default function FinanceSection({
                                     onChange={e => setTxAssetAmount(e.target.value)} 
                                     placeholder="مثلاً ۱.۵ یا ۱۰" 
                                     required={isAssetPurchase}
-                                    className="w-full text-left px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-bold focus:outline-none bg-white" 
+                                    className="w-full text-left px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-bold focus:outline-none bg-[#FDFBF7] dark:bg-[#1B1D16]" 
                                   />
                                 </div>
 
@@ -1327,7 +1332,7 @@ export default function FinanceSection({
                                     value={txAssetMarketPrice}
                                     onChange={setTxAssetMarketPrice}
                                     placeholder="در صورت خالی بودن، برابر با میانگین قیمت خرید در نظر گرفته می‌شود"
-                                    className="py-2 rounded-xl border border-[#D6CFC3] text-xs focus:border-[#7C8363] bg-white"
+                                    className="py-2 rounded-xl border border-[#D6CFC3] text-xs focus:border-[#7C8363] bg-[#FDFBF7] dark:bg-[#1B1D16]"
                                   />
                                 </div>
                               </div>
@@ -1384,7 +1389,7 @@ export default function FinanceSection({
                           el.scrollIntoView({ behavior: 'smooth', block: 'center' });
                         }
                       }}
-                      className="flex items-center gap-1.5 text-right w-full hover:bg-gray-100 p-1 rounded-lg transition-colors cursor-pointer">
+                      className="flex items-center gap-1.5 text-right w-full hover:bg-[#F9F6EE] dark:bg-[#1B1D16] p-1 rounded-lg transition-colors cursor-pointer">
                       <div className="w-2.5 h-2.5 rounded-sm shrink-0" style={{backgroundColor:COLORS[i%COLORS.length]}} />
                       <span className="truncate flex-1">{item.name}: {Math.round((item.value/totalExpense)*100)}%</span>
                     </button>
@@ -1454,7 +1459,7 @@ export default function FinanceSection({
             {/* Mobile list */}
             <div className="block sm:hidden space-y-2">
               {paginatedTx.length>0 ? paginatedTx.map(t=>(
-                <button key={t.id} onClick={()=>openDetail(t)} className="w-full bg-white p-3 rounded-xl border border-[#E6DFD3]/60 shadow-xs flex justify-between items-center text-right hover:bg-[#F9F6EE] transition-colors cursor-pointer">
+                <button key={t.id} onClick={()=>openDetail(t)} className="w-full bg-[#FDFBF7] dark:bg-[#1B1D16] p-3 rounded-xl border border-[#E6DFD3]/60 shadow-xs flex justify-between items-center text-right hover:bg-[#F9F6EE] transition-colors cursor-pointer">
                   <div className="space-y-1 min-w-0 flex-1 pl-2">
                     <h4 className="font-bold text-xs text-[#2D3025] truncate">{t.description}</h4>
                     <div className="flex items-center gap-1.5 flex-wrap">
@@ -1540,19 +1545,19 @@ export default function FinanceSection({
                       <div className="space-y-1">
                         <label className="text-[10px] font-bold text-[#8D7F72]">نام / توضیح</label>
                         <input type="text" value={recurDesc} onChange={e=>setRecurDesc(e.target.value)} placeholder="مثال: اجاره ماهانه" required
-                          className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-semibold focus:outline-none bg-white" />
+                          className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-semibold focus:outline-none bg-[#FDFBF7] dark:bg-[#1B1D16]" />
                       </div>
                       <div className="space-y-1">
                         <label className="text-[10px] font-bold text-[#8D7F72]">مبلغ (تومان)</label>
                         <MoneyInput value={recurAmount} onChange={setRecurAmount} placeholder="مبلغ" required
-                          className="py-2 rounded-xl border border-[#D6CFC3] text-xs focus:outline-none bg-white" />
+                          className="py-2 rounded-xl border border-[#D6CFC3] text-xs focus:outline-none bg-[#FDFBF7] dark:bg-[#1B1D16]" />
                       </div>
                       <div className="space-y-1">
                         <label className="text-[10px] font-bold text-[#8D7F72]">نوع</label>
                         <div className="flex bg-[#E6DFD3] p-0.5 rounded-lg">
                           {(['expense','income'] as const).map(t=>(
                             <button key={t} type="button" onClick={()=>setRecurType(t)}
-                              className={`flex-1 py-1.5 text-[10px] font-bold rounded-md transition-all cursor-pointer ${recurType===t?'bg-white shadow-xs text-[#2D3025]':'text-[#8D7F72]'}`}>
+                              className={`flex-1 py-1.5 text-[10px] font-bold rounded-md transition-all cursor-pointer ${recurType===t?'bg-[#FDFBF7] dark:bg-[#1B1D16] shadow-xs text-[#2D3025]':'text-[#8D7F72]'}`}>
                               {t==='expense'?'هزینه':'درآمد'}
                             </button>
                           ))}
@@ -1561,14 +1566,14 @@ export default function FinanceSection({
                       <div className="space-y-1">
                         <label className="text-[10px] font-bold text-[#8D7F72]">تناوب</label>
                         <select value={recurFreq} onChange={e=>setRecurFreq(e.target.value as any)}
-                          className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-semibold focus:outline-none bg-white">
+                          className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-semibold focus:outline-none bg-[#FDFBF7] dark:bg-[#1B1D16]">
                           {(['daily','weekly','monthly','yearly'] as const).map(f=><option key={f} value={f}>{FREQ_LABELS[f]}</option>)}
                         </select>
                       </div>
                       <div className="space-y-1">
                         <label className="text-[10px] font-bold text-[#8D7F72]">دسته‌بندی</label>
                         <select value={recurCat} onChange={e=>setRecurCat(e.target.value)}
-                          className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-semibold focus:outline-none bg-white">
+                          className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-semibold focus:outline-none bg-[#FDFBF7] dark:bg-[#1B1D16]">
                           {categories.filter(c=>c.type===recurType).map(c=><option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
                         </select>
                       </div>
@@ -1590,7 +1595,7 @@ export default function FinanceSection({
             {recurringTransactions.length>0 ? (
               <div className="space-y-2">
                 {recurringTransactions.map(r=>(
-                  <div key={r.id} className={`flex items-center justify-between p-3 rounded-xl border transition-all ${r.active?'bg-[#F9F6EE] border-[#E6DFD3]':'bg-white border-[#E6DFD3]/40 opacity-60'}`}>
+                  <div key={r.id} className={`flex items-center justify-between p-3 rounded-xl border transition-all ${r.active?'bg-[#F9F6EE] border-[#E6DFD3]':'bg-[#FDFBF7] dark:bg-[#1B1D16] border-[#E6DFD3]/40 opacity-60'}`}>
                     <div className="flex items-center gap-3 min-w-0">
                       <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${r.type==='income'?'bg-[#E8ECE0] text-[#7C8363]':'bg-[#F4E9E4] text-[#9B6B61]'}`}>
                         <Repeat className="w-3.5 h-3.5" />
@@ -1674,21 +1679,21 @@ export default function FinanceSection({
 
               return (
                 <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
-                  className="bg-amber-50 border border-amber-200 p-5 rounded-2xl space-y-4 mb-4 dark:bg-amber-950/20 dark:border-amber-900/40">
-                  <div className="flex justify-between items-center border-b border-amber-200 pb-2">
-                    <h3 className="text-xs font-black text-amber-900 dark:text-amber-300 flex items-center gap-2">
-                      <ArrowLeftRight className="w-4 h-4 text-amber-600" />
+                  className="bg-[#FDFBF7] dark:bg-[#1B1D16] border border-[#E6DFD3] dark:border-[#3D4133] p-5 rounded-2xl space-y-4 mb-4 dark:bg-[#F9F1D8] dark:bg-[#201D13]/20 dark:border-[#E6DFD3] dark:border-[#3D4133]/40">
+                  <div className="flex justify-between items-center border-b border-[#E6DFD3] dark:border-[#3D4133] pb-2">
+                    <h3 className="text-xs font-black text-[#8D7F72] dark:text-[#9D978B] dark:text-[#8D7F72] dark:text-[#9D978B] flex items-center gap-2">
+                      <ArrowLeftRight className="w-4 h-4 text-[#9B6B61] dark:text-[#C59B93]" />
                       <span>پرداخت بدهی کارت اعتباری {targetCard.bankName}</span>
                     </h3>
-                    <button type="button" onClick={() => setSettlingBankId(null)} className="text-amber-600 hover:text-amber-900 cursor-pointer">
+                    <button type="button" onClick={() => setSettlingBankId(null)} className="text-[#9B6B61] dark:text-[#C59B93] hover:text-[#8D7F72] dark:text-[#9D978B] cursor-pointer">
                       <X className="w-4 h-4" />
                     </button>
                   </div>
                   <form onSubmit={handleSettleSubmit} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-amber-800 dark:text-amber-400">حساب مبدا (برداشت)</label>
+                      <label className="text-[10px] font-bold text-[#2D3025] dark:text-[#E8ECE0] dark:text-[#8D7F72] dark:text-[#9D978B]">حساب مبدا (برداشت)</label>
                       <select value={settleFundingBankId} onChange={e => setSettleFundingBankId(e.target.value)} required
-                        className="w-full px-3 py-2 rounded-xl border border-amber-200 bg-white text-xs font-bold focus:outline-none">
+                        className="w-full px-3 py-2 rounded-xl border border-[#E6DFD3] dark:border-[#3D4133] bg-[#FDFBF7] dark:bg-[#1B1D16] text-xs font-bold focus:outline-none">
                         <option value="">-- انتخاب حساب مبدا --</option>
                         {debitAccounts.map(x => (
                           <option key={x.id} value={x.id}>
@@ -1698,14 +1703,14 @@ export default function FinanceSection({
                       </select>
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-amber-800 dark:text-amber-400">مبلغ بازپرداخت (تومان)</label>
+                      <label className="text-[10px] font-bold text-[#2D3025] dark:text-[#E8ECE0] dark:text-[#8D7F72] dark:text-[#9D978B]">مبلغ بازپرداخت (تومان)</label>
                       <MoneyInput value={settleAmount} onChange={setSettleAmount} placeholder="مبلغ بازپرداخت" required
-                        className="py-2 rounded-xl border border-amber-200 bg-white text-xs focus:outline-none" />
-                      <span className="text-[9px] text-amber-700 font-semibold block mt-1">حداکثر بدهی: {maxDebt.toLocaleString('fa-IR')} تومان</span>
+                        className="py-2 rounded-xl border border-[#E6DFD3] dark:border-[#3D4133] bg-[#FDFBF7] dark:bg-[#1B1D16] text-xs focus:outline-none" />
+                      <span className="text-[9px] text-[#9B6B61] dark:text-[#C59B93] font-semibold block mt-1">حداکثر بدهی: {maxDebt.toLocaleString('fa-IR')} تومان</span>
                     </div>
                     <div className="flex items-end">
                       <button type="submit"
-                        className="w-full py-2.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer">
+                        className="w-full py-2.5 bg-[#F9F1D8] dark:bg-[#201D13] hover:bg-[#F9F1D8] dark:bg-[#201D13] text-white text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer">
                         <Check className="w-4 h-4" />
                         <span>تایید و تسویه بدهی</span>
                       </button>
@@ -1753,7 +1758,7 @@ export default function FinanceSection({
                       {b.cardNumber && <span className="text-[10px] font-mono text-[#8D7F72] block mt-0.5">{b.cardNumber}</span>}
                     </div>
                     {b.isCredit && (
-                      <span className="px-1.5 py-0.5 bg-amber-100 text-amber-800 text-[8px] font-bold rounded">
+                      <span className="px-1.5 py-0.5 bg-[#F9F1D8] dark:bg-[#201D13] text-[#2D3025] dark:text-[#E8ECE0] text-[8px] font-bold rounded">
                         کارت اعتباری
                       </span>
                     )}
@@ -1802,9 +1807,9 @@ export default function FinanceSection({
                         </span>
                       </div>
                       {b.creditDueDate && (
-                        <div className="flex justify-between items-center text-[10px] bg-amber-50/50 p-2 rounded-xl border border-amber-100/60 dark:bg-amber-950/10 dark:border-amber-900/20">
+                        <div className="flex justify-between items-center text-[10px] bg-[#FDFBF7] dark:bg-[#1B1D16]/50 p-2 rounded-xl border border-[#EBE3C8] dark:border-[#3D4133]/60 dark:bg-[#F9F1D8] dark:bg-[#201D13]/10 dark:border-[#E6DFD3] dark:border-[#3D4133]/20">
                           <span className="text-[#8D7F72] font-semibold">📅 تاریخ سررسید:</span>
-                          <span className="font-bold text-amber-900 dark:text-amber-300">{b.creditDueDate}</span>
+                          <span className="font-bold text-[#8D7F72] dark:text-[#9D978B] dark:text-[#8D7F72] dark:text-[#9D978B]">{b.creditDueDate}</span>
                         </div>
                       )}
                       {b.isCredit && (b.creditLimit ?? 0) - b.balance > 0 && (
@@ -1814,7 +1819,7 @@ export default function FinanceSection({
                           const firstDebit = bankAccounts.find(x => !x.isCredit);
                           setSettleFundingBankId(firstDebit?.id || '');
                         }}
-                          className="w-full py-2 bg-amber-600 hover:bg-amber-700 text-white text-[10px] font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1 mt-1 shadow-sm">
+                          className="w-full py-2 bg-[#F9F1D8] dark:bg-[#201D13] hover:bg-[#F9F1D8] dark:bg-[#201D13] text-white text-[10px] font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1 mt-1 shadow-sm">
                           <ArrowLeftRight className="w-3.5 h-3.5" />
                           <span>تسویه قسط / پرداخت بدهی کارت</span>
                         </button>
@@ -1831,7 +1836,7 @@ export default function FinanceSection({
                         <span className="text-[9px] font-bold text-[#8D7F72] block mb-1">اسناد متصل ({linkedDocs.length.toLocaleString('fa-IR')} سند)</span>
                         <div className="space-y-1">
                           {linkedDocs.map(doc => (
-                            <div key={doc.id} className="flex items-center gap-1.5 bg-white px-2 py-1 rounded-lg border border-[#D6CFC3]/40 text-[9px] text-[#2D3025] font-semibold">
+                            <div key={doc.id} className="flex items-center gap-1.5 bg-[#FDFBF7] dark:bg-[#1B1D16] px-2 py-1 rounded-lg border border-[#D6CFC3]/40 text-[9px] text-[#2D3025] font-semibold">
                               <span className="text-[10px]">📄</span>
                               <span className="truncate flex-1">{doc.title}</span>
                             </div>
@@ -1878,12 +1883,12 @@ export default function FinanceSection({
                   <div className="space-y-1">
                     <label className="text-[10px] font-bold text-[#8D7F72]">نام بانک</label>
                     <input value={bkName} onChange={e=>setBkName(e.target.value)} placeholder="مثال: بانک سامان" required
-                      className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-bold focus:outline-none bg-white" />
+                      className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-bold focus:outline-none bg-[#FDFBF7] dark:bg-[#1B1D16]" />
                   </div>
                   <div className="space-y-1">
                     <label className="text-[10px] font-bold text-[#8D7F72]">نام حساب</label>
                     <input value={bkAccName} onChange={e=>setBkAccName(e.target.value)} placeholder="مثال: سپرده کوتاه‌مدت"
-                      className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-bold focus:outline-none bg-white" />
+                      className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-bold focus:outline-none bg-[#FDFBF7] dark:bg-[#1B1D16]" />
                   </div>
                   
                   {/* Credit Card Toggle Option */}
@@ -1893,7 +1898,7 @@ export default function FinanceSection({
                       <span className="text-[9px] font-semibold text-[#8D7F72]">خرید با اعتبار و پرداخت در انتهای دوره تسویه</span>
                     </div>
                     <button type="button" onClick={() => setBkIsCredit(!bkIsCredit)} className="text-[#7C8363] focus:outline-none cursor-pointer">
-                      {bkIsCredit ? <ToggleRight className="w-8 h-8" /> : <ToggleLeft className="w-8 h-8 text-gray-400" />}
+                      {bkIsCredit ? <ToggleRight className="w-8 h-8" /> : <ToggleLeft className="w-8 h-8 text-[#9D978B] dark:text-[#7C8363]" />}
                     </button>
                   </div>
 
@@ -1902,7 +1907,7 @@ export default function FinanceSection({
                       {bkIsCredit ? 'اعتبار باقیمانده فعلی (تومان)' : 'موجودی (تومان)'}
                     </label>
                     <MoneyInput value={bkBalance} onChange={setBkBalance} placeholder={bkIsCredit ? 'اعتبار باقیمانده' : 'موجودی فعلی'} required
-                      className="py-2 rounded-xl border border-[#D6CFC3] text-xs focus:outline-none bg-white" />
+                      className="py-2 rounded-xl border border-[#D6CFC3] text-xs focus:outline-none bg-[#FDFBF7] dark:bg-[#1B1D16]" />
                   </div>
 
                   {bkIsCredit ? (
@@ -1910,19 +1915,19 @@ export default function FinanceSection({
                       <div className="space-y-1">
                         <label className="text-[10px] font-bold text-[#8D7F72]">سقف اعتبار کل کارت (تومان)</label>
                         <MoneyInput value={bkCreditLimit} onChange={setBkCreditLimit} placeholder="مثال: ۵۰,۰۰۰,۰۰۰" required
-                          className="py-2 rounded-xl border border-[#D6CFC3] text-xs focus:outline-none bg-white" />
+                          className="py-2 rounded-xl border border-[#D6CFC3] text-xs focus:outline-none bg-[#FDFBF7] dark:bg-[#1B1D16]" />
                       </div>
                       <div className="space-y-1">
                         <label className="text-[10px] font-bold text-[#8D7F72]">تاریخ سررسید پرداخت بدهی</label>
                         <input value={bkCreditDueDate} onChange={e=>setBkCreditDueDate(e.target.value)} placeholder="مثال: ۲۵ام هر ماه" required={bkIsCredit}
-                          className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-semibold focus:outline-none bg-white" />
+                          className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-semibold focus:outline-none bg-[#FDFBF7] dark:bg-[#1B1D16]" />
                       </div>
                     </>
                   ) : (
                     <div className="space-y-1">
                       <label className="text-[10px] font-bold text-[#8D7F72]">شماره کارت (اختیاری)</label>
                       <input value={bkCard} onChange={e=>setBkCard(e.target.value)} placeholder="مثال: ۶۲۱۹-****-****-۱۲۳۴"
-                        className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-semibold focus:outline-none bg-white" />
+                        className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-semibold focus:outline-none bg-[#FDFBF7] dark:bg-[#1B1D16]" />
                     </div>
                   )}
 
@@ -1930,7 +1935,7 @@ export default function FinanceSection({
                     <div className="sm:col-span-2 space-y-1">
                       <label className="text-[10px] font-bold text-[#8D7F72]">شماره کارت اعتباری (اختیاری)</label>
                       <input value={bkCard} onChange={e=>setBkCard(e.target.value)} placeholder="مثال: ۵۰۲۲-****-****-۱۲۳۴"
-                        className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-semibold focus:outline-none bg-white" />
+                        className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-semibold focus:outline-none bg-[#FDFBF7] dark:bg-[#1B1D16]" />
                     </div>
                   )}
                   <div className="sm:col-span-2 space-y-1.5">
@@ -2120,7 +2125,7 @@ export default function FinanceSection({
                         <div className="mt-3 space-y-2">
                           <div className="space-y-1"><label className="text-[9px] font-bold text-[#8D7F72]">قیمت (تومان)</label>
                             <input type="number" value={editSubPrice} onChange={e=>setEditSubPrice(e.target.value)}
-                              className="w-full text-left px-2 py-1.5 rounded-lg border border-[#D6CFC3] text-xs font-bold focus:outline-none bg-white" />
+                              className="w-full text-left px-2 py-1.5 rounded-lg border border-[#D6CFC3] text-xs font-bold focus:outline-none bg-[#FDFBF7] dark:bg-[#1B1D16]" />
                           </div>
                           <div className="space-y-1"><label className="text-[9px] font-bold text-[#8D7F72]">تاریخ تمدید بعدی</label>
                             <PersianDatePicker value={editSubNext} onChange={setEditSubNext} />
@@ -2139,7 +2144,7 @@ export default function FinanceSection({
                               <span className="font-bold">{isActive?'فعال':'غیرفعال'}</span>
                               <button type="button" onClick={()=>onToggleSubscriptionStatus(sub.id)}
                                 className={`w-8 h-4 rounded-full p-0.5 transition-colors relative cursor-pointer flex items-center ${isActive?'bg-[#7C8363]':'bg-[#D6CFC3]'}`}>
-                                <div className={`w-3 h-3 bg-white rounded-full transition-transform shadow-xs ${isActive?'-translate-x-3.5':'translate-x-0'}`} />
+                                <div className={`w-3 h-3 bg-[#FDFBF7] dark:bg-[#1B1D16] rounded-full transition-transform shadow-xs ${isActive?'-translate-x-3.5':'translate-x-0'}`} />
                               </button>
                             </div>
                           </div>
@@ -2166,12 +2171,12 @@ export default function FinanceSection({
           <AnimatePresence>
             {budgetDirty && (
               <motion.div initial={{opacity:0,y:-8}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-8}}
-                className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5">
-                <div className="flex items-center gap-2 text-xs font-bold text-amber-700">
+                className="flex items-center justify-between bg-[#FDFBF7] dark:bg-[#1B1D16] border border-[#E6DFD3] dark:border-[#3D4133] rounded-xl px-4 py-2.5">
+                <div className="flex items-center gap-2 text-xs font-bold text-[#9B6B61] dark:text-[#C59B93]">
                   <AlertCircle className="w-4 h-4" />تغییرات ذخیره‌نشده‌ای دارید
                 </div>
                 <button onClick={handleSaveBudget}
-                  className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-[10px] font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1">
+                  className="px-3 py-1.5 bg-[#F9F1D8] dark:bg-[#201D13] hover:bg-[#F9F1D8] dark:bg-[#201D13] text-white text-[10px] font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1">
                   <Save className="w-3.5 h-3.5" />ذخیره همین الان
                 </button>
               </motion.div>
@@ -2238,7 +2243,7 @@ export default function FinanceSection({
                   <div className="bg-[#F9F1D8] border border-[#EBE3C8] rounded-xl p-4 space-y-2">
                     <div className="flex justify-between items-center text-xs font-bold">
                       <span className="text-[#5A5A40]">بودجه کل ماه</span>
-                      <span className={isOver?'text-[#9B6B61]':isWarn?'text-amber-600':'text-[#7C8363]'}>{pct}٪ مصرف شده</span>
+                      <span className={isOver?'text-[#9B6B61]':isWarn?'text-[#9B6B61] dark:text-[#C59B93]':'text-[#7C8363]'}>{pct}٪ مصرف شده</span>
                     </div>
                     <div className="w-full h-3 bg-[#E6DFD3] rounded-full overflow-hidden">
                       <div className={`h-full rounded-full transition-all duration-500 ${isOver?'bg-[#9B6B61]':isWarn?'bg-[#D4AF37]':'bg-[#7C8363]'}`} style={{width:`${pct}%`}} />
@@ -2254,8 +2259,8 @@ export default function FinanceSection({
                       </div>
                     )}
                     {isWarn && (
-                      <div className="p-2 bg-amber-50 border border-amber-100 rounded-lg text-[9px] text-amber-700 font-bold flex items-center gap-1.5 mt-2">
-                        <AlertCircle className="w-3.5 h-3.5 text-amber-500 shrink-0 animate-pulse" />
+                      <div className="p-2 bg-[#FDFBF7] dark:bg-[#1B1D16] border border-[#EBE3C8] dark:border-[#3D4133] rounded-lg text-[9px] text-[#9B6B61] dark:text-[#C59B93] font-bold flex items-center gap-1.5 mt-2">
+                        <AlertCircle className="w-3.5 h-3.5 text-[#E26645] shrink-0 animate-pulse" />
                         <span>توجه: بیش از ۸۰٪ از کل بودجه ماهانه مصرف شده است. نزدیک شدن به محدوده پرخطر!</span>
                       </div>
                     )}
@@ -2284,7 +2289,7 @@ export default function FinanceSection({
                         )}
                       </div>
                       {isOver && <p className="text-[9px] text-[#9B6B61] font-bold flex items-center gap-1 mt-1"><AlertCircle className="w-3 h-3 text-red-500 shrink-0" />بودجه این دسته تجاوز شده!</p>}
-                      {isWarn && <p className="text-[9px] text-amber-600 font-bold flex items-center gap-1 mt-1"><AlertCircle className="w-3 h-3 text-amber-500 shrink-0" />بیش از ۸۰٪ بودجه مصرف شده (نزدیک به سقف)</p>}
+                      {isWarn && <p className="text-[9px] text-[#9B6B61] dark:text-[#C59B93] font-bold flex items-center gap-1 mt-1"><AlertCircle className="w-3 h-3 text-[#E26645] shrink-0" />بیش از ۸۰٪ بودجه مصرف شده (نزدیک به سقف)</p>}
                     </div>
                   );
                 })}
@@ -2535,11 +2540,11 @@ export default function FinanceSection({
                         <label className="text-[10px] font-bold text-[#8D7F72]">نوع تعهد مالی</label>
                         <div className="flex bg-[#E6DFD3] p-0.5 rounded-lg w-full">
                           <button type="button" onClick={() => setDebtType('debt')}
-                            className={`flex-1 py-1.5 text-[10px] font-bold rounded-md transition-all cursor-pointer ${debtType === 'debt' ? 'bg-white text-[#9B6B61] shadow-xs' : 'text-[#8D7F72]'}`}>
+                            className={`flex-1 py-1.5 text-[10px] font-bold rounded-md transition-all cursor-pointer ${debtType === 'debt' ? 'bg-[#FDFBF7] dark:bg-[#1B1D16] text-[#9B6B61] shadow-xs' : 'text-[#8D7F72]'}`}>
                             بدهکار هستم (بدهی به دیگران)
                           </button>
                           <button type="button" onClick={() => setDebtType('loan')}
-                            className={`flex-1 py-1.5 text-[10px] font-bold rounded-md transition-all cursor-pointer ${debtType === 'loan' ? 'bg-white text-[#7C8363] shadow-xs' : 'text-[#8D7F72]'}`}>
+                            className={`flex-1 py-1.5 text-[10px] font-bold rounded-md transition-all cursor-pointer ${debtType === 'loan' ? 'bg-[#FDFBF7] dark:bg-[#1B1D16] text-[#7C8363] shadow-xs' : 'text-[#8D7F72]'}`}>
                             طلبکار هستم (قرض دادن به دیگران)
                           </button>
                         </div>
@@ -2548,19 +2553,19 @@ export default function FinanceSection({
                       <div className="space-y-1">
                         <label className="text-[10px] font-bold text-[#8D7F72]">طرف حساب / شخص</label>
                         <input type="text" value={debtPerson} onChange={e => setDebtPerson(e.target.value)} placeholder="مثال: رضا محمدی، بانک ملی" required
-                          className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-bold focus:outline-none bg-white" />
+                          className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-bold focus:outline-none bg-[#FDFBF7] dark:bg-[#1B1D16]" />
                       </div>
 
                       <div className="space-y-1">
                         <label className="text-[10px] font-bold text-[#8D7F72]">عنوان تعهد</label>
                         <input type="text" value={debtTitle} onChange={e => setDebtTitle(e.target.value)} placeholder="مثال: قرض دستی، قسط شهریور" required
-                          className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-bold focus:outline-none bg-white" />
+                          className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-bold focus:outline-none bg-[#FDFBF7] dark:bg-[#1B1D16]" />
                       </div>
 
                       <div className="space-y-1">
                         <label className="text-[10px] font-bold text-[#8D7F72]">مبلغ (تومان)</label>
                         <MoneyInput value={debtAmount} onChange={setDebtAmount} placeholder="مبلغ" required
-                          className="py-2 rounded-xl border border-[#D6CFC3] text-xs focus:outline-none bg-white" />
+                          className="py-2 rounded-xl border border-[#D6CFC3] text-xs focus:outline-none bg-[#FDFBF7] dark:bg-[#1B1D16]" />
                       </div>
 
                       <div className="space-y-1">
@@ -2571,7 +2576,7 @@ export default function FinanceSection({
                       <div className="space-y-1">
                         <label className="text-[10px] font-bold text-[#8D7F72]">توضیحات (اختیاری)</label>
                         <input type="text" value={debtDesc} onChange={e => setDebtDesc(e.target.value)} placeholder="بابت چه چیز..."
-                          className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-semibold focus:outline-none bg-white" />
+                          className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-semibold focus:outline-none bg-[#FDFBF7] dark:bg-[#1B1D16]" />
                       </div>
                     </div>
 
@@ -2676,22 +2681,22 @@ export default function FinanceSection({
                       </div>
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="font-bold text-xs text-gray-500 line-through">{d.title}</span>
-                          <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-gray-200 text-gray-500">
+                          <span className="font-bold text-xs text-[#8D7F72] dark:text-[#9D978B] line-through">{d.title}</span>
+                          <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-[#E6DFD3] dark:bg-[#3D4133] text-[#8D7F72] dark:text-[#9D978B]">
                             {d.type === 'debt' ? `پرداخت شده به ${d.person}` : `دریافت شده از ${d.person}`}
                           </span>
                         </div>
-                        <span className="text-[9px] text-gray-400 font-mono">تسویه با مبلغ {d.amount.toLocaleString('fa-IR')} تومان</span>
+                        <span className="text-[9px] text-[#9D978B] dark:text-[#7C8363] font-mono">تسویه با مبلغ {d.amount.toLocaleString('fa-IR')} تومان</span>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-2">
                       <button onClick={() => onToggleDebtCompletion(d.id)}
-                        className="px-2 py-1 text-[9px] font-bold border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-100 transition-all cursor-pointer">
+                        className="px-2 py-1 text-[9px] font-bold border border-[#E6DFD3] dark:border-[#3D4133] text-[#3D3D3D] dark:text-[#9D978B] rounded-lg hover:bg-[#F9F6EE] dark:bg-[#1B1D16] transition-all cursor-pointer">
                         بازگرداندن به فعال
                       </button>
                       <button onClick={() => onDeleteDebt(d.id)}
-                        className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg transition-all cursor-pointer">
+                        className="p-1.5 text-[#9D978B] dark:text-[#7C8363] hover:text-red-600 rounded-lg transition-all cursor-pointer">
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
@@ -2750,14 +2755,14 @@ export default function FinanceSection({
                     <div className="bg-[#FDFBF7] p-5 rounded-2xl shadow-sm border border-[#EBE3C8] flex items-center justify-between">
                       <div className="space-y-1">
                         <span className="text-[11px] text-[#8D7F72] font-semibold block">سررسید پرداخت‌نشده این ماه</span>
-                        <h3 className="text-lg sm:text-xl font-bold font-serif-elegant text-amber-700">
+                        <h3 className="text-lg sm:text-xl font-bold font-serif-elegant text-[#9B6B61] dark:text-[#C59B93]">
                           {dueThisMonthAmount.toLocaleString('fa-IR')} <span className="text-xs font-normal text-[#8D7F72]">تومان</span>
                         </h3>
                         <span className="text-[9px] text-[#8D7F72] block font-semibold">
                           {dueThisMonthInsts.length.toLocaleString('fa-IR')} قسط آماده پرداخت
                         </span>
                       </div>
-                      <div className="p-3 bg-[#F9F1D8] text-amber-700 rounded-xl border border-[#EBE3C8]"><AlertCircle className="w-5 h-5" /></div>
+                      <div className="p-3 bg-[#F9F1D8] text-[#9B6B61] dark:text-[#C59B93] rounded-xl border border-[#EBE3C8]"><AlertCircle className="w-5 h-5" /></div>
                     </div>
                   </div>
                 );
@@ -2807,19 +2812,19 @@ export default function FinanceSection({
                           <div className="space-y-1">
                             <label className="text-[10px] font-bold text-[#8D7F72]">عنوان خرید / وام</label>
                             <input type="text" value={instTitle} onChange={e => setInstTitle(e.target.value)} placeholder="مثال: گوشی آیفون ۱۶، وام مسکن" required
-                              className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-bold focus:outline-none bg-white text-gray-800" />
+                              className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-bold focus:outline-none bg-[#FDFBF7] dark:bg-[#1B1D16] text-[#2D3025] dark:text-[#E8ECE0]" />
                           </div>
 
                           <div className="space-y-1">
                             <label className="text-[10px] font-bold text-[#8D7F72]">مبلغ کل خرید یا وام (تومان)</label>
                             <MoneyInput value={instTotalAmount} onChange={setInstTotalAmount} placeholder="مبلغ کل تعهد" required
-                              className="py-2 rounded-xl border border-[#D6CFC3] text-xs focus:outline-none bg-white text-gray-800" />
+                              className="py-2 rounded-xl border border-[#D6CFC3] text-xs focus:outline-none bg-[#FDFBF7] dark:bg-[#1B1D16] text-[#2D3025] dark:text-[#E8ECE0]" />
                           </div>
 
                           <div className="space-y-1">
                             <label className="text-[10px] font-bold text-[#8D7F72]">دسته‌بندی مخارج</label>
                             <select value={instCategory} onChange={e => setInstCategory(e.target.value)}
-                              className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-bold focus:outline-none bg-white text-gray-800">
+                              className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-bold focus:outline-none bg-[#FDFBF7] dark:bg-[#1B1D16] text-[#2D3025] dark:text-[#E8ECE0]">
                               {categories.filter(c => c.type === 'expense').map(c => (
                                 <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
                               ))}
@@ -2829,19 +2834,19 @@ export default function FinanceSection({
                           <div className="space-y-1">
                             <label className="text-[10px] font-bold text-[#8D7F72]">تعداد ماه‌های بازپرداخت (تعداد اقساط)</label>
                             <input type="number" min="1" max="120" value={instMonths} onChange={e => setInstMonths(e.target.value)} required
-                              className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-bold focus:outline-none bg-white text-gray-800" />
+                              className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-bold focus:outline-none bg-[#FDFBF7] dark:bg-[#1B1D16] text-[#2D3025] dark:text-[#E8ECE0]" />
                           </div>
 
                           <div className="space-y-1">
                             <label className="text-[10px] font-bold text-[#8D7F72]">تعداد اقساط پرداخت‌شده تا الان</label>
                             <input type="number" min="0" max={instMonths} value={instPaidMonths} onChange={e => setInstPaidMonths(e.target.value)} required
-                              className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-bold focus:outline-none bg-white text-gray-800" />
+                              className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-bold focus:outline-none bg-[#FDFBF7] dark:bg-[#1B1D16] text-[#2D3025] dark:text-[#E8ECE0]" />
                           </div>
 
                           <div className="space-y-1">
                             <label className="text-[10px] font-bold text-[#8D7F72]">روز سررسید در هر ماه</label>
                             <input type="number" min="1" max="31" value={instDayOfMonth} onChange={e => setInstDayOfMonth(e.target.value)} required
-                              className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-bold focus:outline-none bg-white text-gray-800" />
+                              className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-bold focus:outline-none bg-[#FDFBF7] dark:bg-[#1B1D16] text-[#2D3025] dark:text-[#E8ECE0]" />
                           </div>
 
                           <div className="space-y-1 sm:col-span-2">
@@ -2850,7 +2855,7 @@ export default function FinanceSection({
                           </div>
 
                           {instTotalAmount && instMonths && Number(instMonths) > 0 && (
-                            <div className="sm:col-span-3 bg-white p-3 rounded-xl border border-[#D6CFC3]/60 text-center">
+                            <div className="sm:col-span-3 bg-[#FDFBF7] dark:bg-[#1B1D16] p-3 rounded-xl border border-[#D6CFC3]/60 text-center">
                               <span className="text-xs font-bold text-[#7C8363]">پیش‌نمایش طرح اقساطی:</span>
                               <p className="text-xs font-black text-[#2D3025] mt-1">
                                 مبلغ هر قسط:{' '}
@@ -2891,9 +2896,9 @@ export default function FinanceSection({
                 if (dueThisMonth.length === 0) return null;
 
                 return (
-                  <div className="bg-[#FDFBF7] p-5 rounded-2xl border border-amber-200 bg-amber-50/20 space-y-4">
-                    <h3 className="text-sm font-bold text-amber-800 flex items-center gap-2 font-serif-elegant">
-                      <AlertCircle className="w-4 h-4 text-amber-600 animate-pulse" />
+                  <div className="bg-[#FDFBF7] p-5 rounded-2xl border border-[#E6DFD3] dark:border-[#3D4133] bg-[#FDFBF7] dark:bg-[#1B1D16]/20 space-y-4">
+                    <h3 className="text-sm font-bold text-[#2D3025] dark:text-[#E8ECE0] flex items-center gap-2 font-serif-elegant">
+                      <AlertCircle className="w-4 h-4 text-[#9B6B61] dark:text-[#C59B93] animate-pulse" />
                       <span>پیش‌نویس اقساط ماه جاری (آماده پرداخت)</span>
                     </h3>
 
@@ -2932,7 +2937,7 @@ export default function FinanceSection({
                       const currentCat = categories.find(c => c.id === inst.category);
 
                       return (
-                        <div key={inst.id} className="p-4 rounded-xl border border-[#DDE2D5] bg-white space-y-3 shadow-xs">
+                        <div key={inst.id} className="p-4 rounded-xl border border-[#DDE2D5] bg-[#FDFBF7] dark:bg-[#1B1D16] space-y-3 shadow-xs">
                           <div className="flex items-start justify-between">
                             <div className="flex items-center gap-2.5">
                               <span className="text-base">{currentCat?.icon || '📂'}</span>
@@ -2947,10 +2952,10 @@ export default function FinanceSection({
                               {isOver ? (
                                 <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[8px] font-bold rounded-full">تکمیل شده</span>
                               ) : (
-                                <span className="px-2 py-0.5 bg-amber-100 text-amber-800 text-[8px] font-bold rounded-full">قسط {inst.paidMonths.toLocaleString('fa-IR')} از {inst.totalMonths.toLocaleString('fa-IR')}</span>
+                                <span className="px-2 py-0.5 bg-[#F9F1D8] dark:bg-[#201D13] text-[#2D3025] dark:text-[#E8ECE0] text-[8px] font-bold rounded-full">قسط {inst.paidMonths.toLocaleString('fa-IR')} از {inst.totalMonths.toLocaleString('fa-IR')}</span>
                               )}
                               <button onClick={() => { if (confirm(`طرح اقساطی "${inst.title}" حذف شود؟`)) onDeleteInstallment?.(inst.id); }}
-                                className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-all cursor-pointer">
+                                className="p-1.5 text-[#9D978B] dark:text-[#7C8363] hover:text-red-600 rounded-lg hover:bg-red-50 transition-all cursor-pointer">
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
                             </div>
@@ -2969,10 +2974,10 @@ export default function FinanceSection({
                           </div>
 
                           {/* Dots timeline representation */}
-                          <div className="flex gap-1.5 flex-wrap pt-1 border-t border-gray-100 mt-2">
+                          <div className="flex gap-1.5 flex-wrap pt-1 border-t border-[#E6DFD3]/40 dark:border-[#3D4133]/40 mt-2">
                             {Array.from({ length: inst.totalMonths }).map((_, i) => (
                               <div key={i} title={`قسط ماه ${i + 1}`}
-                                className={`w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold border shrink-0 ${i < inst.paidMonths ? 'bg-emerald-500 text-white border-emerald-600' : 'bg-gray-100 text-gray-400 border-gray-200'}`}>
+                                className={`w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold border shrink-0 ${i < inst.paidMonths ? 'bg-emerald-500 text-white border-emerald-600' : 'bg-[#F9F6EE] dark:bg-[#1B1D16] text-[#9D978B] dark:text-[#7C8363] border-[#E6DFD3] dark:border-[#3D4133]'}`}>
                                 {(i + 1).toLocaleString('fa-IR')}
                               </div>
                             ))}
@@ -2981,7 +2986,7 @@ export default function FinanceSection({
                           {!isOver && (
                             <div className="flex justify-between items-center text-[9px] text-[#8D7F72] font-semibold pt-1">
                               <span>سررسید بعدی: {nextDueDate}</span>
-                              <span className="text-amber-700 font-bold bg-amber-50 px-2 py-0.5 rounded-lg border border-amber-100">
+                              <span className="text-[#9B6B61] dark:text-[#C59B93] font-bold bg-[#FDFBF7] dark:bg-[#1B1D16] px-2 py-0.5 rounded-lg border border-[#EBE3C8] dark:border-[#3D4133]">
                                 {nextDueDate <= todayDate ? 'موعد پرداخت رسیده' : 'فعال'}
                               </span>
                             </div>
@@ -3183,7 +3188,7 @@ export default function FinanceSection({
                             onChange={e => setAssetName(e.target.value)} 
                             placeholder="نام دارایی" 
                             required
-                            className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-bold focus:outline-none bg-white" 
+                            className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-bold focus:outline-none bg-[#FDFBF7] dark:bg-[#1B1D16]" 
                           />
                         </div>
 
@@ -3195,7 +3200,7 @@ export default function FinanceSection({
                             onChange={e => setAssetSymbol(e.target.value)} 
                             placeholder="نماد اختصاری" 
                             required
-                            className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-bold focus:outline-none bg-white" 
+                            className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-bold focus:outline-none bg-[#FDFBF7] dark:bg-[#1B1D16]" 
                           />
                         </div>
 
@@ -3204,7 +3209,7 @@ export default function FinanceSection({
                           <select 
                             value={assetType} 
                             onChange={e => setAssetType(e.target.value as any)}
-                            className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-semibold focus:outline-none bg-white text-right"
+                            className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-semibold focus:outline-none bg-[#FDFBF7] dark:bg-[#1B1D16] text-right"
                           >
                             <option value="crypto">🪙 ارز دیجیتال (Crypto)</option>
                             <option value="gold">✨ طلا، سکه و فلزات گرانبها</option>
@@ -3224,7 +3229,7 @@ export default function FinanceSection({
                             onChange={e => setAssetAmount(e.target.value)} 
                             placeholder="مثلاً ۰.۱۵ یا ۱۰" 
                             required
-                            className="w-full text-left px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-extrabold focus:outline-none bg-white" 
+                            className="w-full text-left px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-extrabold focus:outline-none bg-[#FDFBF7] dark:bg-[#1B1D16]" 
                           />
                         </div>
 
@@ -3234,7 +3239,7 @@ export default function FinanceSection({
                             value={assetPurchasePrice}
                             onChange={setAssetPurchasePrice}
                             placeholder="بهای تمام‌شده هر واحد"
-                            className="py-2 rounded-xl border border-[#D6CFC3] text-xs focus:outline-none bg-white"
+                            className="py-2 rounded-xl border border-[#D6CFC3] text-xs focus:outline-none bg-[#FDFBF7] dark:bg-[#1B1D16]"
                           />
                         </div>
 
@@ -3245,7 +3250,7 @@ export default function FinanceSection({
                             onChange={setAssetCurrentPrice}
                             placeholder="قیمت روز بازار"
                             required
-                            className="py-2 rounded-xl border border-[#D6CFC3] text-xs focus:outline-none bg-white"
+                            className="py-2 rounded-xl border border-[#D6CFC3] text-xs focus:outline-none bg-[#FDFBF7] dark:bg-[#1B1D16]"
                           />
                         </div>
                       </div>
@@ -3257,7 +3262,7 @@ export default function FinanceSection({
                           value={assetNotes} 
                           onChange={e => setAssetNotes(e.target.value)} 
                           placeholder="مثلاً ذخیره در کیف پول لجر، صرافی نوبیتکس"
-                          className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-semibold focus:outline-none bg-white" 
+                          className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-semibold focus:outline-none bg-[#FDFBF7] dark:bg-[#1B1D16]" 
                         />
                       </div>
 
@@ -3317,7 +3322,7 @@ export default function FinanceSection({
               <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
                 {/* Search input */}
                 <div className="relative flex-1 md:flex-initial min-w-[150px]">
-                  <Search className="w-3.5 h-3.5 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2" />
+                  <Search className="w-3.5 h-3.5 text-[#9D978B] dark:text-[#7C8363] absolute right-3 top-1/2 -translate-y-1/2" />
                   <input 
                     type="text"
                     value={assetSearch}
@@ -3388,7 +3393,7 @@ export default function FinanceSection({
                             a.type === 'gold' ? 'bg-[#F9F1D8] text-[#D4AF37]' :
                             a.type === 'stock' ? 'bg-[#EAF2F8] text-[#2980B9]' :
                             a.type === 'currency' ? 'bg-[#EAF2F8] text-[#27AE60]' :
-                            a.type === 'real_estate' ? 'bg-[#F4E9E4] text-[#9B6B61]' : 'bg-gray-100 text-gray-500'
+                            a.type === 'real_estate' ? 'bg-[#F4E9E4] text-[#9B6B61]' : 'bg-[#F9F6EE] dark:bg-[#1B1D16] text-[#8D7F72] dark:text-[#9D978B]'
                           }`}>
                             {a.type === 'crypto' ? <Coins className="w-4 h-4" /> :
                              a.type === 'gold' ? <Zap className="w-4 h-4" /> :
@@ -3446,7 +3451,7 @@ export default function FinanceSection({
                         </div>
 
                         {a.notes && (
-                          <div className="text-[9px] text-gray-500 bg-white/40 p-1.5 rounded border border-[#E6DFD3]/30 font-semibold text-right">
+                          <div className="text-[9px] text-[#8D7F72] dark:text-[#9D978B] bg-white/40 p-1.5 rounded border border-[#E6DFD3]/30 font-semibold text-right">
                             📝 {a.notes}
                           </div>
                         )}
@@ -3461,7 +3466,7 @@ export default function FinanceSection({
                             <span className="text-[9px] font-bold text-[#8D7F72] block mb-1">اسناد مرتبط ({linkedDocs.length.toLocaleString('fa-IR')} سند)</span>
                             <div className="space-y-1">
                               {linkedDocs.map(doc => (
-                                <div key={doc.id} className="flex items-center gap-1.5 bg-white px-2 py-1 rounded-lg border border-[#D6CFC3]/40 text-[9px] text-[#2D3025] font-semibold">
+                                <div key={doc.id} className="flex items-center gap-1.5 bg-[#FDFBF7] dark:bg-[#1B1D16] px-2 py-1 rounded-lg border border-[#D6CFC3]/40 text-[9px] text-[#2D3025] font-semibold">
                                   <span className="text-[10px]">📄</span>
                                   <span className="truncate flex-1">{doc.title}</span>
                                 </div>
@@ -3485,7 +3490,7 @@ export default function FinanceSection({
                                   [a.id]: e.target.value
                                 });
                               }}
-                              className="w-full text-left font-mono font-bold text-xs bg-white border border-[#D6CFC3] rounded-lg px-2 py-1 focus:outline-none focus:border-[#7C8363]"
+                              className="w-full text-left font-mono font-bold text-xs bg-[#FDFBF7] dark:bg-[#1B1D16] border border-[#D6CFC3] rounded-lg px-2 py-1 focus:outline-none focus:border-[#7C8363]"
                             />
                           </div>
                           <button 
@@ -3500,7 +3505,7 @@ export default function FinanceSection({
                             ثبت قیمت
                           </button>
                         </form>
-                        <div className="text-[8px] text-gray-400 font-bold mt-1 text-left font-mono">
+                        <div className="text-[8px] text-[#9D978B] dark:text-[#7C8363] font-bold mt-1 text-left font-mono">
                           آخرین بروزرسانی: {a.lastUpdated || '—'}
                         </div>
                       </div>
@@ -3569,7 +3574,7 @@ export default function FinanceSection({
                   </div>
                   <div className="space-y-1"><label className="text-[10px] font-bold text-[#8D7F72]">مبلغ (تومان)</label>
                     <MoneyInput value={editTxAmt} onChange={setEditTxAmt}
-                      className="py-2 rounded-xl border border-[#D6CFC3] text-sm focus:outline-none bg-white" />
+                      className="py-2 rounded-xl border border-[#D6CFC3] text-sm focus:outline-none bg-[#FDFBF7] dark:bg-[#1B1D16]" />
                   </div>
                   
                   {editTxType !== 'transfer' && (
@@ -3580,14 +3585,14 @@ export default function FinanceSection({
                           const cat = categories.find(c=>c.id===e.target.value);
                           setEditTxSub(cat?.subcategories[0]||'');
                         }}
-                          className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-semibold focus:outline-none bg-white">
+                          className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-semibold focus:outline-none bg-[#FDFBF7] dark:bg-[#1B1D16]">
                           {categories.filter(c=>c.type===editTxType).map(c=><option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
                         </select>
                       </div>
                       {(() => { const editCatObj = categories.find(c=>c.id===editTxCat); return editCatObj&&editCatObj.subcategories.length>0 ? (
                         <div className="space-y-1"><label className="text-[10px] font-bold text-[#8D7F72]">زیردسته</label>
                           <select value={editTxSub} onChange={e=>setEditTxSub(e.target.value)}
-                            className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-semibold focus:outline-none bg-white">
+                            className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-semibold focus:outline-none bg-[#FDFBF7] dark:bg-[#1B1D16]">
                             <option value="">بدون زیردسته</option>
                             {editCatObj.subcategories.map(s=><option key={s} value={s}>{s}</option>)}
                           </select>
@@ -3598,7 +3603,7 @@ export default function FinanceSection({
 
                   <div className="space-y-1"><label className="text-[10px] font-bold text-[#8D7F72]">توضیح</label>
                     <input value={editTxDesc} onChange={e=>setEditTxDesc(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-semibold focus:outline-none bg-white" />
+                      className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-semibold focus:outline-none bg-[#FDFBF7] dark:bg-[#1B1D16]" />
                   </div>
                   <div className="space-y-1"><label className="text-[10px] font-bold text-[#8D7F72]">تاریخ</label>
                     <PersianDatePicker value={editTxDate} onChange={setEditTxDate} />
@@ -3611,7 +3616,7 @@ export default function FinanceSection({
                           {editTxType === 'transfer' ? 'حساب مبدأ (برداشت وجه)' : 'حساب بانکی مرتبط (بروزرسانی موجودی)'}
                         </label>
                         <select value={editTxBank} onChange={e=>setEditTxBank(e.target.value)}
-                          className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-semibold focus:outline-none bg-white">
+                          className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-semibold focus:outline-none bg-[#FDFBF7] dark:bg-[#1B1D16]">
                           <option value="">-- بدون حساب بانکی (نقدی) --</option>
                           {bankAccounts.map(b=>(
                             <option key={b.id} value={b.id}>{b.bankName} ({b.accountName})</option>
@@ -3623,7 +3628,7 @@ export default function FinanceSection({
                         <div className="space-y-1">
                           <label className="text-[10px] font-bold text-[#4A6B82]">حساب مقصد (واریز وجه)</label>
                           <select value={editTxToBank} onChange={e=>setEditTxToBank(e.target.value)}
-                            className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-semibold focus:outline-none bg-white">
+                            className="w-full px-3 py-2 rounded-xl border border-[#D6CFC3] text-xs font-semibold focus:outline-none bg-[#FDFBF7] dark:bg-[#1B1D16]">
                             <option value="">-- انتخاب حساب مقصد --</option>
                             {bankAccounts.map(b=>(
                               <option key={b.id} value={b.id}>{b.bankName} ({b.accountName})</option>
@@ -3685,6 +3690,13 @@ export default function FinanceSection({
                       <Trash2 className="w-4 h-4" />حذف
                     </button>
                   </div>
+                </div>
+              )}
+
+              {/* Linked Contacts */}
+              {detailTx.id && !txEditMode && (
+                <div className="border-t border-[#E6DFD3]/60 pt-3 mt-2">
+                  <LinkedContacts entityType="finance" entityId={detailTx.id} contacts={contacts} onNavigateContact={onNavigateContact} />
                 </div>
               )}
             </motion.div>

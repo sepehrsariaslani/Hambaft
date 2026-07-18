@@ -3,7 +3,7 @@
  "doctype": "DocType",
  "module": "Hambaft",
  "custom": 0,
- "autoname": "field:title",
+ "autoname": "format:AREA-{#####}",
  "fields": [
   {
    "fieldname": "title",
@@ -27,6 +27,20 @@
    "fieldname": "icon",
    "fieldtype": "Data",
    "label": "آیکون"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "وضعیت",
+   "options": "فعال\nغیرفعال\nآرشیو",
+   "default": "فعال",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "sort_order",
+   "fieldtype": "Int",
+   "label": "ترتیب",
+   "default": 0
   },
   {
    "fieldname": "user",

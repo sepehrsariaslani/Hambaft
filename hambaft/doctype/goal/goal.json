@@ -2,12 +2,12 @@
  "doctype": "DocType",
  "name": "Goal",
  "creation": "2026-01-01 00:00:00",
- "modified": "2026-01-01 00:00:00",
+ "modified": "2026-07-10 00:00:00",
  "modified_by": "Administrator",
  "owner": "Administrator",
  "docstatus": 0,
  "module": "Hambaft",
- "autoname": "hash",
+ "autoname": "format:GOAL-{#####}",
  "is_submittable": 0,
  "track_changes": 1,
  "fields": [
@@ -25,11 +25,37 @@
    "label": "توضیحات"
   },
   {
+   "fieldname": "area",
+   "fieldtype": "Link",
+   "label": "حوزه",
+   "options": "Hambaft Area",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
    "fieldname": "category",
    "fieldtype": "Select",
    "label": "دسته‌بندی",
-   "options": "سلامت\nمالی\nشغلی\nآموزشی\nشخصی",
+   "options": "سلامت\nمالی\nشغلی\nآموزشی\nشخصی\nرابطه\nسفارشی",
    "default": "شخصی",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "goal_type",
+   "fieldtype": "Select",
+   "label": "نوع هدف",
+   "options": "نتیجه‌ای\nسنجه‌ای\nمبتنی‌بر_عادت\nتحویل_پروژه\nپس‌انداز_مالی\nسرمایه‌گذاری\nپرداخت_بدهی\nسلامت\nیادگیری\nثبات",
+   "default": "نتیجه‌ای",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "progress_mode",
+   "fieldtype": "Select",
+   "label": "حالت پیشرفت",
+   "options": "دستی\nمقدار_سنجه\nتجمیع_عادت\nتجمیع_پروژه\nموجودی_مالی\nپس‌انداز_مالی\nپرداخت_بدهی\nمرکب_وزنی",
+   "default": "دستی",
    "in_list_view": 1,
    "in_standard_filter": 1
   },
@@ -41,6 +67,19 @@
    "default": "پیش‌نویس",
    "in_list_view": 1,
    "in_standard_filter": 1
+  },
+  {
+   "fieldname": "parent_goal",
+   "fieldtype": "Link",
+   "label": "هدف والد",
+   "options": "Goal"
+  },
+  {
+   "fieldname": "goal_level",
+   "fieldtype": "Select",
+   "label": "سطح هدف",
+   "options": "سالانه\nفصلی\nماهانه\nسفارشی",
+   "default": "سالانه"
   },
   {
    "fieldname": "target_value",
@@ -76,10 +115,16 @@
    "read_only": 1
   },
   {
+   "fieldname": "derived_progress_detail",
+   "fieldtype": "Code",
+   "label": "جزئیات پیشرفت محاسبه‌شده (JSON)",
+   "read_only": 1
+  },
+  {
    "fieldname": "priority",
    "fieldtype": "Select",
    "label": "اولویت",
-   "options": "پایین\nمتوسط\nبالا",
+   "options": "پایین\nمتوسط\nبالا\nفوری",
    "default": "متوسط",
    "in_list_view": 1
   },
@@ -94,6 +139,43 @@
    "label": "برچسب‌ها"
   },
   {
+   "fieldname": "note_blocks_json",
+   "fieldtype": "Text",
+   "label": "بلوک‌های یادداشت (JSON)"
+  },
+  {
+   "fieldname": "linked_habits_section",
+   "fieldtype": "Section Break",
+   "label": "عادت‌های مرتبط"
+  },
+  {
+   "fieldname": "linked_habits",
+   "fieldtype": "Table",
+   "label": "پیوند عادت‌ها",
+   "options": "Goal Habit Link"
+  },
+  {
+   "fieldname": "finance_section",
+   "fieldtype": "Section Break",
+   "label": "ارتباط مالی"
+  },
+  {
+   "fieldname": "linked_finance_accounts",
+   "fieldtype": "Table",
+   "label": "حساب‌های مالی مرتبط",
+   "options": "Goal Finance Link"
+  },
+  {
+   "fieldname": "color",
+   "fieldtype": "Color",
+   "label": "رنگ"
+  },
+  {
+   "fieldname": "icon",
+   "fieldtype": "Data",
+   "label": "آیکون"
+  },
+  {
    "fieldname": "user",
    "fieldtype": "Link",
    "label": "کاربر",
@@ -101,6 +183,112 @@
    "reqd": 1,
    "in_list_view": 1,
    "in_standard_filter": 1
+  },
+  {
+   "fieldname": "linked_projects_section",
+   "fieldtype": "Section Break",
+   "label": "پروژه‌های مرتبط"
+  },
+  {
+   "fieldname": "linked_projects",
+   "fieldtype": "Table",
+   "label": "پیوند پروژه‌ها",
+   "options": "Goal Project Link"
+  },
+  {
+   "fieldname": "project_weights_section",
+   "fieldtype": "Section Break",
+   "label": "وزن‌دهی سیگنال‌های پروژه"
+  },
+  {
+   "fieldname": "project_progress_weight",
+   "fieldtype": "Percent",
+   "label": "وزن پیشرفت پروژه",
+   "default": 40,
+   "description": "سهم پیشرفت کلی پروژه در محاسبه هدف"
+  },
+  {
+   "fieldname": "milestone_weight",
+   "fieldtype": "Percent",
+   "label": "وزن تکمیل نقطه‌عطف",
+   "default": 25,
+   "description": "سهم تسک‌های نقطه‌عطف و کلیدی در محاسبه هدف"
+  },
+  {
+   "fieldname": "key_task_weight",
+   "fieldtype": "Percent",
+   "label": "وزن تسک‌های کلیدی",
+   "default": 20,
+   "description": "سهم تسک‌های کلیدی پروژه در محاسبه هدف"
+  },
+  {
+   "fieldname": "tracked_time_weight",
+   "fieldtype": "Percent",
+   "label": "وزن زمان صرف‌شده",
+   "default": 10,
+   "description": "سهم نسبت زمان واقعی به تخمینی (نرمال‌شده)"
+  },
+  {
+   "fieldname": "metric_weight",
+   "fieldtype": "Percent",
+   "label": "وزن سنجه/KPI",
+   "default": 5,
+   "description": "سهم مقدار سنجه (current_value / target_value)"
+  },
+  {
+   "fieldname": "health_section",
+   "fieldtype": "Section Break",
+   "label": "سلامت هدف"
+  },
+  {
+   "fieldname": "health_state",
+   "fieldtype": "Select",
+   "label": "وضعیت سلامت",
+   "options": "در_مسیر\nدر_خطر\nخارج_از_مسیر\nنیاز_به_بررسی",
+   "read_only": 1
+  },
+  {
+   "fieldname": "health_detail",
+   "fieldtype": "Code",
+   "label": "جزئیات سلامت (JSON)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "completion_section",
+   "fieldtype": "Section Break",
+   "label": "سیاست تکمیل"
+  },
+  {
+   "fieldname": "completion_policy",
+   "fieldtype": "Select",
+   "label": "سیاست تکمیل هدف",
+   "options": "آستانه_پیشرفت\nآستانه_به_علاوه_پروژه‌های_اجباری\nسنجه_به_علاوه_پروژه‌های_اجباری\nهمه_پروژه‌ها_تکمیل\nآستانه_به_علاوه_نقاط_عطف",
+   "default": "آستانه_پیشرفت",
+   "description": "شرط تکمیل خودکار هدف"
+  },
+  {
+   "fieldname": "completion_threshold",
+   "fieldtype": "Percent",
+   "label": "آستانه تکمیل",
+   "default": 100,
+   "description": "درصد پیشرفت مورد نیاز برای تکمیل (در سیاست‌های آستانه‌ای)"
+  },
+  {
+   "fieldname": "snapshot_section",
+   "fieldtype": "Section Break",
+   "label": "آخرین اسنپ‌شات"
+  },
+  {
+   "fieldname": "last_snapshot_json",
+   "fieldtype": "Code",
+   "label": "اسنپ‌شات آخرین محاسبه (JSON)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_snapshot_at",
+   "fieldtype": "Datetime",
+   "label": "زمان آخرین اسنپ‌شات",
+   "read_only": 1
   }
  ],
  "permissions": [

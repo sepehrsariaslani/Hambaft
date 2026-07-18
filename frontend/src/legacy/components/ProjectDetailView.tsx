@@ -1,5 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Goal, Project, Task, GoalCategory, BankAccount, Transaction, Milestone } from '../types';
+import { Goal, Project, Task, GoalCategory, GoalLinkedProject, BankAccount, Transaction, Milestone } from '../types';
+import LinkedContacts from './LinkedContacts';
+import CommentReactions from './CommentReactions';
+import ProofUploader from './ProofUploader';
+import EntityNoteEditor from '../../notes/components/EntityNoteEditor';
+import ViewSwitcher, { type ViewMode } from './ViewSwitcher';
+import ProjectMetaPanel from './ProjectMetaPanel';
 import { 
   ArrowRight, 
   FolderKanban, 
@@ -30,10 +36,13 @@ import {
   CalendarDays,
   Activity,
   Layers,
-  Edit2
+  Edit2,
+  Target
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import PersianDatePicker from './PersianDatePicker';
+import ProjectTaskTreeView from './ProjectTaskTreeView';
+import TaskDetailDrawer from './TaskDetailDrawer';
 import { DateObject } from 'react-multi-date-picker';
 import persian from 'react-date-object/calendars/persian';
 import persian_fa from 'react-date-object/locales/persian_fa';
@@ -45,27 +54,27 @@ const TX_CATEGORIES: Record<string, { label: string; color: string }> = {
   gift: { label: 'هدیه', color: 'text-pink-600 bg-pink-50' },
   subsidy: { label: 'یارانه/حمایتی', color: 'text-teal-600 bg-teal-50' },
   investment: { label: 'سود سرمایه‌گذاری', color: 'text-cyan-600 bg-cyan-50' },
-  food: { label: 'خوراک و رستوران', color: 'text-amber-600 bg-amber-50' },
+  food: { label: 'خوراک و رستوران', color: 'text-[#9B6B61] bg-[#F9F1D8]' },
   rent: { label: 'مسکن و اجاره', color: 'text-indigo-600 bg-indigo-50' },
   transport: { label: 'حمل و نقل', color: 'text-blue-600 bg-blue-50' },
   health: { label: 'پزشکی و سلامت', color: 'text-red-600 bg-red-50' },
   shopping: { label: 'خرید کالا/خدمات', color: 'text-purple-600 bg-purple-50' },
   education: { label: 'آموزش و تحصیل', color: 'text-orange-600 bg-orange-50' },
-  other: { label: 'سایر موارد', color: 'text-gray-600 bg-gray-50' }
+  other: { label: 'سایر موارد', color: 'text-[#8D7F72] bg-[#F9F6EE]' }
 };
 
 const TASK_CATEGORIES = [
   { id: 'work', label: 'کاری', color: 'text-blue-600 bg-blue-50' },
   { id: 'personal', label: 'شخصی', color: 'text-emerald-600 bg-emerald-50' },
   { id: 'health', label: 'سلامت', color: 'text-rose-600 bg-rose-50' },
-  { id: 'finance', label: 'مالی', color: 'text-amber-600 bg-amber-50' },
+  { id: 'finance', label: 'مالی', color: 'text-[#9B6B61] bg-[#F9F1D8]' },
   { id: 'learning', label: 'یادگیری', color: 'text-indigo-600 bg-indigo-50' },
-  { id: 'other', label: 'سایر', color: 'text-gray-600 bg-gray-50' }
+  { id: 'other', label: 'سایر', color: 'text-[#8D7F72] bg-[#F9F6EE]' }
 ];
 
 const PRIORITIES = [
   { id: 'low', label: 'پایین', color: 'bg-emerald-50 text-emerald-700' },
-  { id: 'medium', label: 'متوسط', color: 'bg-amber-50 text-amber-700' },
+  { id: 'medium', label: 'متوسط', color: 'bg-[#F9F1D8] text-[#5A5A40]' },
   { id: 'high', label: 'فوری', color: 'bg-red-50 text-red-700 font-bold' }
 ];
 
@@ -76,21 +85,27 @@ const MONTHS_FA = [
 
 interface ProjectDetailViewProps {
   project: Project & { goalId: string; goalTitle: string; goalCategory: GoalCategory };
+  goals: Goal[];
   transactions: Transaction[];
   bankAccounts: BankAccount[];
   onAddTransaction: (tx: Omit<Transaction, 'id'>) => void;
   onDeleteTransaction: (id: string) => void;
   onToggleTaskTracking: (goalId: string, projectId: string, taskId: string) => void;
   onBack: () => void;
-  onAddTaskToProject: (goalId: string, projectId: string, title: string) => void;
+  onAddTaskToProject: (goalId: string, projectId: string, titleOrTask: string | Task) => void;
   onToggleTaskInProject: (goalId: string, projectId: string, taskId: string) => void;
   onDeleteTaskFromProject: (goalId: string, projectId: string, taskId: string) => void;
   onToggleProjectCompletion: (goalId: string, projectId: string) => void;
-  onUpdateProjectDetails?: (goalId: string, projectId: string, updates: { title?: string; description?: string; notes?: string; milestones?: Milestone[]; tasks?: Task[] }) => void;
+  onUpdateProjectDetails?: (goalId: string, projectId: string, updates: { title?: string; description?: string; notes?: string; milestones?: Milestone[]; tasks?: Task[]; noteBlocks?: any[] }) => void;
+  onNavigateTask?: (taskId: string) => void;
+  onNavigateEntity?: (tab: string, id?: string) => void;
+  onMoveProjectToGoal: (fromGoalId: string, projectId: string, toGoalId: string) => void;
+  contacts?: { id: string; name: string; photoUrl?: string; category?: string }[];
 }
 
 export default function ProjectDetailView({
   project,
+  goals,
   transactions,
   bankAccounts,
   onAddTransaction,
@@ -101,10 +116,15 @@ export default function ProjectDetailView({
   onToggleTaskInProject,
   onDeleteTaskFromProject,
   onToggleProjectCompletion,
-  onUpdateProjectDetails
+  onUpdateProjectDetails,
+  onNavigateTask,
+  onNavigateEntity,
+  onMoveProjectToGoal,
+  contacts = [],
 }: ProjectDetailViewProps) {
   // Views/Tabs State
-  const [activeTab, setActiveTab] = useState<'tasks' | 'planning' | 'milestones'>('tasks');
+  const [activeTab, setActiveTab] = useState<'tasks' | 'finance' | 'planning' | 'milestones' | 'report' | 'notes'>('tasks');
+  const [taskViewMode, setTaskViewMode] = useState<ViewMode>('tree');
   const [selectedTaskForDetails, setSelectedTaskForDetails] = useState<Task | null>(null);
   const [schedulingTaskId, setSchedulingTaskId] = useState<string | null>(null);
   const [calendarDate, setCalendarDate] = useState(() => new Date());
@@ -147,6 +167,22 @@ export default function ProjectDetailView({
   const completedTasks = tasksList.filter(t => t.completed).length;
   const totalTasks = tasksList.length;
   const progressPercent = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+
+  // Quality-aware progress: milestone=3x, key=2x, normal=1x
+  const qualityProgress = (() => {
+    let totalWeight = 0, doneWeight = 0
+    for (const t of tasksList) {
+      const w = t.importance === 'milestone' ? 3 : t.importance === 'key' ? 2 : 1
+      totalWeight += w
+      if (t.completed) doneWeight += w
+    }
+    return totalWeight > 0 ? Math.round((doneWeight / totalWeight) * 100) : 0
+  })()
+
+  const milestoneTasks = tasksList.filter(t => t.importance === 'milestone')
+  const keyTasks = tasksList.filter(t => t.importance === 'key')
+  const milestoneDone = milestoneTasks.filter(t => t.completed).length
+  const keyDone = keyTasks.filter(t => t.completed).length
 
   // Filtered Tasks
   const filteredTasks = tasksList.filter(t => 
@@ -446,17 +482,114 @@ export default function ProjectDetailView({
           </div>
 
           {/* Progress */}
-          <div className="bg-[#FDFBF7] dark:bg-[#121411] p-3 rounded-xl border border-[#E6DFD3]/60">
-            <div className="flex justify-between text-[9px] font-extrabold mb-1">
-              <span>میزان پیشرفت کارهای پروژه</span>
+          <div className="bg-[#FDFBF7] dark:bg-[#121411] p-3 rounded-xl border border-[#E6DFD3]/60 space-y-2">
+            <div className="flex justify-between text-[9px] font-extrabold">
+              <span>پیشرفت ساده</span>
               <span>{progressPercent}% ({completedTasks} از {totalTasks})</span>
             </div>
             <div className="w-full bg-[#E6DFD3]/40 h-2 rounded-full overflow-hidden">
               <div className="bg-[#7C8363] h-full transition-all duration-300" style={{ width: `${progressPercent}%` }} />
             </div>
+            {qualityProgress !== progressPercent && (
+              <>
+                <div className="flex justify-between text-[9px] font-extrabold">
+                  <span>پیشرفت کیفی <span className="text-[#8D7F72] font-normal">(نقطه‌عطف ×۳، کلیدی ×۲)</span></span>
+                  <span>{qualityProgress}%</span>
+                </div>
+                <div className="w-full bg-[#E6DFD3]/40 h-2 rounded-full overflow-hidden">
+                  <div className="bg-[#9B6B61] h-full transition-all duration-300" style={{ width: `${qualityProgress}%` }} />
+                </div>
+              </>
+            )}
+            {/* Milestone / Key breakdown */}
+            {(milestoneTasks.length > 0 || keyTasks.length > 0) && (
+              <div className="flex gap-3 text-[9px] font-bold pt-1">
+                {milestoneTasks.length > 0 && (
+                  <span className="bg-[#F9F1D8] text-[#5A5A40] px-2 py-0.5 rounded-lg">◆ نقطه‌عطف: {milestoneDone}/{milestoneTasks.length}</span>
+                )}
+                {keyTasks.length > 0 && (
+                  <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded-lg">★ کلیدی: {keyDone}/{keyTasks.length}</span>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
+
+      <ProjectMetaPanel
+        project={project}
+        goals={goals}
+        onMoveProjectToGoal={onMoveProjectToGoal}
+        onOpenGoal={(goalId) => onNavigateEntity?.('goals', goalId)}
+      />
+
+      {/* Linked Contacts */}
+      {project.id && (
+        <div className="bg-[#FDFBF7] dark:bg-[#1B1D16] p-4 rounded-2xl border border-[#E6DFD3] dark:border-[#3D4133]/30">
+          <LinkedContacts entityType="project" entityId={project.id} contacts={contacts} onNavigateContact={(contactId) => onNavigateEntity?.('contacts', contactId)} />
+          <div className="mt-3 pt-3 border-t border-[#E6DFD3]/40 dark:border-[#3D4133]/20">
+            <CommentReactions entityType="project" entityId={project.id} />
+          </div>
+          <div className="mt-3 pt-3 border-t border-[#E6DFD3]/40 dark:border-[#3D4133]/20">
+            <ProofUploader entityType="project" entityId={project.id} />
+          </div>
+        </div>
+      )}
+
+      {/* GOAL CONTRIBUTION CONTEXT with Health State */}
+      {project.goalId && project.goalTitle && (() => {
+        // Find contribution data from the parent goal's linkedProjects
+        const contribType = project.contributionType || 'mandatory'
+        const contribLabel = contribType === 'mandatory' || contribType === 'اجباری' ? 'اجباری' :
+                             contribType === 'recommended' || contribType === 'پیشنهادی' ? 'پیشنهادی' :
+                             contribType === 'supporting' || contribType === 'پشتیبان' ? 'پشتیبان' : contribType
+        const contribColor = contribLabel === 'اجباری' ? 'bg-red-100 text-red-700 border-red-200' :
+                             contribLabel === 'پیشنهادی' ? 'bg-blue-100 text-blue-700 border-blue-200' :
+                             'bg-[#E6DFD3]/40 text-[#8D7F72] border-[#D6CFC3]'
+        // Health state from project
+        const healthState = (project as any).goalHealthState || ''
+        const healthLabel = healthState === 'در_مسیر' || healthState === 'on_track' ? 'در مسیر' :
+                            healthState === 'در_خطر' || healthState === 'at_risk' ? 'در خطر' :
+                            healthState === 'خارج_از_مسیر' || healthState === 'off_track' ? 'خارج از مسیر' :
+                            healthState === 'نیاز_به_بررسی' || healthState === 'needs_review' ? 'نیاز به بررسی' : ''
+        const healthColor = healthLabel === 'در مسیر' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' :
+                            healthLabel === 'در خطر' ? 'bg-[#F9F1D8] text-[#5A5A40] border-[#EBE3C8]' :
+                            healthLabel === 'خارج از مسیر' ? 'bg-red-100 text-red-700 border-red-200' :
+                            healthLabel === 'نیاز به بررسی' ? 'bg-yellow-100 text-yellow-700 border-yellow-200' : ''
+        return (
+          <div className="bg-[#E8ECE0]/20 p-3 rounded-2xl border border-[#DDE2D5] space-y-2 text-right">
+            <div className="flex items-center gap-3">
+              <div className="p-1.5 bg-[#7C8363]/10 rounded-lg">
+                <Target className="w-4 h-4 text-[#7C8363]" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <span className="text-[9px] text-[#8D7F72] block">مشارکت در هدف:</span>
+                <span className="text-xs font-bold text-[#2D3025] truncate block">{project.goalTitle}</span>
+              </div>
+              <div className="flex items-center gap-2 text-[9px] font-bold flex-wrap justify-end">
+                <span className={`px-2 py-0.5 rounded-md border ${contribColor}`}>
+                  {contribLabel}
+                </span>
+                {healthLabel && (
+                  <span className={`px-2 py-0.5 rounded-md border ${healthColor}`}>
+                    {healthLabel}
+                  </span>
+                )}
+                <span className="bg-[#F9F1D8] text-[#5A5A40] px-2 py-0.5 rounded-md border border-[#EBE3C8]">
+                  پیشرفت: {qualityProgress}%
+                </span>
+              </div>
+            </div>
+            {/* Goal health detail row */}
+            {(healthLabel === 'در خطر' || healthLabel === 'خارج از مسیر') && (
+              <div className="flex items-center gap-2 text-[9px] text-red-600 font-semibold bg-red-50 px-3 py-1.5 rounded-lg border border-red-100">
+                <AlertCircle className="w-3 h-3" />
+                <span>هدف مرتبط {healthLabel} است — اولویت‌بندی پروژه‌های اجباری این هدف مهم است</span>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* THREE VIEW SWITCHER (TABS) */}
       <div className="flex border-b border-[#E6DFD3] dark:border-[#3D4133]/60">
@@ -468,7 +601,19 @@ export default function ProjectDetailView({
         >
           <div className="flex items-center gap-1">
             <FolderKanban className="w-3.5 h-3.5" />
-            <span>لیست کارها و مالی</span>
+            <span>تسک‌ها</span>
+          </div>
+        </button>
+
+        <button
+          onClick={() => { setActiveTab('finance'); setSchedulingTaskId(null); }}
+          className={`px-4 py-2 text-xs font-black transition-all cursor-pointer ${
+            activeTab === 'finance' ? 'border-b-2 border-[#7C8363] text-[#7C8363]' : 'text-[#8D7F72]'
+          }`}
+        >
+          <div className="flex items-center gap-1">
+            <Coins className="w-3.5 h-3.5" />
+            <span>مالی</span>
           </div>
         </button>
 
@@ -495,6 +640,30 @@ export default function ProjectDetailView({
             <span>مایلستون‌ها (نقاط عطف)</span>
           </div>
         </button>
+
+        <button
+          onClick={() => { setActiveTab('report'); setSchedulingTaskId(null); }}
+          className={`px-4 py-2 text-xs font-black transition-all cursor-pointer ${
+            activeTab === 'report' ? 'border-b-2 border-[#7C8363] text-[#7C8363]' : 'text-[#8D7F72]'
+          }`}
+        >
+          <div className="flex items-center gap-1">
+            <TrendingUp className="w-3.5 h-3.5" />
+            <span>گزارش زمان</span>
+          </div>
+        </button>
+
+        <button
+          onClick={() => { setActiveTab('notes'); setSchedulingTaskId(null); }}
+          className={`px-4 py-2 text-xs font-black transition-all cursor-pointer ${
+            activeTab === 'notes' ? 'border-b-2 border-[#7C8363] text-[#7C8363]' : 'text-[#8D7F72]'
+          }`}
+        >
+          <div className="flex items-center gap-1">
+            <FileText className="w-3.5 h-3.5" />
+            <span>یادداشت‌ها (Notion)</span>
+          </div>
+        </button>
       </div>
 
       {/* VIEW CONTENTS */}
@@ -502,8 +671,8 @@ export default function ProjectDetailView({
         {activeTab === 'tasks' && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             
-            {/* Task list (Left) */}
-            <div className="lg:col-span-7 space-y-4">
+            {/* Task list — full width since notes section moved to dedicated page */}
+            <div className="lg:col-span-12 space-y-4">
               <div className="bg-white dark:bg-[#1C1D17] rounded-3xl border border-[#E6DFD3] p-5 space-y-3 shadow-xs">
                 <div className="flex justify-between items-center pb-2 border-b border-[#E6DFD3]/40">
                   <h3 className="text-xs font-black text-[#2D3025] dark:text-[#E8ECE0] flex items-center gap-1.5">
@@ -536,8 +705,40 @@ export default function ProjectDetailView({
                   <button type="submit" className="px-4 py-1.5 bg-[#7C8363] text-white text-xs font-bold rounded-xl cursor-pointer">افزودن</button>
                 </form>
 
-                {/* Tasks List */}
-                <div className="space-y-2">
+                {/* View Switcher: Tree / List */}
+                <ViewSwitcher
+                  views={[
+                    { id: 'tree', label: 'نمای درختی', emoji: '🌲' },
+                    { id: 'list', label: 'نمای لیست', emoji: '🗂️' },
+                  ]}
+                  activeView={taskViewMode}
+                  onChange={setTaskViewMode}
+                  size="sm"
+                />
+
+                {/* Tasks Tree View */}
+                {taskViewMode === 'tree' && (
+                  <ProjectTaskTreeView
+                    tasks={tasksList}
+                    onToggleTask={(taskId) => onToggleTaskInProject(project.goalId, project.id, taskId)}
+                    onDeleteTask={(taskId) => onDeleteTaskFromProject(project.goalId, project.id, taskId)}
+                    onUpdateTask={(task) => handleUpdateSingleTask(task)}
+                    onAddTask={(titleOrTask) => onAddTaskToProject(project.goalId, project.id, titleOrTask)}
+                    onViewTaskDetails={(taskId) => {
+                      if (onNavigateTask) { onNavigateTask(taskId); return; }
+                      const t = tasksList.find(x => x.id === taskId)
+                      if (t) setSelectedTaskForDetails(t)
+                    }}
+                    onOpenTaskDrawer={(taskId) => {
+                      const t = tasksList.find(x => x.id === taskId)
+                      if (t) setSelectedTaskForDetails(t)
+                    }}
+                  />
+                )}
+
+                {/* Tasks List View */}
+                {taskViewMode === 'list' && (
+                  <div className="space-y-2">
                   {filteredTasks.length > 0 ? (
                     filteredTasks.map((t) => {
                       const sec = getTaskSeconds(t);
@@ -546,8 +747,8 @@ export default function ProjectDetailView({
                           key={t.id}
                           className="flex items-center justify-between p-3 bg-[#FDFBF7] dark:bg-[#121411] border border-[#E6DFD3] rounded-xl hover:border-[#7C8363] transition-colors"
                         >
-                          <div 
-                            onClick={() => setSelectedTaskForDetails(t)}
+                          <div
+                            onClick={() => onNavigateTask ? onNavigateTask(t.id) : setSelectedTaskForDetails(t)}
                             className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer"
                           >
                             <button
@@ -570,7 +771,7 @@ export default function ProjectDetailView({
                                 {t.dueDate && <span className="text-[8px] text-[#9B6B61]">مهلت: {t.dueDate}</span>}
                                 {t.priority && (
                                   <span className={`text-[8px] px-1.5 rounded ${
-                                    t.priority === 'high' ? 'bg-red-50 text-red-600' : t.priority === 'medium' ? 'bg-amber-50 text-amber-600' : 'bg-gray-50 text-gray-600'
+                                    t.priority === 'high' ? 'bg-red-50 text-red-600' : t.priority === 'medium' ? 'bg-[#F9F1D8] text-[#9B6B61]' : 'bg-[#F9F6EE] text-[#8D7F72]'
                                   }`}>
                                     {t.priority === 'high' ? 'فوری' : t.priority === 'medium' ? 'متوسط' : 'پایین'}
                                   </span>
@@ -578,6 +779,12 @@ export default function ProjectDetailView({
                               </div>
                             </div>
                           </div>
+                          <button
+                            onClick={() => setSelectedTaskForDetails(t)}
+                            className="px-2 py-1 text-[10px] font-bold text-[#5a6b8a] hover:bg-blue-50 rounded-lg shrink-0"
+                          >
+                            پنل
+                          </button>
 
                           <div className="flex items-center gap-1.5 shrink-0">
                             <button
@@ -602,108 +809,80 @@ export default function ProjectDetailView({
                     <p className="text-[10px] text-center text-[#8D7F72] py-6">هیچ وظیفه‌ای با این مشخصات یافت نشد.</p>
                   )}
                 </div>
-              </div>
-
-              {/* Financial Logger */}
-              <div className="bg-white dark:bg-[#1C1D17] rounded-3xl border border-[#E6DFD3] p-5 space-y-4 shadow-xs">
-                <h3 className="text-xs font-black text-[#2D3025] dark:text-[#E8ECE0] flex items-center gap-1.5 pb-2 border-b border-[#E6DFD3]/40">
-                  <Coins className="w-4 h-4 text-emerald-600" />
-                  <span>ثبت مخارج و درآمدهای اختصاصی پروژه</span>
-                </h3>
-
-                <form onSubmit={handleAddProjectTx} className="space-y-2">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-[9px] text-[#8D7F72] font-black">نوع تراکنش</label>
-                      <div className="grid grid-cols-2 gap-1 bg-[#FDFBF7] p-0.5 border border-[#D6CFC3] rounded-xl mt-1">
-                        <button type="button" onClick={() => setTxType('expense')} className={`py-1 text-[9px] font-black rounded-lg ${txType === 'expense' ? 'bg-red-500 text-white' : 'text-[#8D7F72]'}`}>هزینه</button>
-                        <button type="button" onClick={() => setTxType('income')} className={`py-1 text-[9px] font-black rounded-lg ${txType === 'income' ? 'bg-emerald-500 text-white' : 'text-[#8D7F72]'}`}>درآمد</button>
-                      </div>
-                    </div>
-                    <div>
-                      <label className="text-[9px] text-[#8D7F72] font-black">مبلغ (ریال)</label>
-                      <input
-                        type="text" required placeholder="مثلا ۵,۰۰۰,۰۰۰" value={txAmount}
-                        onChange={(e) => {
-                          const val = e.target.value.replace(/,/g, '');
-                          if (!isNaN(Number(val))) setTxAmount(val ? Number(val).toLocaleString() : '');
-                        }}
-                        className="w-full px-3 py-1.5 text-xs bg-white dark:bg-[#121411] border border-[#D6CFC3] rounded-xl mt-1 font-mono text-left"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-[9px] text-[#8D7F72] font-black font-sans">توضیحات</label>
-                      <input type="text" placeholder="بابت..." value={txDesc} onChange={e => setTxDesc(e.target.value)} className="w-full px-3 py-1.5 text-xs bg-white dark:bg-[#121411] border border-[#D6CFC3] rounded-xl mt-1" />
-                    </div>
-                    <div>
-                      <label className="text-[9px] text-[#8D7F72] font-black">تاریخ</label>
-                      <PersianDatePicker value={txDate} onChange={setTxDate} className="mt-1" />
-                    </div>
-                  </div>
-
-                  <button type="submit" className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl mt-2">ثبت تراکنش مالی</button>
-                </form>
-
-                {/* Transactions history */}
-                <div className="space-y-1 max-h-40 overflow-y-auto pt-2 border-t border-[#E6DFD3]/40">
-                  {projectTransactions.length > 0 ? (
-                    projectTransactions.map((tx) => (
-                      <div key={tx.id} className="flex justify-between items-center p-2 bg-[#FDFBF7] dark:bg-[#121411] border border-[#E6DFD3]/40 rounded-xl text-right">
-                        <div>
-                          <div className="text-xs font-bold text-[#3D3D3D] dark:text-[#E8ECE0]">{tx.description}</div>
-                          <div className="text-[8px] text-[#8D7F72] font-mono mt-0.5">{tx.date}</div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className={`text-xs font-black font-mono ${tx.type === 'income' ? 'text-emerald-600' : 'text-red-600'}`}>
-                            {tx.type === 'income' ? '+' : '-'}{tx.amount.toLocaleString()}
-                          </span>
-                          <button onClick={() => onDeleteTransaction(tx.id)} className="p-1 text-red-500"><Trash2 className="w-3 h-3" /></button>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-[8px] text-[#8D7F72] italic text-center py-2">هیچ تراکنشی ثبت نشده است.</p>
-                  )}
-                </div>
+                )}
               </div>
             </div>
 
-            {/* Notes & Coaching (Right) */}
-            <div className="lg:col-span-5 space-y-4">
-              <div className="bg-white dark:bg-[#1C1D17] rounded-3xl border border-[#E6DFD3] p-5 space-y-3 shadow-xs">
-                <h3 className="text-xs font-black text-[#2D3025] dark:text-[#E8ECE0] flex items-center gap-1.5 pb-2 border-b border-[#E6DFD3]/40">
-                  <BookOpen className="w-3.5 h-3.5 text-[#E26645]" />
-                  <span>دفترچه یادداشت و طوفان فکری پروژه</span>
-                </h3>
-                <textarea
-                  value={projectNotes}
-                  onChange={(e) => setProjectNotes(e.target.value)}
-                  placeholder="ایده‌ها، منابع، آدرس‌ها و یادداشت‌های مربوط به این پروژه..."
-                  className="w-full px-3 py-2 text-xs bg-[#F9F6EE] dark:bg-[#121411] border border-[#D6CFC3] rounded-xl text-[#3D3D3D] dark:text-[#E8ECE0] h-48 resize-none focus:outline-none"
-                />
-                <button
-                  onClick={handleSaveNotesOnly}
-                  className="w-full py-1.5 bg-[#7C8363] text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1"
-                >
-                  {isSavingNotes ? <Clock className="w-3 h-3 animate-spin" /> : <FileText className="w-3 h-3" />}
-                  <span>ذخیره یادداشت‌ها</span>
-                </button>
-              </div>
+          </div>
+        )}
 
-              <div className="bg-[#E8ECE0]/40 dark:bg-[#1F241A]/20 p-4 rounded-3xl border border-[#DDE2D5]/60">
-                <div className="flex items-center gap-1.5 text-[#7C8363] font-black text-[10px] mb-1">
-                  <AlertCircle className="w-3.5 h-3.5" />
-                  <span>پیشنهاد کوچینگ پروژه</span>
+        {/* FINANCE VIEW */}
+        {activeTab === 'finance' && (
+          <div className="space-y-6">
+            <div className="bg-white dark:bg-[#1C1D17] rounded-3xl border border-[#E6DFD3] p-5 space-y-4 shadow-xs">
+              <h3 className="text-xs font-black text-[#2D3025] dark:text-[#E8ECE0] flex items-center gap-1.5 pb-2 border-b border-[#E6DFD3]/40">
+                <Coins className="w-4 h-4 text-emerald-600" />
+                <span>ثبت مخارج و درآمدهای اختصاصی پروژه</span>
+              </h3>
+
+              <form onSubmit={handleAddProjectTx} className="space-y-2">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[9px] text-[#8D7F72] font-black">نوع تراکنش</label>
+                    <div className="grid grid-cols-2 gap-1 bg-[#FDFBF7] p-0.5 border border-[#D6CFC3] rounded-xl mt-1">
+                      <button type="button" onClick={() => setTxType('expense')} className={`py-1 text-[9px] font-black rounded-lg ${txType === 'expense' ? 'bg-red-500 text-white' : 'text-[#8D7F72]'}`}>هزینه</button>
+                      <button type="button" onClick={() => setTxType('income')} className={`py-1 text-[9px] font-black rounded-lg ${txType === 'income' ? 'bg-emerald-500 text-white' : 'text-[#8D7F72]'}`}>درآمد</button>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[9px] text-[#8D7F72] font-black">مبلغ (ریال)</label>
+                    <input
+                      type="text" required placeholder="مثلا ۵,۰۰۰,۰۰۰" value={txAmount}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/,/g, '');
+                        if (!isNaN(Number(val))) setTxAmount(val ? Number(val).toLocaleString() : '');
+                      }}
+                      className="w-full px-3 py-1.5 text-xs bg-white dark:bg-[#121411] border border-[#D6CFC3] rounded-xl mt-1 font-mono text-left"
+                    />
+                  </div>
                 </div>
-                <p className="text-[10px] text-[#8D7F72] dark:text-[#9D978B] leading-relaxed">
-                  سعی کنید کارها را به بسته‌های ۲۵ دقیقه‌ای تمرکز (پومودورو) بشکنید. ارتباط تنگاتنگ بین کارایی ذهنی و توازن در بخش اهداف بلندمدت با تکمیل گام‌به‌گام زیرکارها محقق می‌شود.
-                </p>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[9px] text-[#8D7F72] font-black font-sans">توضیحات</label>
+                    <input type="text" placeholder="بابت..." value={txDesc} onChange={e => setTxDesc(e.target.value)} className="w-full px-3 py-1.5 text-xs bg-white dark:bg-[#121411] border border-[#D6CFC3] rounded-xl mt-1" />
+                  </div>
+                  <div>
+                    <label className="text-[9px] text-[#8D7F72] font-black">تاریخ</label>
+                    <PersianDatePicker value={txDate} onChange={setTxDate} className="mt-1" />
+                  </div>
+                </div>
+
+                <button type="submit" className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl mt-2">ثبت تراکنش مالی</button>
+              </form>
+
+              {/* Transactions history */}
+              <div className="space-y-1 max-h-40 overflow-y-auto pt-2 border-t border-[#E6DFD3]/40">
+                {projectTransactions.length > 0 ? (
+                  projectTransactions.map((tx) => (
+                    <div key={tx.id} className="flex justify-between items-center p-2 bg-[#FDFBF7] dark:bg-[#121411] border border-[#E6DFD3]/40 rounded-xl text-right">
+                      <div>
+                        <div className="text-xs font-bold text-[#3D3D3D] dark:text-[#E8ECE0]">{tx.description}</div>
+                        <div className="text-[8px] text-[#8D7F72] font-mono mt-0.5">{tx.date}</div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className={`text-xs font-black font-mono ${tx.type === 'income' ? 'text-emerald-600' : 'text-red-600'}`}>
+                          {tx.type === 'income' ? '+' : '-'}{tx.amount.toLocaleString()}
+                        </span>
+                        <button onClick={() => onDeleteTransaction(tx.id)} className="p-1 text-red-500"><Trash2 className="w-3 h-3" /></button>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-[8px] text-[#8D7F72] italic text-center py-2">هیچ تراکنشی ثبت نشده است.</p>
+                )}
               </div>
             </div>
-
           </div>
         )}
 
@@ -722,7 +901,7 @@ export default function ProjectDetailView({
                 <div className="flex items-center gap-3">
                   <button
                     onClick={() => setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() - 1, 1))}
-                    className="p-1 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-lg"
+                    className="p-1 hover:bg-[#E6DFD3]/40 dark:hover:bg-[#2D3025] rounded-lg"
                   >
                     <ChevronLeft className="w-4 h-4 rotate-180" />
                   </button>
@@ -731,7 +910,7 @@ export default function ProjectDetailView({
                   </span>
                   <button
                     onClick={() => setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() + 1, 1))}
-                    className="p-1 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-lg"
+                    className="p-1 hover:bg-[#E6DFD3]/40 dark:hover:bg-[#2D3025] rounded-lg"
                   >
                     <ChevronLeft className="w-4 h-4" />
                   </button>
@@ -739,9 +918,9 @@ export default function ProjectDetailView({
               </div>
 
               {schedulingTaskId && (
-                <div className="bg-amber-50 border border-amber-200 text-amber-800 text-[10px] p-2.5 rounded-xl flex items-center justify-between">
+                <div className="bg-[#F9F1D8] border border-[#EBE3C8] text-[#5A5A40] text-[10px] p-2.5 rounded-xl flex items-center justify-between">
                   <span>حالت برنامه‌ریزی فعال است. برای ثبت تاریخ انجام، روی یکی از روزهای تقویم زیر کلیک کنید.</span>
-                  <button onClick={() => setSchedulingTaskId(null)} className="text-amber-900 font-bold bg-white px-2 py-0.5 rounded border">انصراف</button>
+                  <button onClick={() => setSchedulingTaskId(null)} className="text-[#5A5A40] font-bold bg-white px-2 py-0.5 rounded border">انصراف</button>
                 </div>
               )}
 
@@ -770,13 +949,13 @@ export default function ProjectDetailView({
                       className={`min-h-[70px] border rounded-xl p-1 text-right flex flex-col justify-between transition-all ${
                         cell.active 
                           ? 'bg-[#FDFBF7] dark:bg-[#121411] border-[#E6DFD3] hover:border-[#7C8363] cursor-pointer' 
-                          : 'bg-gray-50/40 dark:bg-zinc-900/10 border-transparent opacity-30 select-none'
+                          : 'bg-[#F9F6EE]/40 dark:bg-[#1B1D16]/10 border-transparent opacity-30 select-none'
                       }`}
                     >
                       {cell.active && (
                         <div className="flex justify-between items-center text-[9px] font-black text-[#8D7F72]">
                           <span>{cell.day}</span>
-                          <span className="text-[8px] text-gray-400 font-mono">{jalaliDay}</span>
+                          <span className="text-[8px] text-[#8D7F72] font-mono">{jalaliDay}</span>
                         </div>
                       )}
 
@@ -787,11 +966,12 @@ export default function ProjectDetailView({
                             key={t.id}
                             onClick={(e) => {
                               e.stopPropagation();
+                              if (onNavigateTask) { onNavigateTask(t.id); return; }
                               setSelectedTaskForDetails(t);
                             }}
                             className={`text-[8px] p-1 rounded truncate leading-none font-bold select-none cursor-pointer ${
                               t.completed 
-                                ? 'bg-gray-200/60 text-gray-500 line-through' 
+                                ? 'bg-[#D6CFC3]/60 text-[#8D7F72] line-through' 
                                 : 'bg-[#E8ECE0] text-[#5A5A40] dark:bg-[#1F241A] dark:text-[#9ECE9A]'
                             }`}
                             title={t.title}
@@ -823,7 +1003,7 @@ export default function ProjectDetailView({
                     <div key={t.id} className="p-2.5 bg-[#FDFBF7] dark:bg-[#121411] border border-[#E6DFD3]/60 rounded-xl flex items-center justify-between">
                       <div className="min-w-0 flex-1 text-right">
                         <div 
-                          onClick={() => setSelectedTaskForDetails(t)}
+                          onClick={() => onNavigateTask ? onNavigateTask(t.id) : setSelectedTaskForDetails(t)}
                           className="text-[11px] font-bold text-[#3D3D3D] dark:text-[#E8ECE0] truncate cursor-pointer hover:underline"
                         >
                           {t.title}
@@ -833,7 +1013,7 @@ export default function ProjectDetailView({
                         onClick={() => setSchedulingTaskId(t.id)}
                         className={`px-2 py-1 text-[9px] font-black rounded-lg border transition-colors cursor-pointer shrink-0 ${
                           schedulingTaskId === t.id 
-                            ? 'bg-amber-500 text-white border-amber-600' 
+                            ? 'bg-[#9B6B61] text-white border-[#9B6B61]' 
                             : 'bg-[#7C8363] text-white hover:bg-[#5A5A40]'
                         }`}
                       >
@@ -842,7 +1022,7 @@ export default function ProjectDetailView({
                     </div>
                   ))
                 ) : (
-                  <div className="text-center py-8 border border-dashed border-gray-200 rounded-xl text-[9px] text-gray-400">
+                  <div className="text-center py-8 border border-dashed border-[#D6CFC3] rounded-xl text-[9px] text-[#8D7F72]">
                     🎉 تمام کارهای پروژه زمان‌بندی شده‌اند!
                   </div>
                 )}
@@ -866,7 +1046,7 @@ export default function ProjectDetailView({
               </div>
 
               {/* Milestones timeline list */}
-              <div className="space-y-6 relative border-r-2 border-gray-200 dark:border-zinc-800 pr-5 mr-3 pt-3">
+              <div className="space-y-6 relative border-r-2 border-[#D6CFC3] dark:border-[#3D4133] pr-5 mr-3 pt-3">
                 {(project.milestones || []).length > 0 ? (
                   (project.milestones || []).map((m) => {
                     const associated = tasksList.filter(t => t.milestoneId === m.id);
@@ -886,7 +1066,7 @@ export default function ProjectDetailView({
                         <div className="flex justify-between items-start">
                           <div>
                             <div className="flex items-center gap-2">
-                              <span className={`text-xs font-black ${m.completed ? 'text-gray-400 line-through' : 'text-[#3D3D3D] dark:text-[#E8ECE0]'}`}>
+                              <span className={`text-xs font-black ${m.completed ? 'text-[#8D7F72] line-through' : 'text-[#3D3D3D] dark:text-[#E8ECE0]'}`}>
                                 {m.title}
                               </span>
                               {m.dueDate && <span className="text-[8px] bg-red-50 text-red-600 px-1.5 py-0.5 rounded">تا {m.dueDate}</span>}
@@ -910,12 +1090,12 @@ export default function ProjectDetailView({
                         </div>
 
                         {/* Progress Bar of Milestone */}
-                        <div className="bg-[#FDFBF7] dark:bg-[#121411] p-2 rounded-xl border border-gray-100 dark:border-zinc-800 space-y-1">
-                          <div className="flex justify-between text-[8px] font-bold text-gray-500">
+                        <div className="bg-[#FDFBF7] dark:bg-[#121411] p-2 rounded-xl border border-[#E6DFD3] dark:border-[#3D4133] space-y-1">
+                          <div className="flex justify-between text-[8px] font-bold text-[#8D7F72]">
                             <span>کارهای متصل: {doneCount} از {totalCount} کار</span>
                             <span>{pct}% درصد پیشرفت</span>
                           </div>
-                          <div className="w-full bg-gray-200/50 dark:bg-zinc-800 h-1.5 rounded-full overflow-hidden">
+                          <div className="w-full bg-[#D6CFC3]/50 dark:bg-[#3D4133] h-1.5 rounded-full overflow-hidden">
                             <div className="bg-emerald-500 h-full transition-all duration-300" style={{ width: `${pct}%` }} />
                           </div>
 
@@ -925,17 +1105,17 @@ export default function ProjectDetailView({
                               {associated.map(t => (
                                 <div
                                   key={t.id}
-                                  onClick={() => setSelectedTaskForDetails(t)}
+                                  onClick={() => onNavigateTask ? onNavigateTask(t.id) : setSelectedTaskForDetails(t)}
                                   className="flex items-center justify-between text-[9px] bg-white dark:bg-[#1C1D17] border p-1 rounded-lg cursor-pointer hover:border-[#7C8363]"
                                 >
-                                  <span className={`truncate ${t.completed ? 'line-through text-gray-400' : 'text-[#3D3D3D] dark:text-[#E8ECE0]'}`}>{t.title}</span>
+                                  <span className={`truncate ${t.completed ? 'line-through text-[#8D7F72]' : 'text-[#3D3D3D] dark:text-[#E8ECE0]'}`}>{t.title}</span>
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       const updated = tasksList.map(item => item.id === t.id ? { ...item, milestoneId: undefined } : item);
                                       saveTasksList(updated);
                                     }}
-                                    className="text-gray-400 hover:text-red-500 p-0.5"
+                                    className="text-[#8D7F72] hover:text-red-500 p-0.5"
                                     title="قطع ارتباط از مایلستون"
                                   >
                                     <X className="w-2.5 h-2.5" />
@@ -944,7 +1124,7 @@ export default function ProjectDetailView({
                               ))}
                             </div>
                           ) : (
-                            <p className="text-[8px] text-gray-400 italic mt-1">هیچ کاری هنوز به این مایلستون متصل نشده است.</p>
+                            <p className="text-[8px] text-[#8D7F72] italic mt-1">هیچ کاری هنوز به این مایلستون متصل نشده است.</p>
                           )}
                         </div>
                       </div>
@@ -1014,7 +1194,7 @@ export default function ProjectDetailView({
                         </div>
                       ))
                     ) : (
-                      <p className="text-[8px] text-gray-400 italic text-center py-2">هیچ کارِ بدون مایلستونی وجود ندارد.</p>
+                      <p className="text-[8px] text-[#8D7F72] italic text-center py-2">هیچ کارِ بدون مایلستونی وجود ندارد.</p>
                     )}
                   </div>
                 </div>
@@ -1023,238 +1203,122 @@ export default function ProjectDetailView({
 
           </div>
         )}
+
+        {/* REPORT VIEW */}
+        {activeTab === 'report' && (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-white dark:bg-[#1C1D17] rounded-3xl border border-[#E6DFD3] p-5 text-center space-y-2">
+                <div className="text-[9px] font-bold text-[#8D7F72]">کل زمان صرف‌شده</div>
+                <div className="text-xl font-black text-[#2D3025] dark:text-[#E8ECE0] font-mono">{formatSeconds(totalProjectSeconds)}</div>
+              </div>
+              <div className="bg-white dark:bg-[#1C1D17] rounded-3xl border border-[#E6DFD3] p-5 text-center space-y-2">
+                <div className="text-[9px] font-bold text-[#8D7F72]">تعداد کارها</div>
+                <div className="text-xl font-black text-[#2D3025] dark:text-[#E8ECE0]">{totalTasks}</div>
+              </div>
+              <div className="bg-white dark:bg-[#1C1D17] rounded-3xl border border-[#E6DFD3] p-5 text-center space-y-2">
+                <div className="text-[9px] font-bold text-[#8D7F72]">میانگین زمان هر کار</div>
+                <div className="text-xl font-black text-[#2D3025] dark:text-[#E8ECE0] font-mono">
+                  {totalTasks > 0 ? formatSeconds(Math.round(totalProjectSeconds / totalTasks)) : '0'}
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white dark:bg-[#1C1D17] rounded-3xl border border-[#E6DFD3] p-5 space-y-4">
+              <h3 className="text-xs font-black text-[#2D3025] dark:text-[#E8ECE0] flex items-center gap-1.5">
+                <Clock className="w-4 h-4 text-[#7C8363]" />
+                <span>جزئیات زمان هر کار</span>
+              </h3>
+              <div className="space-y-2">
+                {tasksList.map((t) => {
+                  const sec = getTaskSeconds(t)
+                  const pct = totalProjectSeconds > 0 ? Math.round((sec / totalProjectSeconds) * 100) : 0
+                  return (
+                    <div key={t.id} className="flex items-center gap-3 p-3 bg-[#FDFBF7] dark:bg-[#121411] border border-[#E6DFD3]/60 rounded-xl">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <span className={`text-xs font-bold ${t.completed ? 'line-through text-[#8D7F72]' : 'text-[#2D3025] dark:text-[#E8ECE0]'}`}>{t.title}</span>
+                          <span className="text-[10px] font-mono text-[#7C8363]">{formatSeconds(sec)}</span>
+                        </div>
+                        <div className="w-full bg-[#E6DFD3]/40 h-1.5 rounded-full overflow-hidden mt-1.5">
+                          <div className="bg-[#7C8363] h-full rounded-full transition-all" style={{ width: `${pct}%` }} />
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+                {tasksList.length === 0 && (
+                  <div className="text-center py-8 text-[10px] text-[#8D7F72]">هیچ کاری ثبت نشده است</div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* NOTES VIEW */}
+        {activeTab === 'notes' && (
+          <div className="space-y-4">
+            <EntityNoteEditor
+              entityId={project.id}
+              entityType="project"
+              title="یادداشت‌ها و جزئیات پروژه (Notion)"
+              initialBlocks={project.noteBlocks}
+              onSave={(blocks) => {
+                if (onUpdateProjectDetails) {
+                  onUpdateProjectDetails(project.goalId, project.id, { noteBlocks: blocks });
+                }
+              }}
+            />
+          </div>
+        )}
+
+
       </div>
 
-      {/* TASK DETAILS SLIDE-OVER OVERLAY MODAL */}
-      <AnimatePresence>
-        {selectedTaskForDetails && (
-          <>
-            {/* Backdrop */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 0.5 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setSelectedTaskForDetails(null)}
-              className="fixed inset-0 bg-black z-50 cursor-pointer"
-            />
-
-            {/* Slide over */}
-            <motion.div
-              initial={{ x: '100%' }}
-              animate={{ x: 0 }}
-              exit={{ x: '100%' }}
-              transition={{ type: 'spring', damping: 20, stiffness: 200 }}
-              className="fixed top-0 bottom-0 right-0 w-full sm:w-[480px] bg-white dark:bg-[#1C1D17] border-l border-[#E6DFD3] dark:border-[#3D4133] z-50 shadow-2xl p-6 flex flex-col justify-between overflow-y-auto text-right"
-              dir="rtl"
-            >
-              <div className="space-y-5">
-                {/* Close & Completed */}
-                <div className="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-zinc-800">
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => handleUpdateSingleTask({ ...selectedTaskForDetails, completed: !selectedTaskForDetails.completed })}
-                      className="text-[#8D7F72] hover:text-[#7C8363]"
-                    >
-                      {selectedTaskForDetails.completed ? <CheckSquare className="w-5 h-5 text-[#7C8363]" /> : <Square className="w-5 h-5" />}
-                    </button>
-                    <span className="text-[10px] font-black text-gray-400">شناسه کار: {selectedTaskForDetails.id.split('-')[1] || 'جدید'}</span>
-                  </div>
-
-                  <button
-                    onClick={() => setSelectedTaskForDetails(null)}
-                    className="p-1 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-lg cursor-pointer"
-                  >
-                    <X className="w-4 h-4 text-gray-400" />
-                  </button>
-                </div>
-
-                {/* Editable Title */}
-                <div className="space-y-1">
-                  <label className="text-[9px] text-[#8D7F72] font-black">عنوان کار</label>
-                  <input
-                    type="text"
-                    value={selectedTaskForDetails.title}
-                    onChange={(e) => handleUpdateSingleTask({ ...selectedTaskForDetails, title: e.target.value })}
-                    className="w-full px-3 py-2 text-xs bg-[#FDFBF7] dark:bg-[#121411] border border-[#D6CFC3] rounded-xl text-[#3D3D3D] dark:text-[#E8ECE0] font-black focus:outline-none"
-                  />
-                </div>
-
-                {/* Editable Description */}
-                <div className="space-y-1">
-                  <label className="text-[9px] text-[#8D7F72] font-black font-sans">توضیحات و یادداشت‌ها</label>
-                  <textarea
-                    value={selectedTaskForDetails.description || ''}
-                    onChange={(e) => handleUpdateSingleTask({ ...selectedTaskForDetails, description: e.target.value })}
-                    placeholder="جزئیات این کار خرد..."
-                    className="w-full px-3 py-2 text-xs bg-[#FDFBF7] dark:bg-[#121411] border border-[#D6CFC3] rounded-xl text-[#3D3D3D] dark:text-[#E8ECE0] h-20 resize-none focus:outline-none leading-relaxed"
-                  />
-                </div>
-
-                {/* Priority, Category and Milestone */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-[9px] text-[#8D7F72] font-black">اولویت</label>
-                    <select
-                      value={selectedTaskForDetails.priority || ''}
-                      onChange={(e) => handleUpdateSingleTask({ ...selectedTaskForDetails, priority: (e.target.value || undefined) as any })}
-                      className="w-full px-2.5 py-2 text-xs bg-[#FDFBF7] dark:bg-[#121411] border border-[#D6CFC3] rounded-xl text-[#3D3D3D] dark:text-[#E8ECE0]"
-                    >
-                      <option value="">انتخاب نشده</option>
-                      {PRIORITIES.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
-                    </select>
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-[9px] text-[#8D7F72] font-black">دسته‌بندی</label>
-                    <select
-                      value={selectedTaskForDetails.category || ''}
-                      onChange={(e) => handleUpdateSingleTask({ ...selectedTaskForDetails, category: (e.target.value || undefined) as any })}
-                      className="w-full px-2.5 py-2 text-xs bg-[#FDFBF7] dark:bg-[#121411] border border-[#D6CFC3] rounded-xl text-[#3D3D3D] dark:text-[#E8ECE0]"
-                    >
-                      <option value="">انتخاب نشده</option>
-                      {TASK_CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-[9px] text-[#8D7F72] font-black">تاریخ مهلت / انجام</label>
-                    <PersianDatePicker
-                      value={selectedTaskForDetails.dueDate || ''}
-                      onChange={(val) => handleUpdateSingleTask({ ...selectedTaskForDetails, dueDate: val || undefined })}
-                      placeholder="بدون تاریخ انجام"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-[9px] text-[#8D7F72] font-black">مایلستون (نقطه عطف) متصل</label>
-                    <select
-                      value={selectedTaskForDetails.milestoneId || ''}
-                      onChange={(e) => handleUpdateSingleTask({ ...selectedTaskForDetails, milestoneId: e.target.value || undefined })}
-                      className="w-full px-2.5 py-2 text-xs bg-[#FDFBF7] dark:bg-[#121411] border border-[#D6CFC3] rounded-xl text-[#3D3D3D] dark:text-[#E8ECE0]"
-                    >
-                      <option value="">فاقد نقطه عطف</option>
-                      {(project.milestones || []).map(m => <option key={m.id} value={m.id}>{m.title}</option>)}
-                    </select>
-                  </div>
-                </div>
-
-                {/* Subtasks Section */}
-                <div className="pt-4 border-t border-gray-100 dark:border-zinc-800 space-y-3">
-                  <div className="flex justify-between items-center">
-                    <h4 className="text-[11px] font-black text-[#2D3025] dark:text-[#E8ECE0]">زیرلیست کارها و چک‌لیست جزئی</h4>
-                    <span className="text-[8px] text-gray-500 bg-gray-100 dark:bg-zinc-800 px-2 py-0.5 rounded-full">
-                      {(selectedTaskForDetails.subTasks || []).filter(st => st.completed).length} از {(selectedTaskForDetails.subTasks || []).length} مورد
-                    </span>
-                  </div>
-
-                  {/* Add Subtask */}
-                  <div className="flex gap-1.5">
-                    <input
-                      type="text"
-                      placeholder="مورد جدید در چک‌لیست..."
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          const input = e.currentTarget;
-                          const title = input.value.trim();
-                          if (!title) return;
-                          const newSub = { id: `subtk-${Date.now()}`, title, completed: false };
-                          const updated = [...(selectedTaskForDetails.subTasks || []), newSub];
-                          handleUpdateSingleTask({ ...selectedTaskForDetails, subTasks: updated });
-                          input.value = '';
-                        }
-                      }}
-                      className="flex-1 px-3 py-1 text-[11px] bg-[#FDFBF7] dark:bg-[#121411] border border-[#D6CFC3] rounded-xl focus:outline-none"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
-                    {(selectedTaskForDetails.subTasks || []).length > 0 ? (
-                      (selectedTaskForDetails.subTasks || []).map((sub) => (
-                        <div key={sub.id} className="flex items-center justify-between p-1.5 bg-[#FDFBF7]/60 dark:bg-[#121411]/50 border border-gray-100 dark:border-zinc-800 rounded-lg">
-                          <button
-                            onClick={() => {
-                              const updated = (selectedTaskForDetails.subTasks || []).map(st => st.id === sub.id ? { ...st, completed: !st.completed } : st);
-                              handleUpdateSingleTask({ ...selectedTaskForDetails, subTasks: updated });
-                            }}
-                            className="flex items-center gap-2 text-right text-xs"
-                          >
-                            {sub.completed ? <CheckCircle className="w-3.5 h-3.5 text-[#7C8363]" /> : <Square className="w-3.5 h-3.5 text-gray-400" />}
-                            <span className={sub.completed ? 'line-through text-gray-400' : 'text-[#3D3D3D] dark:text-[#E8ECE0]'}>{sub.title}</span>
-                          </button>
-                          <button
-                            onClick={() => {
-                              const updated = (selectedTaskForDetails.subTasks || []).filter(st => st.id !== sub.id);
-                              handleUpdateSingleTask({ ...selectedTaskForDetails, subTasks: updated });
-                            }}
-                            className="text-red-500 hover:text-red-600 p-0.5"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
-                        </div>
-                      ))
-                    ) : (
-                      <p className="text-[9px] text-gray-400 italic text-center py-2">هیچ موردی در چک‌لیست این کار ثبت نشده است.</p>
-                    )}
-                  </div>
-                </div>
-
-                {/* Stopwatch Tracker */}
-                <div className="p-3 bg-[#E8ECE0]/30 dark:bg-[#1E241A]/20 rounded-2xl border border-[#7C8363]/20 space-y-2">
-                  <div className="flex justify-between items-center text-[10px] font-black text-[#5A5A40]">
-                    <span>زمان‌سنج اختصاصی این تسک</span>
-                    <span className="font-mono">{formatSeconds(getTaskSeconds(selectedTaskForDetails))}</span>
-                  </div>
-
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => onToggleTaskTracking(project.goalId, project.id, selectedTaskForDetails.id)}
-                      className={`flex-1 py-1.5 text-xs font-bold rounded-xl flex items-center justify-center gap-1 cursor-pointer transition-colors ${
-                        selectedTaskForDetails.isTracking 
-                          ? 'bg-red-500 text-white hover:bg-red-600 animate-pulse' 
-                          : 'bg-[#7C8363] text-white hover:bg-[#5A5A40]'
-                      }`}
-                    >
-                      {selectedTaskForDetails.isTracking ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 fill-white" />}
-                      <span>{selectedTaskForDetails.isTracking ? 'توقف زمان‌سنج' : 'شروع زمان‌سنج'}</span>
-                    </button>
-                    <button
-                      onClick={() => {
-                        const updated = { ...selectedTaskForDetails, totalTimeSpent: 0, isTracking: false, trackingStartTime: undefined };
-                        handleUpdateSingleTask(updated);
-                      }}
-                      className="px-3 py-1.5 border border-[#D6CFC3] text-xs font-bold rounded-xl text-gray-600 dark:text-gray-400"
-                    >
-                      بازنشانی زمان
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Bottom Actions */}
-              <div className="pt-4 border-t border-gray-100 dark:border-zinc-800 flex justify-between gap-3">
-                <button
-                  onClick={() => {
-                    if (confirm('آیا از حذف این کار اطمینان دارید؟')) {
-                      handleDeleteSingleTask(selectedTaskForDetails.id);
-                    }
-                  }}
-                  className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-black rounded-xl cursor-pointer"
-                >
-                  حذف دائم تسک
-                </button>
-                <button
-                  onClick={() => setSelectedTaskForDetails(null)}
-                  className="px-6 py-2 bg-[#7C8363] hover:bg-[#5A5A40] text-white text-xs font-black rounded-xl cursor-pointer"
-                >
-                  بستن و ثبت جزئیات
-                </button>
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
+      {selectedTaskForDetails && (
+        <TaskDetailDrawer
+          task={selectedTaskForDetails}
+          allTasks={tasksList}
+          goals={[{ id: project.goalId, title: project.goalTitle, projects: [{ id: project.id, title: project.title }] }]}
+          projects={[{ id: project.id, title: project.title, linkedGoalId: project.linkedGoalId, areaId: project.areaId }]}
+          onUpdateTask={handleUpdateSingleTask}
+          onDeleteTask={(taskId) => handleDeleteSingleTask(taskId)}
+          onClose={() => setSelectedTaskForDetails(null)}
+          onNavigate={(tab, id) => {
+            if (tab === 'projects' && id === project.id) {
+              setSelectedTaskForDetails(null)
+              return
+            }
+            setSelectedTaskForDetails(null)
+            onNavigateEntity?.(tab, id)
+          }}
+          onOpenFullPage={(taskId) => {
+            setSelectedTaskForDetails(null)
+            onNavigateTask?.(taskId)
+          }}
+          onStartTimer={(taskId) => onToggleTaskTracking(project.goalId, project.id, taskId)}
+          onPauseTimer={() => {
+            if (selectedTaskForDetails) {
+              onToggleTaskTracking(project.goalId, project.id, selectedTaskForDetails.id)
+            }
+          }}
+          onStopTimer={() => {
+            if (selectedTaskForDetails) {
+              onToggleTaskTracking(project.goalId, project.id, selectedTaskForDetails.id)
+            }
+          }}
+          onResetTimer={(taskId) => {
+            const task = tasksList.find((item) => item.id === taskId)
+            if (!task) return
+            handleUpdateSingleTask({ ...task, totalTimeSpent: 0, isTracking: false, trackingStartTime: undefined })
+          }}
+          activeTimerTaskId={tasksList.find((item) => item.isTracking)?.id || null}
+          activeTimerSeconds={selectedTaskForDetails.isTracking && selectedTaskForDetails.trackingStartTime
+            ? Math.floor((Date.now() - selectedTaskForDetails.trackingStartTime) / 1000) + (selectedTaskForDetails.totalTimeSpent || 0)
+            : selectedTaskForDetails.totalTimeSpent || 0}
+          isTimerRunning={!!selectedTaskForDetails.isTracking}
+        />
+      )}
 
     </div>
   );

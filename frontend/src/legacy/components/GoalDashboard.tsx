@@ -2,6 +2,9 @@ import React, { useState } from 'react';
 import { Goal, GoalCategory, Milestone, Habit } from '../types';
 import { GOAL_CATEGORY_LABELS } from '../initialData';
 import PersianDatePicker from './PersianDatePicker';
+import ViewSwitcher, { type ViewMode } from './ViewSwitcher';
+import GoalKanbanView from './GoalKanbanView';
+import SectionHeader from './SectionHeader';
 import { 
   Target, 
   Calendar, 
@@ -28,7 +31,16 @@ import {
   Image,
   Upload,
   X,
-  Edit2
+  Edit2,
+  Search,
+  Filter,
+  ChevronLeft,
+  ChevronRight,
+  GitFork,
+  Table as TableIcon,
+  LayoutList,
+  Columns,
+  TreePine
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -60,6 +72,7 @@ const CATEGORY_COLORS: Record<GoalCategory, string> = {
   career: 'bg-[#F4E9E4] border-[#EDDDD7] text-[#9B6B61]',
   learning: 'bg-[#E6DFD3] border-[#D6CFC3] text-[#8D7F72]',
   personal: 'bg-[#F9F1D8] border-[#EBE3C8] text-[#5A5A40]',
+  relationship: 'bg-[#F4E9E4] border-[#EDDDD7] text-[#9B6B61]',
   other: 'bg-[#FDFBF7] border-[#D6CFC3] text-[#3D3D3D]'
 };
 
@@ -99,9 +112,13 @@ export default function GoalDashboard({
   onDeleteHabitFromGoal,
   onUpdateGoal
 }: GoalDashboardProps) {
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [activeGoalId, setActiveGoalId] = useState<string | null>(null);
   const [newMilestoneTexts, setNewMilestoneTexts] = useState<Record<string, string>>({});
   const [showAddInline, setShowAddInline] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'completed'>('all');
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
 
   // Form State for Inline Add Goal
   const [newTitle, setNewTitle] = useState('');
@@ -115,6 +132,10 @@ export default function GoalDashboard({
   const [editDesc, setEditDesc] = useState('');
   const [editCategory, setEditCategory] = useState<GoalCategory>('personal');
   const [editTargetDate, setEditTargetDate] = useState('2026-12-31');
+
+  // Inline table edit state
+  const [inlineEditingId, setInlineEditingId] = useState<string | null>(null)
+  const [inlineDraft, setInlineDraft] = useState<Partial<Goal>>({})
 
   // Interactive Goal Relationships States
   const [activeSubTabs, setActiveSubTabs] = useState<Record<string, 'milestones' | 'projects' | 'habits' | 'vision'>>({});
@@ -131,6 +152,16 @@ export default function GoalDashboard({
   // Quick image states
   const [isDownloadingGoalImage, setIsDownloadingGoalImage] = useState<Record<string, boolean>>({});
   const [downloadGoalError, setDownloadGoalError] = useState<Record<string, string | null>>({});
+
+  const filteredGoals = goals.filter(g => {
+    const matchesSearch = g.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          (g.description || '').toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = statusFilter === 'all' ||
+                          (statusFilter === 'completed' && g.completed) ||
+                          (statusFilter === 'active' && !g.completed);
+    const matchesCategory = categoryFilter === 'all' || g.category === categoryFilter;
+    return matchesSearch && matchesStatus && matchesCategory;
+  });
 
   const handleLocalImageUploadDashboard = (goal: Goal, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -253,30 +284,35 @@ export default function GoalDashboard({
   const totalCompletionRatio = totalMilestones > 0 ? Math.round((completedMilestones / totalMilestones) * 100) : 0;
 
   return (
-    <div className="space-y-5 text-right pb-10" dir="rtl" id="goal-dashboard-container">
+    <div className="space-y-5 text-right pb-8" dir="rtl" id="goal-dashboard-container">
       
       {/* 1. Header with Back Button */}
-      <div className="flex justify-between items-center bg-[#FDFBF7] py-2 border-b border-[#E6DFD3]/40" id="goal-header">
-        <div className="flex items-center gap-1.5">
-          <button 
-            id="back-to-home-btn"
-            onClick={() => setActiveTab('dashboard')}
-            className="p-1.5 bg-[#F9F6EE] hover:bg-[#E6DFD3]/60 border border-[#E6DFD3] rounded-xl text-[#8D7F72] transition-all cursor-pointer"
-          >
-            <ArrowRight className="w-4 h-4" />
-          </button>
-          <h2 className="text-sm font-extrabold text-[#2D3025] font-serif-elegant">داشبورد اهداف</h2>
-        </div>
-
-        <button 
-          id="toggle-inline-goal-form-btn"
-          onClick={() => setShowAddInline(!showAddInline)}
-          className="bg-[#7C8363] hover:bg-[#5A5A40] text-white text-[10px] font-bold px-3 py-1.5 rounded-xl transition-all shadow-xs flex items-center gap-1 cursor-pointer"
-        >
-          <PlusCircle className="w-3.5 h-3.5" />
-          <span>هدف جدید</span>
-        </button>
-      </div>
+      <SectionHeader
+        icon={Target}
+        title="داشبورد اهداف"
+        subtitle={`${activeGoalsCount} هدف فعال · ${totalCompletionRatio}% پیشرفت`}
+        badge={activeGoalsCount}
+        badgeVariant="default"
+        actions={
+          <>
+            <button 
+              id="back-to-home-btn"
+              onClick={() => setActiveTab('dashboard')}
+              className="p-1.5 bg-[#F9F6EE] dark:bg-[#151713] hover:bg-[#E6DFD3]/60 dark:hover:bg-[#2D3025]/60 border border-[#E6DFD3] dark:border-[#3D4133] rounded-xl text-[#8D7F72] dark:text-[#9D978B] transition-all cursor-pointer"
+            >
+              <ArrowRight className="w-4 h-4" />
+            </button>
+            <button 
+              id="toggle-inline-goal-form-btn"
+              onClick={() => setShowAddInline(!showAddInline)}
+              className="bg-[#7C8363] hover:bg-[#5A5A40] text-white text-[10px] font-bold px-3 py-1.5 rounded-xl transition-all shadow-xs flex items-center gap-1 cursor-pointer"
+            >
+              <PlusCircle className="w-3.5 h-3.5" />
+              <span>هدف جدید</span>
+            </button>
+          </>
+        }
+      />
 
       {/* Inline Goal Form */}
       <AnimatePresence>
@@ -371,10 +407,73 @@ export default function GoalDashboard({
         </div>
       </div>
 
-      {/* 3. Goals List */}
+      {/* Filters & View Switcher */}
+      <div className="bg-white p-4 rounded-2xl border border-[#E6DFD3] flex flex-col md:flex-row gap-3 items-center">
+        <div className="relative w-full md:w-72">
+          <Search className="w-4 h-4 text-[#8D7F72] absolute right-3 top-2.5" />
+          <input
+            type="text"
+            placeholder="جستجوی اهداف..."
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+            className="w-full pr-9 pl-3 py-1.5 text-xs bg-[#F9F6EE] border border-[#D6CFC3] rounded-xl focus:outline-none focus:border-[#7C8363]"
+          />
+        </div>
+        <div className="flex gap-1.5 w-full md:w-auto overflow-x-auto">
+          {[
+            { id: 'all', label: 'همه' },
+            { id: 'active', label: 'جاری' },
+            { id: 'completed', label: 'تکمیل‌شده' }
+          ].map(opt => (
+            <button
+              key={opt.id}
+              onClick={() => setStatusFilter(opt.id as any)}
+              className={`px-3 py-1.5 rounded-xl text-[10px] font-bold transition-all cursor-pointer whitespace-nowrap ${
+                statusFilter === opt.id
+                  ? 'bg-[#7C8363] text-white'
+                  : 'bg-[#F9F6EE] hover:bg-[#E6DFD3]/40 text-[#8D7F72]'
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+        <div className="w-full md:w-auto md:mr-auto flex items-center gap-2">
+          <span className="text-[10px] font-bold text-[#8D7F72] whitespace-nowrap">دسته:</span>
+          <select
+            value={categoryFilter}
+            onChange={e => setCategoryFilter(e.target.value)}
+            className="px-2 py-1.5 text-[10px] bg-[#F9F6EE] border border-[#D6CFC3] rounded-xl focus:outline-none font-bold text-[#3D3D3D] cursor-pointer"
+          >
+            <option value="all">همه</option>
+            <option value="financial">مالی</option>
+            <option value="health">سلامت</option>
+            <option value="career">شغلی</option>
+            <option value="learning">یادگیری</option>
+            <option value="personal">شخصی</option>
+            <option value="other">سایر</option>
+          </select>
+        </div>
+      </div>
+
+      {/* View Switcher — reusable component */}
+      <ViewSwitcher
+        views={[
+          { id: 'list', label: 'لیست', emoji: '🗂️' },
+          { id: 'table', label: 'جدول', emoji: '⊞' },
+          { id: 'kanban', label: 'کانبان', emoji: '📋' },
+          { id: 'tree', label: 'درخت', emoji: '🌲' },
+        ]}
+        activeView={viewMode}
+        onChange={setViewMode}
+      />
+
+      {/* 3. Goals Views */}
       <div className="space-y-4" id="goals-list-section">
-        {goals.length > 0 ? (
-          goals.map((goal) => {
+        {viewMode === 'list' && (
+          <div className="space-y-4">
+            {filteredGoals.length > 0 ? (
+              filteredGoals.map((goal) => {
             const categoryDetails = GOAL_CATEGORY_LABELS[goal.category] || GOAL_CATEGORY_LABELS.other;
             const colStyle = CATEGORY_COLORS[goal.category] || CATEGORY_COLORS.other;
             
@@ -392,6 +491,18 @@ export default function GoalDashboard({
 
             const isExpanded = activeGoalId === goal.id;
             const subTab = activeSubTabs[goal.id] || 'projects';
+
+            // Health state helpers
+            const getHealthBadge = (state?: string) => {
+              switch (state) {
+                case 'on_track': return { label: 'در مسیر', color: 'bg-emerald-50 border-emerald-200 text-emerald-700' };
+                case 'at_risk': return { label: 'در خطر', color: 'bg-[#F9F1D8] border-[#EBE3C8] text-[#5A5A40]' };
+                case 'off_track': return { label: 'خارج از مسیر', color: 'bg-red-50 border-red-200 text-red-700' };
+                case 'needs_review': return { label: 'نیاز به بررسی', color: 'bg-slate-50 border-slate-200 text-slate-600' };
+                default: return null;
+              }
+            };
+            const healthBadge = getHealthBadge(goal.healthState);
 
             return (
               <div 
@@ -452,6 +563,12 @@ export default function GoalDashboard({
                         {getCategoryIcon(goal.category, "w-2.5 h-2.5")}
                         <span>{categoryDetails.label}</span>
                       </span>
+
+                      {healthBadge && (
+                        <span className={`px-2 py-0.5 rounded-full text-[8px] font-bold border ${healthBadge.color}`}>
+                          {healthBadge.label}
+                        </span>
+                      )}
 
                       <span className="text-[9px] text-[#8D7F72] font-semibold flex items-center gap-0.5 font-mono">
                         <Calendar className="w-2.5 h-2.5 text-[#8D7F72]" />
@@ -842,7 +959,7 @@ export default function GoalDashboard({
                                             {habit.name}
                                           </h5>
                                           <span className="bg-[#FDFBF7] border border-[#E6DFD3] text-[#8D7F72] text-[8px] px-1.5 py-0.5 rounded-full font-bold flex items-center gap-0.5 shrink-0 font-mono">
-                                            <Flame className="w-2.5 h-2.5 text-amber-500 fill-amber-100" />
+                                            <Flame className="w-2.5 h-2.5 text-[#9B6B61] fill-[#F4E9E4]" />
                                             <span>{habit.streak} روز</span>
                                           </span>
                                         </div>
@@ -1041,9 +1158,257 @@ export default function GoalDashboard({
               </div>
             );
           })
-        ) : (
-          <div className="bg-[#FDFBF7] p-8 text-center text-[#8D7F72] border border-dashed border-[#D6CFC3] rounded-2xl font-bold text-xs" id="no-goals-placeholder">
-            هیچ هدفی تعریف نکرده‌اید. با دکمه بالا اولین هدف خود را بسازید!
+            ) : (
+              <div className="bg-[#FDFBF7] p-8 text-center text-[#8D7F72] border border-dashed border-[#D6CFC3] rounded-2xl font-bold text-xs" id="no-goals-placeholder">
+                هیچ هدفی مطابق فیلترها یافت نشد.
+              </div>
+            )}
+          </div>
+        )}
+
+        {viewMode === 'table' && (
+          <div className="bg-white rounded-3xl border border-[#E6DFD3] overflow-hidden shadow-xs">
+            <div className="overflow-x-auto">
+              <table className="w-full text-right">
+                <thead className="bg-[#F9F6EE] border-b border-[#E6DFD3]">
+                  <tr className="text-[10px] font-black text-[#8D7F72]">
+                    <th className="px-4 py-3">هدف</th>
+                    <th className="px-4 py-3">دسته‌بندی</th>
+                    <th className="px-4 py-3">سررسید</th>
+                    <th className="px-4 py-3">پیشرفت</th>
+                    <th className="px-4 py-3">وضعیت</th>
+                    <th className="px-4 py-3">عملیات</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#E6DFD3]/40">
+                  {filteredGoals.length > 0 ? filteredGoals.map(goal => {
+                    const total = goal.milestones.length;
+                    const done = goal.milestones.filter(m => m.completed).length;
+                    const percentage = total > 0 ? Math.round((done / total) * 100) : (goal.completed ? 100 : 0);
+                    const categoryDetails = GOAL_CATEGORY_LABELS[goal.category] || GOAL_CATEGORY_LABELS.other;
+                    const isEditing = inlineEditingId === goal.id;
+                    const draft = isEditing ? inlineDraft : goal;
+                    return (
+                      <tr key={goal.id} className="hover:bg-[#F9F6EE]/50 transition-colors" onDoubleClick={() => { if (!isEditing) { setInlineEditingId(goal.id); setInlineDraft({ ...goal }); } }}>
+                        <td className="px-4 py-3">
+                          {isEditing ? (
+                            <div className="space-y-1">
+                              <input
+                                value={draft.title || ''}
+                                onChange={e => setInlineDraft(d => ({ ...d, title: e.target.value }))}
+                                className="w-full px-2 py-1 text-xs border border-[#7C8363] rounded-lg bg-white"
+                                autoFocus
+                              />
+                              <input
+                                value={draft.description || ''}
+                                onChange={e => setInlineDraft(d => ({ ...d, description: e.target.value }))}
+                                placeholder="توضیحات"
+                                className="w-full px-2 py-1 text-[10px] border border-[#D6CFC3] rounded-lg bg-white"
+                              />
+                            </div>
+                          ) : (
+                            <>
+                              <div className="text-xs font-bold text-[#2D3025]">{goal.title}</div>
+                              <div className="text-[9px] text-[#8D7F72] truncate max-w-[200px]">{goal.description}</div>
+                            </>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          {isEditing ? (
+                            <select
+                              value={draft.category || 'personal'}
+                              onChange={e => setInlineDraft(d => ({ ...d, category: e.target.value as GoalCategory }))}
+                              className="px-2 py-1 text-xs border border-[#D6CFC3] rounded-lg bg-white"
+                            >
+                              <option value="financial">مالی</option>
+                              <option value="health">سلامت</option>
+                              <option value="career">شغلی</option>
+                              <option value="learning">یادگیری</option>
+                              <option value="personal">شخصی</option>
+                              <option value="other">سایر</option>
+                            </select>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full text-[9px] font-bold border bg-[#FDFBF7] border-[#E6DFD3] text-[#8D7F72]">
+                              {categoryDetails.label}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          {isEditing ? (
+                            <input
+                              type="date"
+                              value={draft.targetDate || ''}
+                              onChange={e => setInlineDraft(d => ({ ...d, targetDate: e.target.value }))}
+                              className="px-2 py-1 text-xs border border-[#D6CFC3] rounded-lg bg-white"
+                            />
+                          ) : (
+                            <span className="text-[10px] font-mono text-[#8D7F72]">{goal.targetDate}</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 bg-[#E6DFD3]/40 h-1.5 rounded-full overflow-hidden w-16">
+                              <div className="bg-[#7C8363] h-full rounded-full" style={{ width: `${percentage}%` }} />
+                            </div>
+                            <span className="text-[9px] font-bold text-[#7C8363]">{percentage}%</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <button
+                            onClick={() => onToggleGoalCompletion(goal.id)}
+                            className={`text-[9px] font-bold px-2 py-0.5 rounded-lg border cursor-pointer ${
+                              goal.completed
+                                ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                                : 'bg-[#F9F1D8] border-[#EBE3C8] text-[#5A5A40]'
+                            }`}
+                          >
+                            {goal.completed ? 'تکمیل' : 'جاری'}
+                          </button>
+                        </td>
+                        <td className="px-4 py-3">
+                          {isEditing ? (
+                            <div className="flex gap-1">
+                              <button
+                                onClick={() => {
+                                  onUpdateGoal({ ...goal, ...inlineDraft } as Goal)
+                                  setInlineEditingId(null)
+                                  setInlineDraft({})
+                                }}
+                                className="p-1 bg-[#7C8363] text-white rounded-lg"
+                              >
+                                <CheckSquare className="w-3 h-3" />
+                              </button>
+                              <button
+                                onClick={() => { setInlineEditingId(null); setInlineDraft({}) }}
+                                className="p-1 bg-[#E6DFD3] text-[#2D3025] rounded-lg"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={() => onSelectGoal(goal.id)}
+                                className="px-2 py-1 text-[9px] font-bold bg-[#7C8363] text-white rounded-lg hover:bg-[#5A5A40] transition-colors"
+                              >
+                                جزئیات
+                              </button>
+                              <button
+                                onClick={() => {
+                                  if (confirm('آیا مایل به حذف این هدف هستید؟')) onDeleteGoal(goal.id);
+                                }}
+                                className="p-1 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  }) : (
+                    <tr>
+                      <td colSpan={6} className="px-4 py-8 text-center text-[10px] text-[#8D7F72]">
+                        هیچ هدفی مطابق فیلترها یافت نشد.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {viewMode === 'kanban' && (
+          <GoalKanbanView
+            goals={filteredGoals}
+            onUpdateGoal={onUpdateGoal}
+            onToggleGoalCompletion={onToggleGoalCompletion}
+            onDeleteGoal={onDeleteGoal}
+            onSelectGoal={onSelectGoal}
+          />
+        )}
+
+        {viewMode === 'tree' && (
+          <div className="bg-[#FDFBF7] rounded-3xl border border-[#E6DFD3] p-5 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-[#E6DFD3]/60">
+              <div className="space-y-0.5">
+                <h4 className="text-xs font-black text-[#2D3025] flex items-center gap-1.5">
+                  <GitFork className="w-4 h-4 text-[#E26645]" />
+                  <span>نقشه درختی اهداف و پروژه‌ها</span>
+                </h4>
+                <p className="text-[9px] text-[#8D7F72] font-semibold">ساختار سلسله مراتبی اهداف، پروژه‌ها و کارهای خرد</p>
+              </div>
+            </div>
+            <div className="space-y-6 max-h-[600px] overflow-y-auto pr-1">
+              {filteredGoals.length > 0 ? filteredGoals.map(g => {
+                const total = g.milestones.length;
+                const done = g.milestones.filter(m => m.completed).length;
+                const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+                return (
+                  <div key={g.id} className="space-y-4 bg-white p-4 rounded-2xl border border-[#E6DFD3]/60">
+                    <div className="flex items-center gap-2 bg-[#E26645]/5 p-2.5 rounded-xl border border-[#E26645]/20">
+                      <span className="text-base">🎯</span>
+                      <div className="text-right flex-1">
+                        <span className="text-[7px] font-bold text-[#E26645] uppercase tracking-wider block">هدف کلان</span>
+                        <h4 className="text-xs font-black text-[#2D3025]">{g.title}</h4>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <div className="w-16 bg-[#E6DFD3]/40 h-1.5 rounded-full overflow-hidden">
+                          <div className="bg-[#7C8363] h-full rounded-full" style={{ width: `${pct}%` }} />
+                        </div>
+                        <span className="text-[8px] font-bold text-[#7C8363]">{pct}%</span>
+                      </div>
+                    </div>
+                    {(g.projects || []).length > 0 ? (
+                      <div className="mr-6 border-r-2 border-dashed border-[#C6BFA3] pr-4 space-y-4 text-right">
+                        {g.projects.map(proj => {
+                          const pTasks = proj.tasks || [];
+                          const pDone = pTasks.filter(t => t.completed).length;
+                          const pPct = pTasks.length > 0 ? Math.round((pDone / pTasks.length) * 100) : 0;
+                          return (
+                            <div key={proj.id} className="space-y-2 relative">
+                              <div className="absolute top-4 -right-[21px] w-2 h-2 bg-[#7C8363] rounded-full border border-white" />
+                              <div className="flex items-center gap-2 bg-[#7C8363]/5 p-2 rounded-xl border border-[#7C8363]/20">
+                                <span className="text-xs">📂</span>
+                                <div className="text-right flex-1">
+                                  <span className="text-[7px] font-bold text-[#7C8363] block">پروژه</span>
+                                  <h5 className="text-[11px] font-black text-[#2D3025]">{proj.title}</h5>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <div className="w-12 bg-[#E6DFD3]/40 h-1 rounded-full overflow-hidden">
+                                    <div className="bg-[#9B6B61] h-full rounded-full" style={{ width: `${pPct}%` }} />
+                                  </div>
+                                  <span className="text-[8px] font-bold text-[#9B6B61]">{pPct}%</span>
+                                </div>
+                              </div>
+                              {pTasks.length > 0 ? (
+                                <div className="mr-5 border-r border-[#E6DFD3] pr-3 space-y-1 pt-1 text-right">
+                                  {pTasks.map(task => (
+                                    <div key={task.id} className="flex items-center gap-1.5 py-1 text-xs text-[#3D3D3D] relative">
+                                      <div className="absolute top-3 -right-[16px] w-3 h-[1px] bg-[#E6DFD3]" />
+                                      <span className="text-[9px] text-[#8D7F72]">├─</span>
+                                      <span className="text-[9px]">◽</span>
+                                      <span className={`font-semibold ${task.completed ? 'line-through text-[#8D7F72]' : ''}`}>{task.title}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="mr-5 text-[8px] text-[#8D7F72] italic font-semibold">هنوز تسکی به این پروژه پیوند نخورده است.</p>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="mr-6 text-[8px] text-[#8D7F72] italic font-semibold text-right">پروژه‌ای به این هدف تخصیص نیافته است.</p>
+                    )}
+                  </div>
+                );
+              }) : (
+                <p className="text-center py-6 text-xs text-[#8D7F72]">هدفی برای ساخت درخت یافت نشد.</p>
+              )}
+            </div>
           </div>
         )}
       </div>

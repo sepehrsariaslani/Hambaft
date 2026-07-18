@@ -1,0 +1,42 @@
+{
+  "actions": [],
+  "autoname": "format:CR-{#####}",
+  "creation": "2025-01-01 00:00:00",
+  "doctype": "DocType",
+  "engine": "InnoDB",
+  "field_order": [
+    "user", "from_contact", "to_contact", "relation_type",
+    "column_break_1", "directionality", "strength_score", "status",
+    "since_date", "notes", "sort_order"
+  ],
+  "fields": [
+    {"fieldname": "user", "fieldtype": "Link", "options": "User", "required": 1, "in_list_view": 1, "in_standard_filter": 1},
+    {"fieldname": "from_contact", "fieldtype": "Link", "options": "Hambaft Contact", "required": 1, "in_list_view": 1, "in_standard_filter": 1, "label": "From Contact"},
+    {"fieldname": "to_contact", "fieldtype": "Link", "options": "Hambaft Contact", "required": 1, "in_list_view": 1, "in_standard_filter": 1, "label": "To Contact"},
+    {"fieldname": "relation_type", "fieldtype": "Select", "options": "\nfamily\nspouse_partner\nfriend\ncolleague\nmanager\nmentor\nclient\nintroduced_by\ncustom", "required": 1, "in_list_view": 1, "in_standard_filter": 1, "label": "Relation Type", "default": "friend"},
+    {"fieldname": "column_break_1", "fieldtype": "Column Break"},
+    {"fieldname": "directionality", "fieldtype": "Select", "options": "mutual\ndirected", "required": 1, "in_list_view": 1, "in_standard_filter": 1, "label": "Directionality", "default": "mutual"},
+    {"fieldname": "strength_score", "fieldtype": "Int", "label": "Strength Score", "description": "0-100 scale"},
+    {"fieldname": "status", "fieldtype": "Select", "options": "active\narchived", "required": 1, "in_standard_filter": 1, "label": "Status", "default": "active"},
+    {"fieldname": "since_date", "fieldtype": "Date", "label": "Since Date"},
+    {"fieldname": "notes", "fieldtype": "Small Text", "label": "Notes"},
+    {"fieldname": "sort_order", "fieldtype": "Int", "default": "0", "label": "Sort Order"}
+  ],
+  "index_web_pages_for_search": 0,
+  "is_submittable": 0,
+  "issingle": 0,
+  "istable": 0,
+  "links": [],
+  "modified": "2025-01-01 00:00:00",
+  "module": "Hambaft",
+  "name": "Hambaft Contact Relation",
+  "naming_rule": "Expression (old style)",
+  "owner": "Administrator",
+  "permissions": [
+    {"create": 1, "delete": 1, "email": 0, "export": 0, "print": 0, "read": 1, "report": 0, "role": "All", "share": 0, "write": 1}
+  ],
+  "sort_field": "sort_order",
+  "sort_order": "ASC",
+  "states": [],
+  "title_field": "relation_type"
+}

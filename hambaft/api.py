@@ -6,8 +6,9 @@ from datetime import datetime, date, timedelta
 
 import frappe
 from frappe import _
-from frappe.utils import now_datetime, getdate, today, cint, flt
+from frappe.utils import now_datetime, get_datetime, getdate, today, cint, flt
 from .settings_contract import SETTINGS_FIELDS, get_supported_settings_fields, normalize_settings_update
+from .gallery_mapping import is_gallery_image_file, plan_gallery_scope
 from .dashboard_home import (
     build_finance_snapshot,
     build_summary_metrics,
@@ -21,11 +22,109 @@ DONE_TASK_STATUSES = {"done", "انجام‌شده"}
 ACTIVE_GOAL_STATUSES = {"active", "فعال"}
 DONE_HABIT_STATUSES = {"done", "انجام‌شده"}
 
+# Priority normalization: English -> Persian for Hambaft Task child table
+_PRIORITY_EN_TO_FA = {
+    "low": "پایین", "medium": "متوسط", "high": "بالا", "urgent": "فوری",
+    "پایین": "پایین", "متوسط": "متوسط", "بالا": "بالا", "فوری": "فوری",
+    "کم": "پایین", "زیاد": "بالا", "حیاتی": "فوری",
+}
+_VALID_TASK_PRIORITIES = {"پایین", "متوسط", "بالا", "فوری"}
+
+# Valid Task status values per DocType Select field
+_VALID_TASK_STATUSES = {"inbox", "not_started", "next", "today", "in_progress", "done", "on_hold", "someday", "dropped"}
+_STATUS_FA_TO_EN = {
+    "صندوق ورودی": "inbox", "ورودی": "inbox",
+    "امروز": "today",
+    "بعدی": "next",
+    "در حال انجام": "in_progress",
+    "انجام‌شده": "done", "انجام شده": "done", "تکمیل‌شده": "done", "completed": "done",
+    "متوقف": "on_hold",
+    "شاید": "someday", "روزی": "someday",
+    "انجام‌نشده": "not_started",
+    "دورانداخته": "dropped",
+}
+
+
+def _normalize_task_priority(value):
+    """Map any priority value to a valid Hambaft Task Persian enum."""
+    if not value:
+        return "متوسط"
+    mapped = _PRIORITY_EN_TO_FA.get(str(value).strip())
+    if mapped:
+        return mapped
+    return "متوسط"
+
+
+def _normalize_task_status(value):
+    """Map any status value to a valid Task DocType Select option."""
+    if not value:
+        return "inbox"
+    v = str(value).strip()
+    if v in _VALID_TASK_STATUSES:
+        return v
+    mapped = _STATUS_FA_TO_EN.get(v)
+    if mapped:
+        return mapped
+    return "inbox"
+
+
+def _normalize_task_data(data):
+    """Sanitize task data before doc.update() to prevent validation errors."""
+    if not isinstance(data, dict):
+        return data
+    # Normalize status to a valid English Select option
+    if "status" in data:
+        data["status"] = _normalize_task_status(data["status"])
+    # Normalize priority to Persian (DocType accepts both, but Persian is canonical)
+    if "priority" in data:
+        data["priority"] = _normalize_task_priority(data["priority"])
+    # Normalize effort_type
+    _effort_map = {"fixed": "ثابت", "variable": "متغیر", "ثابت": "ثابت", "متغیر": "متغیر"}
+    if "effort_type" in data:
+        data["effort_type"] = _effort_map.get(str(data["effort_type"]).strip(), "متغیر")
+    # Null out empty Link fields to prevent "does not exist" errors
+    for link_field in ("project", "area", "goal", "parent_task"):
+        val = data.get(link_field)
+        if val is not None and val != "":
+            # Reject temp IDs like tk-*, gl-*, ar-*
+            if isinstance(val, str) and any(val.startswith(p) for p in ("tk-", "gl-", "ar-", "pr-")):
+                data[link_field] = None
+        else:
+            data[link_field] = None
+    return data
+
 
 def _unwrap_response(value):
     if isinstance(value, dict) and "data" in value and set(value.keys()) <= {"status", "data", "message"}:
         return value["data"]
     return value
+
+
+def _get_session_csrf_token():
+    token = str((getattr(frappe.local, "session", None) and frappe.local.session.data or {}).get("csrf_token") or "").strip()
+    if token:
+        return token
+
+    try:
+        token = str(frappe.sessions.get_csrf_token() or "").strip()
+    except Exception:
+        token = ""
+
+    if token:
+        return token
+
+    token = frappe.generate_hash()
+    try:
+        frappe.local.session.data.csrf_token = token
+    except Exception:
+        pass
+
+    try:
+        frappe.local.session_obj.update(force=True)
+    except Exception:
+        pass
+
+    return token
 
 
 def _priority_rank(value):
@@ -159,13 +258,15 @@ def _water_note_field():
 def _check_auth():
     if frappe.session.user == "Guest":
         frappe.throw("Authentication required", frappe.AuthenticationError)
-
-    settings = frappe.db.get_value(
-        "Profile Settings",
-        {"user": frappe.session.user},
-        ["onboarding_completed", "onboarding_step"],
-        as_dict=True,
-    )
+    try:
+        settings = frappe.db.get_value(
+            "Profile Settings",
+            {"user": frappe.session.user},
+            ["onboarding_completed", "onboarding_step"],
+            as_dict=True,
+        )
+    except Exception:
+        settings = None
     return settings
 
 
@@ -207,6 +308,159 @@ def _loads_json(value, default):
         return default
 
 
+_DONE_STATUSES = {"done", "completed", "انجام‌شده", "انجام شده"}
+
+
+def _enrich_task_with_impact(task_dict):
+    """Add impact-aware fields to a task dict (project/goal context, blocked detail)."""
+    task_dict["impact_goal_title"] = None
+    task_dict["impact_goal_health"] = None
+    task_dict["impact_goal_progress"] = None
+    task_dict["impact_project_title"] = None
+    task_dict["impact_project_contribution_type"] = None
+    task_dict["impact_project_progress"] = None
+    task_dict["blocked_by_titles"] = []
+    task_dict["blocked_by_statuses"] = {}
+    task_dict["impact_score"] = 0
+
+    project_name = task_dict.get("project")
+    has_active_goal = False
+    project_contribution_weight = 0
+    goal_health_penalty = 0
+    if project_name:
+        proj = frappe.db.get_value(
+            "Hambaft Project", project_name,
+            ["title", "progress", "goal"], as_dict=True,
+        )
+        if proj:
+            task_dict["impact_project_title"] = proj.title
+            task_dict["impact_project_progress"] = proj.progress or 0
+            if proj.goal:
+                goal = frappe.db.get_value(
+                    "Goal", proj.goal,
+                    ["name", "title", "health_state", "progress_percent"], as_dict=True,
+                )
+                if goal:
+                    task_dict["impact_goal_title"] = goal.title
+                    task_dict["impact_goal_health"] = goal.health_state
+                    task_dict["impact_goal_progress"] = goal.progress_percent or 0
+                    # contribution_type
+                    try:
+                        for link in frappe.get_all(
+                            "Goal Project Link",
+                            filters={"parent": proj.goal, "project": project_name},
+                            fields=["contribution_type"], limit=1,
+                        ):
+                            task_dict["impact_project_contribution_type"] = link.contribution_type
+                            break
+                    except Exception:
+                        pass
+
+    # Also check direct goal link
+    goal_name = task_dict.get("goal")
+    if goal_name and not task_dict.get("impact_goal_title"):
+        goal = frappe.db.get_value(
+            "Goal", goal_name,
+            ["title", "health_state", "progress_percent"], as_dict=True,
+        )
+        if goal:
+            task_dict["impact_goal_title"] = goal.title
+            task_dict["impact_goal_health"] = goal.health_state
+            task_dict["impact_goal_progress"] = goal.progress_percent or 0
+    blocked_raw = task_dict.get("blocked_by_json")
+    blocked = _loads_json(blocked_raw, [])
+    if blocked:
+        titles = []
+        statuses = {}
+        for dep_id in blocked:
+            dep = frappe.db.get_value("Task", dep_id, ["name", "title", "status"], as_dict=True)
+            if dep:
+                titles.append(dep.title or dep.name)
+                statuses[dep.name] = dep.status
+        task_dict["blocked_by_titles"] = titles
+        task_dict["blocked_by_statuses"] = statuses
+
+    # ─── Impact Score Computation ────────────────────────────
+    # Combines multiple signals into a single actionable score (0-100):
+    #   - importance weight: milestone=30, key=20, normal=5
+    #   - linked goal bonus: +15 if task belongs to a project linked to an active goal
+    #   - contribution type bonus: mandatory=+15, recommended=+8, supporting=+3
+    #   - goal health urgency: at_risk=+10, off_track=+15
+    #   - unblocking leverage: +10 if this task blocks other tasks
+    #   - blocked penalty: -10 if this task is currently blocked
+    #   - due urgency: +5 if overdue, +3 if due within 3 days
+    importance = task_dict.get("importance", "عادی")
+    imp_score = {"نقطه‌عطف": 30, "کلیدی": 20}.get(importance, 5)
+    
+    goal_score = 0
+    if task_dict.get("impact_goal_title"):
+        goal_score = 15  # linked to an active goal
+        # Health urgency
+        health = task_dict.get("impact_goal_health", "")
+        if health == "خارج_از_مسیر":
+            goal_score += 15
+        elif health == "در_خطر":
+            goal_score += 10
+        elif health == "نیاز_به_بررسی":
+            goal_score += 5
+
+    contrib_score = 0
+    ct = task_dict.get("impact_project_contribution_type", "")
+    if ct == "اجباری":
+        contrib_score = 15
+    elif ct == "پیشنهادی":
+        contrib_score = 8
+    elif ct == "پشتیبان":
+        contrib_score = 3
+
+    # Unblocking leverage: does this task block others?
+    unblock_score = 0
+    blocking_raw = task_dict.get("blocking_json")
+    blocking_list = _loads_json(blocking_raw, [])
+    if blocking_list:
+        unblock_score = min(10, len(blocking_list) * 5)  # cap at 10
+
+    # Blocked penalty
+    blocked_raw = task_dict.get("blocked_by_json")
+    blocked_list = _loads_json(blocked_raw, [])
+    blocked_penalty = -10 if blocked_list else 0
+
+    # Due urgency
+    due_score = 0
+    due_date_str = task_dict.get("due_date")
+    if due_date_str:
+        try:
+            due_d = getdate(due_date_str)
+            today_d = getdate(today())
+            days_left = (due_d - today_d).days
+            if days_left < 0:
+                due_score = 5  # overdue
+            elif days_left <= 3:
+                due_score = 3  # due soon
+        except Exception:
+            pass
+
+    total_score = min(100, max(0, imp_score + goal_score + contrib_score + unblock_score + blocked_penalty + due_score))
+    task_dict["impact_score"] = total_score
+
+    return task_dict
+
+
+_IMPORTANCE_ORDER = {"نقطه‌عطف": 0, "کلیدی": 1, "عادی": 2}
+_PRIORITY_ORDER = {"فوری": 0, "بالا": 1, "متوسط": 2, "پایین": 3, "urgent": 0, "high": 1, "medium": 2, "low": 3}
+
+
+def _impact_sort_key(task_dict):
+    """Sort key: impact_score desc → importance desc → priority desc → due_date asc."""
+    # Primary: impact_score descending (negate for ascending sort)
+    impact = -task_dict.get("impact_score", 0)
+    # Fallback: importance → priority → due_date
+    imp = _IMPORTANCE_ORDER.get(task_dict.get("importance", "عادی"), 2)
+    pri = _PRIORITY_ORDER.get(task_dict.get("priority", "متوسط"), 2)
+    due = task_dict.get("due_date") or "9999-12-31"
+    return (impact, imp, pri, due)
+
+
 def _save_doc(doc):
     if doc.is_new():
         doc.insert(ignore_permissions=True)
@@ -221,14 +475,28 @@ def _persist_settings_updates(doc, updates):
         return doc
 
     if doc.is_new():
-        doc.update(updates)
+        # For new docs, set each field individually to skip invalid ones gracefully
+        for fieldname, value in updates.items():
+            if hasattr(doc, fieldname):
+                try:
+                    setattr(doc, fieldname, value)
+                except Exception:
+                    pass
         return _save_doc(doc)
 
     allowed_updates = {fieldname: value for fieldname, value in updates.items() if hasattr(doc, fieldname)}
     if not allowed_updates:
         return doc
 
-    frappe.db.set_value("Profile Settings", doc.name, allowed_updates, update_modified=True)
+    try:
+        frappe.db.set_value("Profile Settings", doc.name, allowed_updates, update_modified=True)
+    except Exception:
+        # Fallback: set fields one by one to isolate problematic ones
+        for fieldname, value in allowed_updates.items():
+            try:
+                frappe.db.set_value("Profile Settings", doc.name, fieldname, value, update_modified=True)
+            except Exception:
+                frappe.logger().warning(f"_persist_settings_updates: skipping {fieldname}")
     return frappe.get_doc("Profile Settings", doc.name)
 
 
@@ -270,7 +538,7 @@ def _default_settings(user):
         "subcategories_json": None,
         "task_time_json": None,
         "daily_highlights_json": None,
-        "goal_habits_json": None,
+        "goal_habits_json": None,  # DEPRECATED: Use Goal Habit Link child table instead
     }
 
 
@@ -332,19 +600,240 @@ def _ensure_hambaft_user_role(user_name):
         user_doc.save(ignore_permissions=True)
 
 
-def _project_to_frontend(doc):
-    task_rows = []
-    for row in doc.get("tasks") or []:
-        task_rows.append({
-            "id": row.name,
-            "title": row.title,
-            "completed": bool(row.completed or row.status == "انجام‌شده"),
-            "createdAt": str(getattr(row, "creation", None) or doc.creation or today())[:10],
-            "description": row.description or "",
-            "dueDate": str(row.due_date)[:10] if getattr(row, "due_date", None) else None,
-            "priority": row.priority,
-            "status": row.status,
+def _get_goal_members_list(goal_name):
+    """Get active members for a goal."""
+    members = frappe.get_all(
+        "Hambaft Goal Member",
+        filters={"goal": goal_name, "status": "فعال"},
+        fields=["name", "user", "role", "joined_at"],
+    )
+    result = []
+    for m in members:
+        info = _user_display_info(m.user)
+        result.append({
+            "membership_id": m.name,
+            "user_email": m.user,
+            "user_full_name": info.get("full_name", m.user),
+            "user_avatar_url": info.get("avatar_url"),
+            "role": m.role,
+            "joined_at": str(m.joined_at) if m.joined_at else None,
         })
+    return result
+
+
+def _extract_note_blocks(doc):
+    """Parse note_blocks_json from a doc into noteBlocks list for frontend."""
+    raw = getattr(doc, "note_blocks_json", None) if hasattr(doc, "note_blocks_json") else None
+    return _loads_json(raw, [])
+
+
+def _inject_note_blocks(data):
+    """Convert frontend noteBlocks array into note_blocks_json string for DB."""
+    if not isinstance(data, dict):
+        return data
+    blocks = data.pop("noteBlocks", None)
+    if blocks is not None:
+        data["note_blocks_json"] = json.dumps(blocks, ensure_ascii=False)
+    return data
+
+
+def _create_project_task(project_name, task_data):
+    """Create a real Task record linked to a project. Used instead of child table rows."""
+    status = task_data.get("status") or ("done" if task_data.get("completed") else "inbox")
+    # Normalize Persian statuses to English
+    status = _STATUS_FA_TO_EN.get(status, status)
+    priority = task_data.get("priority") or "متوسط"
+    priority = _normalize_task_priority(priority)
+    task_doc = frappe.new_doc("Task")
+    task_doc.title = task_data.get("title")
+    task_doc.description = task_data.get("description") or ""
+    task_doc.project = project_name
+    task_doc.status = status
+    task_doc.priority = priority
+    task_doc.importance = task_data.get("importance") or "عادی"
+    task_doc.due_date = task_data.get("dueDate") or task_data.get("due_date")
+    task_doc.is_daily_highlight = 1 if task_data.get("isDailyHighlight") or task_data.get("is_daily_highlight") else 0
+    task_doc.estimated_minutes = task_data.get("estimatedMinutes") or task_data.get("estimated_minutes")
+    task_doc.actual_minutes = task_data.get("actualMinutes") or task_data.get("actual_minutes")
+    task_doc.user = frappe.session.user
+    # Inherit area/goal from project if not provided
+    try:
+        proj_doc = frappe.get_doc("Hambaft Project", project_name)
+        if not task_data.get("area") and proj_doc.area:
+            task_doc.area = proj_doc.area
+        if not task_data.get("goal") and proj_doc.goal:
+            task_doc.goal = proj_doc.goal
+    except Exception:
+        pass
+    task_doc.insert(ignore_permissions=True)
+    frappe.db.commit()
+    return task_doc
+
+
+def _sync_project_tasks(project_name, tasks_list, user=None):
+    """Synchronize project tasks: existing Task records are updated,
+    new ones are created, and stale ones (no longer in the list) are unlinked.
+    This replaces the old child-table sync."""
+    user = user or frappe.session.user
+    _done_statuses = {"done", "completed", "انجام‌شده", "انجام شده"}
+
+    # Get current linked tasks from the Task doctype
+    existing = frappe.get_all(
+        "Task",
+        filters={"project": project_name},
+        fields=["name"],
+    )
+    existing_names = {row.name for row in existing}
+    sent_names = set()
+
+    # Cache project doc for area/goal inheritance
+    try:
+        proj_doc = frappe.get_doc("Hambaft Project", project_name)
+    except Exception:
+        proj_doc = None
+
+    for task in tasks_list:
+        tid = task.get("id") or task.get("name")
+        # Skip optimistic/frontend-generated IDs
+        is_temp = not tid or str(tid).startswith(("pt-", "tk-p-", "tk-", "new-"))
+        status = task.get("status") or ("done" if task.get("completed") else "inbox")
+        status = _STATUS_FA_TO_EN.get(status, status)
+        priority = task.get("priority") or "متوسط"
+        priority = _normalize_task_priority(priority)
+
+        if is_temp or tid not in existing_names:
+            # Create new Task
+            task_doc = frappe.new_doc("Task")
+            task_doc.title = task.get("title")
+            task_doc.description = task.get("description") or ""
+            task_doc.project = project_name
+            task_doc.status = status
+            task_doc.priority = priority
+            task_doc.importance = task.get("importance") or "عادی"
+            task_doc.due_date = task.get("dueDate") or task.get("due_date")
+            task_doc.is_daily_highlight = 1 if task.get("isDailyHighlight") or task.get("is_daily_highlight") else 0
+            task_doc.estimated_minutes = task.get("estimatedMinutes") or task.get("estimated_minutes")
+            task_doc.actual_minutes = task.get("actualMinutes") or task.get("actual_minutes")
+            task_doc.user = user
+            if proj_doc:
+                if not task.get("area") and proj_doc.area:
+                    task_doc.area = proj_doc.area
+                if not task.get("goal") and proj_doc.goal:
+                    task_doc.goal = proj_doc.goal
+            task_doc.insert(ignore_permissions=True)
+            sent_names.add(task_doc.name)
+        else:
+            # Update existing Task
+            task_doc = frappe.get_doc("Task", tid)
+            if task.get("title") is not None:
+                task_doc.title = task.get("title")
+            if task.get("description") is not None:
+                task_doc.description = task.get("description")
+            task_doc.status = status
+            task_doc.priority = priority
+            if task.get("importance") is not None:
+                task_doc.importance = task.get("importance")
+            if task.get("dueDate") or task.get("due_date"):
+                task_doc.due_date = task.get("dueDate") or task.get("due_date")
+            task_doc.is_daily_highlight = 1 if task.get("isDailyHighlight") or task.get("is_daily_highlight") else 0
+            if task.get("estimatedMinutes") or task.get("estimated_minutes"):
+                task_doc.estimated_minutes = task.get("estimatedMinutes") or task.get("estimated_minutes")
+            if task.get("actualMinutes") or task.get("actual_minutes"):
+                task_doc.actual_minutes = task.get("actualMinutes") or task.get("actual_minutes")
+            task_doc.save(ignore_permissions=True)
+            sent_names.add(tid)
+
+    # Remove project link from tasks that are no longer in the list
+    for name in existing_names - sent_names:
+        try:
+            task_doc = frappe.get_doc("Task", name)
+            task_doc.project = None
+            task_doc.save(ignore_permissions=True)
+        except Exception:
+            pass
+
+    frappe.db.commit()
+
+
+def _project_to_frontend(doc):
+    _done_statuses = {"done", "completed", "انجام‌شده", "انجام شده"}
+    task_rows = []
+    milestone_total = 0
+    milestone_done = 0
+    key_total = 0
+    key_done = 0
+
+    # Read tasks from the main Task doctype (single source of truth).
+    # A task belongs to a project when task.project == project_name.
+    linked_tasks = frappe.get_all(
+        "Task",
+        filters={"project": doc.name, "user": doc.user or frappe.session.user},
+        fields=["name", "title", "status", "priority", "importance",
+                "description", "due_date", "creation", "is_daily_highlight",
+                "category", "area", "goal", "parent_task",
+                "estimated_minutes", "actual_minutes", "effort_type",
+                "note_blocks_json", "blocked_by_json", "blocking_json"],
+        order_by="creation asc",
+    )
+    for row in linked_tasks:
+        imp = row.get("importance") or "عادی"
+        is_done = row.get("status") in _done_statuses
+        if imp == "نقطه‌عطف":
+            milestone_total += 1
+            if is_done:
+                milestone_done += 1
+        elif imp == "کلیدی":
+            key_total += 1
+            if is_done:
+                key_done += 1
+        task_rows.append({
+            "id": row.get("name"),
+            "title": row.get("title"),
+            "completed": is_done,
+            "status": row.get("status"),
+            "importance": imp,
+            "createdAt": str(row.get("creation") or doc.creation or today())[:10],
+            "description": row.get("description") or "",
+            "dueDate": str(row.get("due_date"))[:10] if row.get("due_date") else None,
+            "priority": row.get("priority"),
+            "category": row.get("category"),
+            "areaId": row.get("area"),
+            "goalId": row.get("goal"),
+            "parentTaskId": row.get("parent_task"),
+            "isDailyHighlight": bool(row.get("is_daily_highlight")),
+            "estimatedMinutes": row.get("estimated_minutes"),
+            "actualMinutes": row.get("actual_minutes"),
+            "effortType": row.get("effort_type"),
+        })
+
+    # Quality-aware progress (same logic as compute_progress on the doc)
+    total_weight = 0
+    done_weight = 0
+    for row in linked_tasks:
+        imp = row.get("importance") or "عادی"
+        w = 3 if imp == "نقطه‌عطف" else 2 if imp == "کلیدی" else 1
+        total_weight += w
+        if row.get("status") in _done_statuses:
+            done_weight += w
+    quality_progress = int((done_weight / total_weight) * 100) if total_weight > 0 else 0
+
+    # Goal health state (if project is linked to a goal)
+    goal_health_state = None
+    contribution_type = None
+    if doc.goal:
+        try:
+            link = frappe.get_all(
+                "Goal Project Link",
+                filters={"project": doc.name, "parent": doc.goal, "parenttype": "Goal"},
+                fields=["contribution_type"],
+                limit=1,
+            )
+            if link:
+                contribution_type = link[0].contribution_type
+            goal_doc = frappe.get_doc("Goal", doc.goal)
+            goal_health_state = getattr(goal_doc, "health_state", None)
+        except Exception:
+            pass
 
     return {
         "name": doc.name,
@@ -352,15 +841,29 @@ def _project_to_frontend(doc):
         "description": doc.description or "",
         "notes": doc.notes or "",
         "goal": doc.goal,
+        "area": doc.area or None,
+        "parent_project": doc.parent_project or None,
         "status": doc.status,
         "priority": doc.priority,
         "start_date": doc.start_date,
         "target_date": doc.target_date,
         "progress": doc.progress or 0,
+        "quality_progress": quality_progress,
+        "milestone_total": milestone_total,
+        "milestone_done": milestone_done,
+        "key_total": key_total,
+        "key_done": key_done,
         "color": doc.color,
         "icon": doc.icon,
+        "actual_minutes": doc.actual_minutes or 0,
+        "blocked_by_json": doc.blocked_by_json or None,
+        "effort_type": doc.effort_type or None,
+        "estimated_hours": doc.estimated_hours or None,
+        "contribution_type": contribution_type,
+        "goal_health_state": goal_health_state,
         "tasks": task_rows,
         "creation": str(doc.creation) if getattr(doc, "creation", None) else None,
+        "noteBlocks": _extract_note_blocks(doc),
     }
 
 
@@ -422,7 +925,11 @@ def check_session():
     This is the safe replacement for frappe.auth.get_logged_user which requires
     internal whitelist configuration.
     """
-    return {"user": frappe.session.user}
+    user = frappe.session.user
+    return {
+        "user": user,
+        "csrf_token": _get_session_csrf_token() if user != "Guest" else "",
+    }
 
 
 @frappe.whitelist()
@@ -441,16 +948,25 @@ def get_profile():
     signup_date = str(user_doc.creation) if getattr(user_doc, "creation", None) else None
 
     profile_name = frappe.db.get_value("Hambaft Profile", {"user": user}, "name")
+    gamification = {"total_points": 0, "level": 1, "current_streak_days": 0, "best_streak_days": 0}
     if profile_name:
         profile = frappe.get_doc("Hambaft Profile", profile_name)
         if profile.signup_date:
             signup_date = str(profile.signup_date)
+        gamification = {
+            "total_points": profile.total_points or 0,
+            "level": profile.level or 1,
+            "current_streak_days": profile.current_streak_days or 0,
+            "best_streak_days": profile.best_streak_days or 0,
+        }
 
     return {
         "name": user_doc.name,
         "full_name": user_doc.full_name,
         "email": user_doc.email,
         "signup_date": signup_date,
+        "csrf_token": _get_session_csrf_token(),
+        "gamification": gamification,
     }
 
 
@@ -547,6 +1063,7 @@ def login(email, password):
 
     return {
         "status": "success",
+        "csrf_token": _get_session_csrf_token(),
         "data": {
             "user": {
                 "name": user.name,
@@ -554,6 +1071,7 @@ def login(email, password):
                 "display_name": user.full_name or user.first_name or user.name,
             },
             "onboarding_completed": bool(settings.get("onboarding_completed")) if settings else False,
+            "csrf_token": _get_session_csrf_token(),
         }
     }
 
@@ -585,6 +1103,7 @@ def signup(email, password, display_name=None):
 
     return {
         "status": "success",
+        "csrf_token": _get_session_csrf_token(),
         "data": {
             "user": {
                 "name": user.name,
@@ -592,6 +1111,7 @@ def signup(email, password, display_name=None):
                 "display_name": user.full_name or user.first_name,
             },
             "onboarding_completed": False,
+            "csrf_token": _get_session_csrf_token(),
         }
     }
 
@@ -609,6 +1129,24 @@ def get_goals(status=None, category=None, limit=50, offset=0):
         filters["category"] = category
     goals = frappe.get_all("Goal", filters=filters, fields="*",
                            limit_page_length=cint(limit), start=cint(offset))
+
+    # Also include shared goals where user is a member but not owner
+    user = frappe.session.user
+    shared_memberships = frappe.get_all(
+        "Hambaft Goal Member",
+        filters={"user": user, "status": "فعال"},
+        fields=["goal"],
+    )
+    shared_goal_ids = [m.goal for m in shared_memberships if m.goal]
+    already_loaded = {g.get("name") for g in goals}
+    for gid in shared_goal_ids:
+        if gid not in already_loaded:
+            try:
+                gdoc = frappe.get_doc("Goal", gid)
+                goals.append(gdoc.as_dict())
+            except Exception:
+                pass
+
     return _api_response({"goals": goals})
 
 
@@ -625,12 +1163,54 @@ def create_goal(data):
         frappe.throw("Authentication required", frappe.AuthenticationError)
     if isinstance(data, str):
         data = json.loads(data)
+    data = _inject_note_blocks(data)
+    # Extract child table data before update
+    habits_data = data.pop("linked_habits", None) or data.pop("linkedHabits", None) or []
+    finance_data = data.pop("linked_finance_accounts", None) or data.pop("linkedFinanceAccounts", None) or []
+    projects_data = data.pop("linked_projects", None) or data.pop("linkedProjects", None) or []
     doc = frappe.new_doc("Goal")
     doc.update(data)
     doc.user = frappe.session.user
+    # Add linked habits
+    for h in habits_data:
+        if isinstance(h, dict) and h.get("habit"):
+            doc.append("linked_habits", {
+                "habit": h.get("habit"),
+                "contribution_type": h.get("contribution_type") or "تعداد_انجام",
+                "weight": flt(h.get("weight") or 100),
+                "period": h.get("period") or "ماهانه",
+                "target_value": flt(h.get("target_value")) if h.get("target_value") else None,
+                "cap_value": flt(h.get("cap_value")) if h.get("cap_value") else None,
+                "is_negative": cint(h.get("is_negative") or 0),
+                "notes": h.get("notes") or "",
+            })
+    # Add linked finance accounts
+    for f in finance_data:
+        if isinstance(f, dict) and f.get("finance_account"):
+            doc.append("linked_finance_accounts", {
+                "finance_account": f.get("finance_account"),
+                "finance_type": f.get("finance_type") or "موجودی_حساب",
+                "initial_amount": flt(f.get("initial_amount")) if f.get("initial_amount") else None,
+                "target_amount": flt(f.get("target_amount")) if f.get("target_amount") else None,
+                "weight": flt(f.get("weight") or 100),
+                "notes": f.get("notes") or "",
+            })
+    # Add linked projects
+    for p in projects_data:
+        proj_name = p.get("project") if isinstance(p, dict) else p
+        if not proj_name:
+            continue
+        doc.append("linked_projects", {
+            "project": proj_name,
+            "contribution_type": (p.get("contribution_type") if isinstance(p, dict) else None) or "اجباری",
+            "weight": flt(p.get("weight") if isinstance(p, dict) else 100 or 100),
+            "is_mandatory": cint(p.get("is_mandatory") if isinstance(p, dict) else 1 or 1),
+            "sort_order": cint(p.get("sort_order") if isinstance(p, dict) else 0 or 0),
+            "notes": (p.get("notes") if isinstance(p, dict) else None) or "",
+        })
     doc.insert()
     frappe.db.commit()
-    return _api_response({"goal": doc.as_dict()})
+    return _api_response({"goal": _goal_to_frontend(doc)})
 
 
 @frappe.whitelist()
@@ -639,11 +1219,59 @@ def update_goal(name, data):
         frappe.throw("Authentication required", frappe.AuthenticationError)
     if isinstance(data, str):
         data = json.loads(data)
+    data = _inject_note_blocks(data)
+    # Extract child table data
+    habits_data = data.pop("linked_habits", None) or data.pop("linkedHabits", None)
+    finance_data = data.pop("linked_finance_accounts", None) or data.pop("linkedFinanceAccounts", None)
+    projects_data = data.pop("linked_projects", None) or data.pop("linkedProjects", None)
     doc = frappe.get_doc("Goal", name)
     doc.update(data)
+    # Replace linked habits if provided
+    if habits_data is not None:
+        doc.set("linked_habits", [])
+        for h in habits_data:
+            if isinstance(h, dict) and h.get("habit"):
+                doc.append("linked_habits", {
+                    "habit": h.get("habit"),
+                    "contribution_type": h.get("contribution_type") or "تعداد_انجام",
+                    "weight": flt(h.get("weight") or 100),
+                    "period": h.get("period") or "ماهانه",
+                    "target_value": flt(h.get("target_value")) if h.get("target_value") else None,
+                    "cap_value": flt(h.get("cap_value")) if h.get("cap_value") else None,
+                    "is_negative": cint(h.get("is_negative") or 0),
+                    "notes": h.get("notes") or "",
+                })
+    # Replace linked finance if provided
+    if finance_data is not None:
+        doc.set("linked_finance_accounts", [])
+        for f in finance_data:
+            if isinstance(f, dict) and f.get("finance_account"):
+                doc.append("linked_finance_accounts", {
+                    "finance_account": f.get("finance_account"),
+                    "finance_type": f.get("finance_type") or "موجودی_حساب",
+                    "initial_amount": flt(f.get("initial_amount")) if f.get("initial_amount") else None,
+                    "target_amount": flt(f.get("target_amount")) if f.get("target_amount") else None,
+                    "weight": flt(f.get("weight") or 100),
+                    "notes": f.get("notes") or "",
+                })
+    # Replace linked projects if provided
+    if projects_data is not None:
+        doc.set("linked_projects", [])
+        for p in projects_data:
+            proj_name = p.get("project") if isinstance(p, dict) else p
+            if not proj_name:
+                continue
+            doc.append("linked_projects", {
+                "project": proj_name,
+                "contribution_type": (p.get("contribution_type") if isinstance(p, dict) else None) or "اجباری",
+                "weight": flt(p.get("weight") if isinstance(p, dict) else 100 or 100),
+                "is_mandatory": cint(p.get("is_mandatory") if isinstance(p, dict) else 1 or 1),
+                "sort_order": cint(p.get("sort_order") if isinstance(p, dict) else 0 or 0),
+                "notes": (p.get("notes") if isinstance(p, dict) else None) or "",
+            })
     doc.save()
     frappe.db.commit()
-    return _api_response({"goal": doc.as_dict()})
+    return _api_response({"goal": _goal_to_frontend(doc)})
 
 
 @frappe.whitelist()
@@ -653,6 +1281,16 @@ def delete_goal(name):
     frappe.delete_doc("Goal", name)
     frappe.db.commit()
     return _api_response({"ok": True})
+
+
+@frappe.whitelist()
+def get_areas(limit=50, offset=0):
+    if frappe.session.user == "Guest":
+        frappe.throw("Authentication required", frappe.AuthenticationError)
+    areas = frappe.get_all("Hambaft Area", filters=_owner_filter(), fields="*",
+                           limit_page_length=cint(limit), start=cint(offset),
+                           order_by="title asc")
+    return _api_response({"areas": areas})
 
 
 @frappe.whitelist()
@@ -695,30 +1333,48 @@ def get_task(name):
 
 
 @frappe.whitelist()
-def create_task(data):
+def create_task(data=None):
     if frappe.session.user == "Guest":
         frappe.throw("Authentication required", frappe.AuthenticationError)
+    if data is None:
+        data = {}
     if isinstance(data, str):
-        data = json.loads(data)
+        try:
+            data = json.loads(data)
+        except (json.JSONDecodeError, ValueError):
+            data = {}
+    data = _normalize_task_data(data)
+    data = _inject_note_blocks(data)
     doc = frappe.new_doc("Task")
     doc.update(data)
     doc.user = frappe.session.user
     doc.insert()
     frappe.db.commit()
-    return _api_response({"task": doc.as_dict()})
+    result = doc.as_dict()
+    result["noteBlocks"] = _extract_note_blocks(doc)
+    return _api_response({"task": result})
 
 
 @frappe.whitelist()
-def update_task(name, data):
+def update_task(name, data=None):
     if frappe.session.user == "Guest":
         frappe.throw("Authentication required", frappe.AuthenticationError)
+    if data is None:
+        data = {}
     if isinstance(data, str):
-        data = json.loads(data)
+        try:
+            data = json.loads(data)
+        except (json.JSONDecodeError, ValueError):
+            data = {}
+    data = _normalize_task_data(data)
+    data = _inject_note_blocks(data)
     doc = frappe.get_doc("Task", name)
     doc.update(data)
     doc.save()
     frappe.db.commit()
-    return _api_response({"task": doc.as_dict()})
+    result = doc.as_dict()
+    result["noteBlocks"] = _extract_note_blocks(doc)
+    return _api_response({"task": result})
 
 
 @frappe.whitelist()
@@ -726,22 +1382,110 @@ def complete_task(name, actual_minutes=None):
     if frappe.session.user == "Guest":
         frappe.throw("Authentication required", frappe.AuthenticationError)
     doc = frappe.get_doc("Task", name)
+
+    # Check if task was already done (avoid double-awarding points)
+    was_already_done = doc.status == "done"
+
     doc.status = "done"
     doc.completed_on = now_datetime()
     if actual_minutes:
         doc.actual_minutes = cint(actual_minutes)
     doc.save()
+    # Also complete all subtasks recursively
+    children = frappe.get_all("Task", filters={"parent_task": name, "status": ["!=", "done"]}, pluck="name")
+    for child in children:
+        complete_task(child)
     frappe.db.commit()
-    return _api_response({"task": doc.as_dict()})
+
+    # Phase 9: Award points for task completion
+    gamification_result = {}
+    if not was_already_done:
+        try:
+            gamification_result = _award_points(
+                frappe.session.user, 10, "task_completed",
+                entity_type="Task", entity=name,
+                description="تسک تکمیل شد"
+            )
+        except Exception:
+            gamification_result = {}
+        # Phase 10: Update daily challenge progress
+        try:
+            _update_challenge_progress(frappe.session.user, "complete_task")
+        except Exception:
+            pass
+
+    return _api_response({"task": doc.as_dict(), "gamification": gamification_result})
 
 
 @frappe.whitelist()
 def delete_task(name):
     if frappe.session.user == "Guest":
         frappe.throw("Authentication required", frappe.AuthenticationError)
+    # Recursively delete all subtasks first
+    children = frappe.get_all("Task", filters={"parent_task": name}, pluck="name")
+    for child in children:
+        # Recursively delete grandchildren
+        delete_task(child)
+    # Clear parent_task references that point to this task
+    frappe.db.sql("UPDATE `tabTask` SET parent_task = NULL WHERE parent_task = %s", name)
     frappe.delete_doc("Task", name)
     frappe.db.commit()
     return _api_response({"ok": True})
+
+
+@frappe.whitelist()
+def bulk_update_tasks(names, updates):
+    """Bulk update multiple tasks at once.
+
+    Args:
+        names: JSON string of task name list, e.g. '["TASK-001","TASK-002"]'
+        updates: JSON string of field updates, e.g. '{"status":"done","priority":"high"}'
+    """
+    if frappe.session.user == "Guest":
+        frappe.throw("Authentication required", frappe.AuthenticationError)
+    if isinstance(names, str):
+        try:
+            names = json.loads(names)
+        except (json.JSONDecodeError, ValueError):
+            names = []
+    if isinstance(updates, str):
+        try:
+            updates = json.loads(updates)
+        except (json.JSONDecodeError, ValueError):
+            updates = {}
+    if not names or not updates:
+        frappe.throw("names and updates are required")
+
+    _IMPORTANCE_MAP = {"normal": "عادی", "key": "کلیدی", "milestone": "نقطه‌عطف"}
+
+    allowed_fields = {"status", "priority", "importance"}
+    filtered_updates = {k: v for k, v in updates.items() if k in allowed_fields}
+    if not filtered_updates:
+        frappe.throw("No valid fields to update")
+
+    # Normalize status: Persian → English if needed
+    if "status" in filtered_updates:
+        filtered_updates["status"] = _normalize_task_status(filtered_updates["status"])
+    if "importance" in filtered_updates and filtered_updates["importance"] in _IMPORTANCE_MAP:
+        filtered_updates["importance"] = _IMPORTANCE_MAP[filtered_updates["importance"]]
+
+    updated = 0
+    errors = 0
+    for name in names:
+        try:
+            doc = frappe.get_doc("Task", name)
+            if doc.user and doc.user != frappe.session.user:
+                errors += 1
+                continue
+            for field, value in filtered_updates.items():
+                doc.set(field, value)
+            doc.save(ignore_permissions=True)
+            updated += 1
+        except Exception:
+            errors += 1
+
+    frappe.db.commit()
+    return _api_response({"updated": updated, "errors": errors})
 
 
 # ─── Habits CRUD ────────────────────────────────────────────────
@@ -806,7 +1550,7 @@ def delete_habit(name):
 
 
 @frappe.whitelist()
-def log_habit(habit, date=None, status="done", value=1, note=None, mood=None):
+def log_habit(habit, date=None, status="انجام‌شده", value=1, note=None, mood=None):
     if frappe.session.user == "Guest":
         frappe.throw("Authentication required", frappe.AuthenticationError)
     if not date:
@@ -834,6 +1578,15 @@ def log_habit(habit, date=None, status="done", value=1, note=None, mood=None):
     doc.user = frappe.session.user
     doc.save()
     frappe.db.commit()
+
+    # Phase 10: Update daily challenge progress for habit logging
+    if status == "انجام‌شده":
+        try:
+            _update_challenge_progress(frappe.session.user, "log_habit")
+            _update_challenge_progress(frappe.session.user, "consistency")
+        except Exception:
+            pass
+
     return _api_response({"log": doc.as_dict()})
 
 
@@ -1366,6 +2119,18 @@ def get_mood_trend(days=30):
                           "avg_sleep": round(avg_sleep, 1), "trend": logs})
 
 
+@frappe.whitelist()
+def delete_mood_log(name):
+    """Delete a mood energy log entry."""
+    if frappe.session.user == "Guest":
+        frappe.throw("Authentication required", frappe.AuthenticationError)
+    doc = frappe.get_doc("Mood Energy Log", name)
+    if doc.user != frappe.session.user:
+        frappe.throw("Not authorized", frappe.PermissionError)
+    frappe.delete_doc("Mood Energy Log", name)
+    return _api_response({"deleted": name})
+
+
 # ─── Motivation ─────────────────────────────────────────────────
 
 @frappe.whitelist()
@@ -1431,10 +2196,20 @@ def get_settings():
 
 
 @frappe.whitelist()
-def update_settings(data):
+def update_settings(data=None):
     if frappe.session.user == "Guest":
         frappe.throw("Authentication required", frappe.AuthenticationError)
+    if data is None:
+        data = {}
+    if isinstance(data, str):
+        try:
+            data = json.loads(data)
+        except (json.JSONDecodeError, ValueError):
+            data = {}
+    data = data or {}
     data = _normalize_settings_update(data)
+    if not data:
+        return _api_response({"settings": _get_settings_payload()})
     doc = _get_or_create_settings_doc()
     doc = _persist_settings_updates(doc, data)
     frappe.db.commit()
@@ -1481,7 +2256,12 @@ def get_onboarding_status():
 def submit_onboarding_step(step, data=None):
     if frappe.session.user == "Guest":
         frappe.throw("Authentication required", frappe.AuthenticationError)
-    data = _normalize_settings_update(data)
+    if isinstance(data, str):
+        try:
+            data = json.loads(data)
+        except (json.JSONDecodeError, ValueError):
+            data = {}
+    data = _normalize_settings_update(data or {})
     step = cint(step)
     doc = _get_or_create_settings_doc()
     payload = dict(data or {})
@@ -1665,12 +2445,15 @@ def create_project(data):
     if isinstance(data, str):
         data = json.loads(data)
     data = data or {}
+    data = _inject_note_blocks(data)
     doc = frappe.new_doc("Hambaft Project")
     doc.user = frappe.session.user
     doc.title = data.get("title")
     doc.description = data.get("description")
     doc.notes = data.get("notes")
     doc.goal = data.get("goal")
+    doc.area = data.get("area")
+    doc.parent_project = data.get("parent_project")
     doc.status = data.get("status") or "برنامه‌ریزی"
     doc.priority = data.get("priority") or "متوسط"
     doc.start_date = data.get("start_date")
@@ -1678,18 +2461,18 @@ def create_project(data):
     doc.progress = flt(data.get("progress") or 0)
     doc.color = data.get("color")
     doc.icon = data.get("icon")
-    for task in data.get("tasks") or []:
-        doc.append("tasks", {
-            "title": task.get("title"),
-            "description": task.get("description"),
-            "status": task.get("status") or ("انجام‌شده" if task.get("completed") else "انجام‌نشده"),
-            "priority": task.get("priority") or "متوسط",
-            "due_date": task.get("dueDate") or task.get("due_date"),
-            "user": frappe.session.user,
-            "completed": 1 if task.get("completed") else 0,
-        })
+    doc.effort_type = data.get("effort_type")
+    doc.estimated_hours = flt(data.get("estimated_hours")) if data.get("estimated_hours") else None
+    doc.blocked_by_json = data.get("blocked_by_json")
+    if data.get("note_blocks_json"):
+        doc.note_blocks_json = data.get("note_blocks_json")
+    # Do NOT write tasks to the child table — tasks are now linked via Task.project.
+    # If tasks are provided, create real Task records instead.
     doc.insert(ignore_permissions=True)
     frappe.db.commit()
+    # Create linked Task records for any tasks provided
+    for task in data.get("tasks") or []:
+        _create_project_task(doc.name, task)
     return _api_response({"project": _project_to_frontend(doc)})
 
 
@@ -1700,11 +2483,14 @@ def update_project(name, data):
     if isinstance(data, str):
         data = json.loads(data)
     data = data or {}
+    data = _inject_note_blocks(data)
     doc = frappe.get_doc("Hambaft Project", name)
     doc.title = data.get("title", doc.title)
     doc.description = data.get("description", doc.description)
     doc.notes = data.get("notes", doc.notes)
     doc.goal = data.get("goal", doc.goal)
+    doc.area = data.get("area", doc.area)
+    doc.parent_project = data.get("parent_project", doc.parent_project)
     doc.status = data.get("status", doc.status)
     doc.priority = data.get("priority", doc.priority)
     doc.start_date = data.get("start_date", doc.start_date)
@@ -1712,19 +2498,15 @@ def update_project(name, data):
     doc.progress = flt(data.get("progress", doc.progress or 0))
     doc.color = data.get("color", doc.color)
     doc.icon = data.get("icon", doc.icon)
+    doc.effort_type = data.get("effort_type", doc.effort_type)
+    doc.estimated_hours = flt(data.get("estimated_hours")) if data.get("estimated_hours") is not None else doc.estimated_hours
+    doc.blocked_by_json = data.get("blocked_by_json", doc.blocked_by_json)
+    if data.get("note_blocks_json"):
+        doc.note_blocks_json = data.get("note_blocks_json")
+    # Tasks are no longer stored in the child table — they are real Task records.
+    # When "tasks" is provided in the update, sync them with the Task doctype.
     if "tasks" in data:
-        doc.set("tasks", [])
-        for task in data.get("tasks") or []:
-            doc.append("tasks", {
-                "name": task.get("id") if task.get("id") and not str(task.get("id")).startswith(("pt-", "tk-p-", "tk-")) else None,
-                "title": task.get("title"),
-                "description": task.get("description"),
-                "status": task.get("status") or ("انجام‌شده" if task.get("completed") else "انجام‌نشده"),
-                "priority": task.get("priority") or "متوسط",
-                "due_date": task.get("dueDate") or task.get("due_date"),
-                "user": frappe.session.user,
-                "completed": 1 if task.get("completed") else 0,
-            })
+        _sync_project_tasks(doc.name, data.get("tasks") or [], doc.user or frappe.session.user)
     doc.save(ignore_permissions=True)
     frappe.db.commit()
     return _api_response({"project": _project_to_frontend(doc)})
@@ -1872,7 +2654,436 @@ def update_contact(name, data):
 def delete_contact(name):
     _check_auth()
     _require_owner("Hambaft Contact", name)
+    # Also delete all contact relations involving this contact
+    try:
+        for rel in frappe.get_all("Hambaft Contact Relation", filters={"user": frappe.session.user, "from_contact": name}):
+            frappe.delete_doc("Hambaft Contact Relation", rel.name, ignore_permissions=True, force=True)
+        for rel in frappe.get_all("Hambaft Contact Relation", filters={"user": frappe.session.user, "to_contact": name}):
+            frappe.delete_doc("Hambaft Contact Relation", rel.name, ignore_permissions=True, force=True)
+    except Exception:
+        pass  # Relation tables may not exist yet
+    # Also delete all contact-entity links involving this contact
+    try:
+        for link in frappe.get_all("Hambaft Contact Link", filters={"user": frappe.session.user, "contact": name}):
+            frappe.delete_doc("Hambaft Contact Link", link.name, ignore_permissions=True, force=True)
+    except Exception:
+        pass  # Link table may not exist yet
     frappe.delete_doc("Hambaft Contact", name, ignore_permissions=True)
+    frappe.db.commit()
+    return _api_response({"ok": True})
+
+
+# ─── Contact Relations ─────────────────────────────────────────
+
+
+def _contact_relations_table_exists():
+    """Check if Hambaft Contact Relation table exists."""
+    try:
+        return frappe.db.exists("DocType", "Hambaft Contact Relation")
+    except Exception:
+        return False
+
+
+def _compute_relationship_health(contact, relation_count=0, today_str=None):
+    """Derive a lightweight relationship health state from existing data.
+
+    Returns one of: "healthy", "needs_attention", "cold", "new"
+    No fake AI — purely rule-based from last_interaction_date, closeness_tier,
+    relation_count, and interaction frequency.
+    """
+    if not today_str:
+        today_str = frappe.utils.today()
+
+    last_date = contact.get("last_interaction_date")
+    closeness = contact.get("closeness_tier") or "acquaintance"
+    score = cint(contact.get("relationship_score") or 0)
+
+    # Thresholds by closeness (days since last contact)
+    thresholds = {"inner": 14, "outer": 45, "acquaintance": 90}
+    threshold = thresholds.get(closeness, 90)
+
+    if not last_date:
+        # Never contacted
+        if relation_count > 0:
+            return "needs_attention"  # connected but never logged
+        return "new"
+
+    try:
+        days_since = (frappe.utils.getdate(today_str) - frappe.utils.getdate(last_date)).days
+    except Exception:
+        days_since = 999
+
+    if days_since <= threshold:
+        return "healthy"
+    elif days_since <= threshold * 2:
+        return "needs_attention"
+    else:
+        return "cold"
+
+
+@frappe.whitelist()
+def get_contacts_summary():
+    """Return enriched contact list with relation counts and derived health.
+
+    Used by the Contacts UI for summary strip, badges, and filtering.
+    """
+    _check_auth()
+    user = frappe.session.user
+
+    contacts = frappe.get_all(
+        "Hambaft Contact",
+        filters={"user": user},
+        fields=["name", "full_name", "contact_category", "closeness_tier",
+                 "last_interaction_date", "relationship_score", "photo_url"],
+        limit_page_length=500,
+    )
+
+    # Build relation counts per contact
+    relation_counts = {}  # contact_id -> count
+    relation_types_map = {}  # contact_id -> {type: count}
+    if _contact_relations_table_exists():
+        try:
+            rels = frappe.get_all(
+                "Hambaft Contact Relation",
+                filters={"user": user, "status": "active"},
+                fields=["from_contact", "to_contact", "relation_type"],
+            )
+            for rel in rels:
+                for cid in (rel.from_contact, rel.to_contact):
+                    relation_counts[cid] = relation_counts.get(cid, 0) + 1
+                    if cid not in relation_types_map:
+                        relation_types_map[cid] = {}
+                    rtype = rel.relation_type or "custom"
+                    relation_types_map[cid][rtype] = relation_types_map[cid].get(rtype, 0) + 1
+        except Exception:
+            pass
+
+    today_str = frappe.utils.today()
+    result = []
+    for c in contacts:
+        rc = relation_counts.get(c.name, 0)
+        rt = relation_types_map.get(c.name, {})
+        health = _compute_relationship_health(c, rc, today_str)
+        result.append({
+            "name": c.name,
+            "full_name": c.full_name,
+            "contact_category": c.contact_category,
+            "closeness_tier": c.closeness_tier,
+            "last_interaction_date": c.last_interaction_date,
+            "relationship_score": c.relationship_score or 0,
+            "photo_url": c.photo_url or None,
+            "relation_count": rc,
+            "relation_types": rt,
+            "health": health,
+        })
+
+    return _api_response({"contacts": result})
+
+
+@frappe.whitelist()
+def get_contact_relations(contact_id):
+    """Get all relations for a contact. Returns both outgoing and incoming relations.
+    For mutual relations, only returns one record (from_contact < to_contact).
+    Enriches with contact names for display.
+    """
+    _check_auth()
+    user = frappe.session.user
+
+    if not _contact_relations_table_exists():
+        return _api_response({"relations": [], "contact_not_ready": True})
+
+    # Fetch relations where this contact is either from or to
+    relations = frappe.get_all(
+        "Hambaft Contact Relation",
+        filters={"user": user, "status": "active"},
+        fields=["name", "from_contact", "to_contact", "relation_type", "directionality",
+                 "strength_score", "since_date", "notes", "sort_order", "status"],
+        order_by="sort_order asc, creation desc",
+    )
+
+    # Filter to only relations involving this contact
+    result = []
+    for rel in relations:
+        if rel.from_contact != contact_id and rel.to_contact != contact_id:
+            continue
+
+        # Determine the "other" contact
+        other_id = rel.to_contact if rel.from_contact == contact_id else rel.from_contact
+
+        # Get other contact's name
+        other_name = frappe.db.get_value("Hambaft Contact", other_id, "full_name") or other_id
+        other_photo = frappe.db.get_value("Hambaft Contact", other_id, "photo_url") or None
+        other_category = frappe.db.get_value("Hambaft Contact", other_id, "contact_category") or None
+
+        # Determine direction label from the perspective of the active contact
+        is_from = rel.from_contact == contact_id
+        if rel.directionality == "mutual":
+            direction_label = "mutual"
+        elif is_from:
+            direction_label = "outgoing"
+        else:
+            direction_label = "incoming"
+
+        result.append({
+            "name": rel.name,
+            "from_contact": rel.from_contact,
+            "to_contact": rel.to_contact,
+            "relation_type": rel.relation_type,
+            "directionality": rel.directionality,
+            "direction_label": direction_label,
+            "other_contact_id": other_id,
+            "other_contact_name": other_name,
+            "other_contact_photo": other_photo,
+            "other_contact_category": other_category,
+            "strength_score": rel.strength_score or 0,
+            "since_date": rel.since_date or None,
+            "notes": rel.notes or "",
+            "sort_order": rel.sort_order or 0,
+        })
+
+    return _api_response({"relations": result})
+
+
+@frappe.whitelist()
+def create_contact_relation(data):
+    """Create a relation between two contacts.
+    Both contacts must belong to the same user.
+    For mutual relations, also creates the reverse record for easy querying.
+    """
+    _check_auth()
+    user = frappe.session.user
+
+    if not _contact_relations_table_exists():
+        return _api_response({"relation_name": None, "created": False, "contact_not_ready": True})
+
+    if isinstance(data, str):
+        data = json.loads(data)
+    data = data or {}
+
+    from_contact = data.get("from_contact")
+    to_contact = data.get("to_contact")
+
+    if not from_contact or not to_contact:
+        frappe.throw("Both from_contact and to_contact are required.")
+
+    if from_contact == to_contact:
+        frappe.throw("A contact cannot be related to itself.")
+
+    # Validate ownership of both contacts
+    for cid in [from_contact, to_contact]:
+        owner = frappe.db.get_value("Hambaft Contact", cid, "user")
+        if owner != user:
+            frappe.throw(f"Contact {cid} does not belong to you.", frappe.PermissionError)
+
+    relation_type = data.get("relation_type") or "friend"
+    directionality = data.get("directionality") or "mutual"
+    strength_score = cint(data.get("strength_score") or 0)
+    since_date = data.get("since_date") or None
+    notes = data.get("notes") or ""
+
+    doc = frappe.new_doc("Hambaft Contact Relation")
+    doc.user = user
+    doc.from_contact = from_contact
+    doc.to_contact = to_contact
+    doc.relation_type = relation_type
+    doc.directionality = directionality
+    doc.strength_score = strength_score
+    doc.status = "active"
+    doc.since_date = since_date
+    doc.notes = notes
+    doc.sort_order = cint(data.get("sort_order") or 0)
+    doc.insert(ignore_permissions=True)
+    frappe.db.commit()
+
+    return _api_response({"relation_name": doc.name, "created": True})
+
+
+@frappe.whitelist()
+def update_contact_relation(name, data):
+    """Update a contact relation."""
+    _check_auth()
+    _require_owner("Hambaft Contact Relation", name)
+
+    if isinstance(data, str):
+        data = json.loads(data)
+    data = data or {}
+
+    doc = frappe.get_doc("Hambaft Contact Relation", name)
+    for fieldname in ("relation_type", "directionality", "strength_score", "since_date", "notes", "sort_order", "status"):
+        if fieldname in data:
+            setattr(doc, fieldname, data.get(fieldname))
+
+    doc.save(ignore_permissions=True)
+    frappe.db.commit()
+    return _api_response({"ok": True})
+
+
+@frappe.whitelist()
+def delete_contact_relation(name):
+    """Delete a contact relation."""
+    _check_auth()
+    _require_owner("Hambaft Contact Relation", name)
+    frappe.delete_doc("Hambaft Contact Relation", name, ignore_permissions=True, force=True)
+    frappe.db.commit()
+    return _api_response({"ok": True})
+
+
+# ─── Contact Links (contact ↔ entity) ──────────────────────────
+
+
+def _contact_link_table_exists():
+    """Check if Hambaft Contact Link table exists."""
+    try:
+        return frappe.db.exists("DocType", "Hambaft Contact Link")
+    except Exception:
+        return False
+
+
+_ENTITY_DOCTYPE_MAP = {
+    "goal": "Hambaft Goal",
+    "project": "Hambaft Project",
+    "task": "Hambaft Task",
+    "occasion": "Hambaft Occasion",
+    "document": "Hambaft Document",
+    "finance": "Hambaft Finance Entry",
+}
+
+
+def _enrich_contact_link(link):
+    """Add entity title and contact name to a link record."""
+    result = {
+        "name": link.name,
+        "contact": link.contact,
+        "entity_type": link.entity_type,
+        "entity": link.entity,
+        "role": link.role,
+        "context_note": link.context_note or "",
+        "status": link.status,
+        "sort_order": link.sort_order or 0,
+    }
+    # Contact name
+    result["contact_name"] = frappe.db.get_value("Hambaft Contact", link.contact, "full_name") or link.contact
+    result["contact_photo"] = frappe.db.get_value("Hambaft Contact", link.contact, "photo_url") or None
+
+    # Entity title
+    target_dt = _ENTITY_DOCTYPE_MAP.get(link.entity_type)
+    if target_dt and link.entity:
+        title_field = "title" if target_dt != "Hambaft Finance Entry" else "title"
+        result["entity_title"] = frappe.db.get_value(target_dt, link.entity, title_field) or link.entity
+    else:
+        result["entity_title"] = link.entity
+
+    return result
+
+
+@frappe.whitelist()
+def get_contact_links(contact_id=None, entity_type=None, entity_id=None):
+    """Get contact-entity links. Can filter by contact, entity, or both.
+    If contact_id provided: returns all links for that contact.
+    If entity_type+entity_id provided: returns all links for that entity.
+    """
+    _check_auth()
+    user = frappe.session.user
+
+    if not _contact_link_table_exists():
+        return _api_response({"links": [], "contact_link_not_ready": True})
+
+    filters = {"user": user, "status": "active"}
+    if contact_id:
+        filters["contact"] = contact_id
+    if entity_type:
+        filters["entity_type"] = entity_type
+    if entity_id:
+        filters["entity"] = entity_id
+
+    links = frappe.get_all(
+        "Hambaft Contact Link",
+        filters=filters,
+        fields=["name", "contact", "entity_type", "entity", "role", "context_note", "status", "sort_order"],
+        order_by="sort_order asc, creation desc",
+    )
+
+    result = [_enrich_contact_link(link) for link in links]
+    return _api_response({"links": result})
+
+
+@frappe.whitelist()
+def create_contact_link(data):
+    """Create a link between a contact and an entity."""
+    _check_auth()
+    user = frappe.session.user
+
+    if not _contact_link_table_exists():
+        return _api_response({"link_name": None, "created": False, "contact_link_not_ready": True})
+
+    if isinstance(data, str):
+        data = json.loads(data)
+    data = data or {}
+
+    contact = data.get("contact")
+    entity_type = data.get("entity_type")
+    entity = data.get("entity")
+
+    if not contact or not entity_type or not entity:
+        frappe.throw("contact, entity_type, and entity are required.")
+
+    # Validate contact ownership
+    owner = frappe.db.get_value("Hambaft Contact", contact, "user")
+    if owner != user:
+        frappe.throw("Contact does not belong to you.", frappe.PermissionError)
+
+    # Validate entity ownership
+    target_dt = _ENTITY_DOCTYPE_MAP.get(entity_type)
+    if not target_dt:
+        frappe.throw(f"Unsupported entity type: {entity_type}")
+    eowner = frappe.db.get_value(target_dt, entity, "user")
+    if eowner != user:
+        frappe.throw(f"Entity does not belong to you.", frappe.PermissionError)
+
+    role = data.get("role") or "related_person"
+    context_note = data.get("context_note") or ""
+
+    doc = frappe.new_doc("Hambaft Contact Link")
+    doc.user = user
+    doc.contact = contact
+    doc.entity_type = entity_type
+    doc.entity = entity
+    doc.role = role
+    doc.context_note = context_note
+    doc.status = "active"
+    doc.sort_order = cint(data.get("sort_order") or 0)
+    doc.insert(ignore_permissions=True)
+    frappe.db.commit()
+
+    return _api_response({"link_name": doc.name, "created": True})
+
+
+@frappe.whitelist()
+def update_contact_link(name, data):
+    """Update a contact link."""
+    _check_auth()
+    _require_owner("Hambaft Contact Link", name)
+
+    if isinstance(data, str):
+        data = json.loads(data)
+    data = data or {}
+
+    doc = frappe.get_doc("Hambaft Contact Link", name)
+    for fieldname in ("role", "context_note", "sort_order", "status"):
+        if fieldname in data:
+            setattr(doc, fieldname, data.get(fieldname))
+
+    doc.save(ignore_permissions=True)
+    frappe.db.commit()
+    return _api_response({"ok": True})
+
+
+@frappe.whitelist()
+def delete_contact_link(name):
+    """Delete a contact link."""
+    _check_auth()
+    _require_owner("Hambaft Contact Link", name)
+    frappe.delete_doc("Hambaft Contact Link", name, ignore_permissions=True, force=True)
     frappe.db.commit()
     return _api_response({"ok": True})
 
@@ -2156,6 +3367,15 @@ def ai_coach_chat(prompt, history=None, life_data=None, conversation_id=None):
         conversation.status = "فعال"
         conversation.started_at = now_datetime()
 
+    # Save user message
+    user_msg = frappe.new_doc("Hambaft AI Message")
+    user_msg.user = frappe.session.user
+    user_msg.conversation = conversation.name if not conversation.is_new() else None
+    user_msg.role = "کاربر"
+    user_msg.content = prompt
+    user_msg.timestamp = now_datetime()
+    user_msg.model = "gemini-3.5"
+
     task_count = len(life_data.get("tasks") or [])
     habit_count = len(life_data.get("habits") or [])
     goal_count = len(life_data.get("goals") or [])
@@ -2178,11 +3398,89 @@ def ai_coach_chat(prompt, history=None, life_data=None, conversation_id=None):
     conversation.context_summary = f"tasks={task_count}, habits={habit_count}, goals={goal_count}, tx={transaction_count}, history={len(history)}"
     if conversation.is_new():
         conversation.insert(ignore_permissions=True)
+        # Update user message with the conversation ID now that it's saved
+        user_msg.conversation = conversation.name
     else:
         conversation.save(ignore_permissions=True)
 
+    # Save user message
+    user_msg.conversation = conversation.name
+    user_msg.insert(ignore_permissions=True)
+
+    # Save AI response message
+    ai_msg = frappe.new_doc("Hambaft AI Message")
+    ai_msg.user = frappe.session.user
+    ai_msg.conversation = conversation.name
+    ai_msg.role = "دستیار"
+    ai_msg.content = response_text
+    ai_msg.timestamp = now_datetime()
+    ai_msg.model = "gemini-3.5"
+    ai_msg.insert(ignore_permissions=True)
+
     frappe.db.commit()
     return _api_response({"text": response_text, "conversation_id": conversation.name})
+
+
+@frappe.whitelist()
+def get_ai_conversations(limit=20):
+    """Get recent AI conversations for the current user."""
+    _check_auth()
+    conversations = frappe.get_all(
+        "Hambaft AI Conversation",
+        filters={"user": frappe.session.user},
+        fields=["name", "title", "ai_type", "status", "started_at", "last_message_at"],
+        order_by="last_message_at desc",
+        limit_page_length=limit,
+    )
+    return _api_response({"conversations": conversations})
+
+
+@frappe.whitelist()
+def get_ai_conversation_messages(conversation_id, limit=100):
+    """Get all messages for a specific conversation."""
+    _check_auth()
+    # Verify ownership
+    conv = frappe.get_doc("Hambaft AI Conversation", conversation_id)
+    if conv.user != frappe.session.user:
+        frappe.throw("عدم دسترسی", frappe.PermissionError)
+
+    messages = frappe.get_all(
+        "Hambaft AI Message",
+        filters={"conversation": conversation_id},
+        fields=["name", "role", "content", "timestamp", "model"],
+        order_by="timestamp asc",
+        limit_page_length=limit,
+    )
+
+    # Map role names to frontend-friendly values
+    role_map = {"کاربر": "user", "دستیار": "model", "سیستم": "system"}
+    for m in messages:
+        m["role"] = role_map.get(m["role"], "system")
+        # Convert datetime to time string for display
+        if m.get("timestamp"):
+            try:
+                dt = getdate(m["timestamp"])
+                m["timestamp"] = m["timestamp"].strftime("%H:%M") if hasattr(m["timestamp"], "strftime") else str(m["timestamp"])
+            except Exception:
+                pass
+
+    return _api_response({"messages": messages, "conversation_id": conversation_id})
+
+
+@frappe.whitelist()
+def delete_ai_conversation(conversation_id):
+    """Delete a conversation and all its messages."""
+    _check_auth()
+    conv = frappe.get_doc("Hambaft AI Conversation", conversation_id)
+    if conv.user != frappe.session.user:
+        frappe.throw("عدم دسترسی", frappe.PermissionError)
+
+    # Delete all messages first
+    frappe.db.delete("Hambaft AI Message", {"conversation": conversation_id})
+    # Delete conversation
+    frappe.delete_doc("Hambaft AI Conversation", conversation_id, ignore_permissions=True)
+    frappe.db.commit()
+    return _api_response({"ok": True})
 
 
 # ─── Scheduled Tasks ────────────────────────────────────────────
@@ -2201,7 +3499,7 @@ def habit_streak_recalc():
     for h in habits:
         try:
             logs = frappe.get_all("Habit Log",
-                                  filters={"habit": h.name, "status": "done"},
+                                  filters={"habit": h.name, "status": "انجام‌شده"},
                                   fields=["date"], order_by="date asc")
             if not logs:
                 continue
@@ -2444,3 +3742,6363 @@ def jalali_convert(date_str=None):
         "month_name": get_jalali_month_name(date_str),
         "jalali_year": get_jalali_year(date_str),
     }
+
+
+# ─── Notion-like Note Pages CRUD ─────────────────────────────────
+
+@frappe.whitelist()
+def get_note_pages(limit=100, offset=0):
+    _check_auth()
+    try:
+        rows = frappe.get_all(
+            "Hambaft Note Page",
+            filters=_owner_filter(),
+            fields="*",
+            limit_page_length=cint(limit),
+            start=cint(offset),
+            order_by="modified desc",
+        )
+    except frappe.DoesNotExistError:
+        return _api_response({"pages": []})
+    except Exception as e:
+        # Table may not exist yet (migrate not run) — return empty gracefully
+        frappe.logger().warning(f"get_note_pages failed: {e}")
+        return _api_response({"pages": []})
+    for row in rows:
+        row["blocks"] = _loads_json(row.get("blocks_json"), [])
+    return _api_response({"pages": rows})
+
+
+@frappe.whitelist()
+def get_note_page(name):
+    _check_auth()
+    doc = frappe.get_doc("Hambaft Note Page", name)
+    result = doc.as_dict()
+    result["blocks"] = _loads_json(doc.blocks_json, [])
+    return _api_response({"page": result})
+
+
+@frappe.whitelist()
+def create_note_page(data=None):
+    _check_auth()
+    if data is None:
+        data = {}
+    if isinstance(data, str):
+        try:
+            data = json.loads(data)
+        except (json.JSONDecodeError, ValueError):
+            data = {}
+    data = data or {}
+    doc = frappe.new_doc("Hambaft Note Page")
+    doc.user = frappe.session.user
+    doc.title = data.get("title") or "بدون عنوان"
+    doc.icon = data.get("icon")
+    doc.cover = data.get("cover")
+    parent_id = data.get("parentId")
+    if parent_id and not frappe.db.exists("Hambaft Note Page", parent_id):
+        frappe.logger().warning(f"create_note_page: parent {parent_id} not found; creating at root")
+        parent_id = None
+    doc.parent_page = parent_id
+    doc.is_favorite = cint(data.get("isFavorite") or 0)
+    doc.is_archived = cint(data.get("isArchived") or 0)
+    doc.is_trashed = cint(data.get("isTrashed") or 0)
+    doc.blocks_json = json.dumps(data.get("blocks") or [], ensure_ascii=False)
+    doc.insert(ignore_permissions=True)
+    frappe.db.commit()
+    result = doc.as_dict()
+    result["blocks"] = _loads_json(doc.blocks_json, [])
+    return _api_response({"page": result})
+
+
+@frappe.whitelist()
+def update_note_page(name, data=None):
+    _check_auth()
+    _require_owner("Hambaft Note Page", name)
+    if data is None:
+        data = {}
+    if isinstance(data, str):
+        try:
+            data = json.loads(data)
+        except (json.JSONDecodeError, ValueError):
+            data = {}
+    doc = frappe.get_doc("Hambaft Note Page", name)
+    if "title" in data:
+        doc.title = data["title"]
+    if "icon" in data:
+        doc.icon = data["icon"]
+    if "cover" in data:
+        doc.cover = data["cover"]
+    if "parentId" in data:
+        pid = data["parentId"] or None
+        if pid and not frappe.db.exists("Hambaft Note Page", pid):
+            frappe.logger().warning(f"update_note_page: parent {pid} not found; clearing")
+            pid = None
+        doc.parent_page = pid
+    if "isFavorite" in data:
+        doc.is_favorite = cint(data["isFavorite"])
+    if "isArchived" in data:
+        doc.is_archived = cint(data["isArchived"])
+    if "isTrashed" in data:
+        doc.is_trashed = cint(data["isTrashed"])
+    if "blocks" in data:
+        doc.blocks_json = json.dumps(data["blocks"] or [], ensure_ascii=False)
+    doc.save(ignore_permissions=True)
+    frappe.db.commit()
+    result = doc.as_dict()
+    result["blocks"] = _loads_json(doc.blocks_json, [])
+    return _api_response({"page": result})
+
+
+@frappe.whitelist()
+def delete_note_page(name):
+    _check_auth()
+    _require_owner("Hambaft Note Page", name)
+    frappe.delete_doc("Hambaft Note Page", name, ignore_permissions=True)
+    frappe.db.commit()
+    return _api_response({"ok": True})
+
+
+# ─── Planner Task Sessions ──────────────────────────────────────
+
+@frappe.whitelist()
+def start_task_session(task):
+    _check_auth()
+    # Stop any existing active session for this user
+    active = frappe.get_all(
+        "Hambaft Task Session",
+        filters={"user": frappe.session.user, "status": "active"},
+        fields=["name"],
+        limit_page_length=1,
+    )
+    for row in active:
+        s = frappe.get_doc("Hambaft Task Session", row.name)
+        s.status = "paused"
+        s.stopped_at = now_datetime()
+        if s.started_at:
+            delta = datetime.strptime(str(s.stopped_at), "%Y-%m-%d %H:%M:%S.%f") - datetime.strptime(str(s.started_at), "%Y-%m-%d %H:%M:%S.%f")
+            s.duration_minutes = int(delta.total_seconds() / 60)
+        s.save(ignore_permissions=True)
+    # Create new session
+    doc = frappe.new_doc("Hambaft Task Session")
+    doc.task = task
+    doc.user = frappe.session.user
+    doc.started_at = now_datetime()
+    doc.status = "active"
+    doc.duration_minutes = 0
+    doc.insert(ignore_permissions=True)
+    frappe.db.commit()
+    return _api_response({"session": doc.as_dict()})
+
+
+@frappe.whitelist()
+def stop_task_session(session_name):
+    _check_auth()
+    doc = frappe.get_doc("Hambaft Task Session", session_name)
+    _require_owner("Hambaft Task Session", session_name)
+    doc.status = "paused"
+    doc.stopped_at = now_datetime()
+    if doc.started_at:
+        delta = datetime.strptime(str(doc.stopped_at), "%Y-%m-%d %H:%M:%S.%f") - datetime.strptime(str(doc.started_at), "%Y-%m-%d %H:%M:%S.%f")
+        doc.duration_minutes = int(delta.total_seconds() / 60)
+    doc.save(ignore_permissions=True)
+    # Update task actual_minutes
+    _update_task_actual_minutes(doc.task)
+    frappe.db.commit()
+    return _api_response({"session": doc.as_dict()})
+
+
+@frappe.whitelist()
+def resume_task_session(session_name):
+    _check_auth()
+    doc = frappe.get_doc("Hambaft Task Session", session_name)
+    _require_owner("Hambaft Task Session", session_name)
+    # Pause any other active session
+    active = frappe.get_all(
+        "Hambaft Task Session",
+        filters={"user": frappe.session.user, "status": "active", "name": ["!=", session_name]},
+        fields=["name"],
+    )
+    for row in active:
+        s = frappe.get_doc("Hambaft Task Session", row.name)
+        s.status = "paused"
+        s.stopped_at = now_datetime()
+        if s.started_at:
+            delta = datetime.strptime(str(s.stopped_at), "%Y-%m-%d %H:%M:%S.%f") - datetime.strptime(str(s.started_at), "%Y-%m-%d %H:%M:%S.%f")
+            s.duration_minutes = int(delta.total_seconds() / 60)
+        s.save(ignore_permissions=True)
+    doc.status = "active"
+    doc.started_at = now_datetime()
+    doc.stopped_at = None
+    doc.save(ignore_permissions=True)
+    frappe.db.commit()
+    return _api_response({"session": doc.as_dict()})
+
+
+@frappe.whitelist()
+def finish_task_session(session_name):
+    _check_auth()
+    doc = frappe.get_doc("Hambaft Task Session", session_name)
+    _require_owner("Hambaft Task Session", session_name)
+    doc.status = "completed"
+    doc.stopped_at = now_datetime()
+    if doc.started_at:
+        delta = datetime.strptime(str(doc.stopped_at), "%Y-%m-%d %H:%M:%S.%f") - datetime.strptime(str(doc.started_at), "%Y-%m-%d %H:%M:%S.%f")
+        doc.duration_minutes = int(delta.total_seconds() / 60)
+    doc.save(ignore_permissions=True)
+    _update_task_actual_minutes(doc.task)
+    frappe.db.commit()
+    return _api_response({"session": doc.as_dict()})
+
+
+def _update_task_actual_minutes(task_name):
+    total = frappe.db.sql(
+        "SELECT SUM(duration_minutes) FROM `tabHambaft Task Session` WHERE task=%s AND status IN ('paused', 'completed')",
+        task_name
+    )[0][0] or 0
+    frappe.db.set_value("Task", task_name, "actual_minutes", cint(total))
+
+
+@frappe.whitelist()
+def get_task_sessions(task, limit=50):
+    _check_auth()
+    sessions = frappe.get_all(
+        "Hambaft Task Session",
+        filters={"task": task, "user": frappe.session.user},
+        fields="*",
+        limit_page_length=cint(limit),
+        order_by="started_at desc",
+    )
+    return _api_response({"sessions": sessions})
+
+
+@frappe.whitelist()
+def get_active_session():
+    _check_auth()
+    active = frappe.get_all(
+        "Hambaft Task Session",
+        filters={"user": frappe.session.user, "status": "active"},
+        fields="*",
+        limit_page_length=1,
+        order_by="started_at desc",
+    )
+    return _api_response({"session": active[0] if active else None})
+
+
+# ─── Task Hierarchy ─────────────────────────────────────────────
+
+@frappe.whitelist()
+def get_task_children(parent_task):
+    _check_auth()
+    children = frappe.get_all(
+        "Task",
+        filters={"parent_task": parent_task, "user": frappe.session.user},
+        fields="*",
+        order_by="creation asc",
+    )
+    return _api_response({"tasks": children})
+
+
+@frappe.whitelist()
+def get_task_hierarchy(task_name):
+    _check_auth()
+    task = frappe.get_doc("Task", task_name).as_dict()
+    task["children"] = frappe.get_all(
+        "Task",
+        filters={"parent_task": task_name, "user": frappe.session.user},
+        fields="*",
+        order_by="creation asc",
+    )
+    task["blocked_by"] = _loads_json(task.get("blocked_by_json"), [])
+    return _api_response({"task": task})
+
+
+# ─── Task Dependencies ──────────────────────────────────────────
+
+@frappe.whitelist()
+def add_task_dependency(task_name, depends_on_task):
+    _check_auth()
+    doc = frappe.get_doc("Task", task_name)
+    _require_owner("Task", task_name)
+    blocked = _loads_json(doc.blocked_by_json, [])
+    if depends_on_task not in blocked:
+        blocked.append(depends_on_task)
+        doc.blocked_by_json = json.dumps(blocked, ensure_ascii=False)
+        doc.save(ignore_permissions=True)
+        frappe.db.commit()
+    return _api_response({"blocked_by": blocked})
+
+
+@frappe.whitelist()
+def remove_task_dependency(task_name, depends_on_task):
+    _check_auth()
+    doc = frappe.get_doc("Task", task_name)
+    _require_owner("Task", task_name)
+    blocked = _loads_json(doc.blocked_by_json, [])
+    if depends_on_task in blocked:
+        blocked.remove(depends_on_task)
+        doc.blocked_by_json = json.dumps(blocked, ensure_ascii=False)
+        doc.save(ignore_permissions=True)
+        frappe.db.commit()
+    return _api_response({"blocked_by": blocked})
+
+
+@frappe.whitelist()
+def is_task_blocked(task_name):
+    _check_auth()
+    doc = frappe.get_doc("Task", task_name)
+    blocked = _loads_json(doc.blocked_by_json, [])
+    if not blocked:
+        return _api_response({"blocked": False, "reason": None})
+    # Check if any dependency is not done (support both English and Persian statuses)
+    done_statuses = {"done", "completed", "انجام‌شده", "انجام شده"}
+    for dep_id in blocked:
+        dep = frappe.db.get_value("Task", dep_id, "status", as_dict=True)
+        if dep and dep.status not in done_statuses:
+            return _api_response({"blocked": True, "reason": f"تسک پیش‌نیاز {dep_id} هنوز انجام نشده"})
+    return _api_response({"blocked": False, "reason": None})
+
+
+@frappe.whitelist()
+def get_task_impact_detail(task_name):
+    """Return impact context for a task: linked project, goal, contribution info."""
+    _check_auth()
+    task = frappe.get_doc("Task", task_name)
+    _require_owner("Task", task_name)
+
+    result = {
+        "task": task.name,
+        "importance": task.importance or "عادی",
+        "project": None,
+        "goal": None,
+    }
+
+    # If task has a project, load project context
+    if task.project:
+        proj = frappe.db.get_value(
+            "Hambaft Project", task.project,
+            ["name", "title", "status", "progress", "goal"],
+            as_dict=True,
+        )
+        if proj:
+            result["project"] = {
+                "name": proj.name,
+                "title": proj.title,
+                "status": proj.status,
+                "progress": proj.progress or 0,
+            }
+            # If project has a goal, load goal context
+            if proj.goal:
+                goal = frappe.db.get_value(
+                    "Goal", proj.goal,
+                    ["name", "title", "health_state", "progress_percent", "progress_mode"],
+                    as_dict=True,
+                )
+                if goal:
+                    # Find the contribution_type of this project to its goal
+                    contrib_type = "اجباری"
+                    try:
+                        goal_doc = frappe.get_doc("Goal", proj.goal)
+                        for link in (goal_doc.get("linked_projects") or []):
+                            if link.project == proj.name:
+                                contrib_type = link.contribution_type or "اجباری"
+                                break
+                    except Exception:
+                        pass
+                    result["goal"] = {
+                        "name": goal.name,
+                        "title": goal.title,
+                        "health_state": goal.health_state or "در_مسیر",
+                        "progress_percent": goal.progress_percent or 0,
+                        "progress_mode": goal.progress_mode or "",
+                        "project_contribution_type": contrib_type,
+                    }
+
+    # Also check direct goal link on the task
+    if task.goal and not result.get("goal"):
+        goal = frappe.db.get_value(
+            "Goal", task.goal,
+            ["name", "title", "health_state", "progress_percent", "progress_mode"],
+            as_dict=True,
+        )
+        if goal:
+            result["goal"] = {
+                "name": goal.name,
+                "title": goal.title,
+                "health_state": goal.health_state or "در_مسیر",
+                "progress_percent": goal.progress_percent or 0,
+                "progress_mode": goal.progress_mode or "",
+            }
+
+    # Blocked-by details
+    blocked_by = _loads_json(task.blocked_by_json, [])
+    if blocked_by:
+        blocked_details = []
+        done_statuses = {"done", "completed", "انجام‌شده", "انجام شده"}
+        for dep_id in blocked_by:
+            dep = frappe.db.get_value("Task", dep_id, ["name", "title", "status"], as_dict=True)
+            if dep:
+                blocked_details.append({
+                    "name": dep.name,
+                    "title": dep.title or dep.name,
+                    "status": dep.status,
+                    "is_done": dep.status in done_statuses,
+                })
+        result["blocked_by_details"] = blocked_details
+
+    return _api_response(result)
+
+
+@frappe.whitelist()
+def update_task_importance(task_name, importance):
+    """Quick update of task importance field."""
+    _check_auth()
+    _require_owner("Task", task_name)
+    valid = {"عادی", "کلیدی", "نقطه‌عطف"}
+    if importance not in valid:
+        frappe.throw("اهمیت نامعتبر. مقادیر مجاز: عادی، کلیدی، نقطه‌عطف", frappe.ValidationError)
+    frappe.db.set_value("Task", task_name, "importance", importance, update_modified=True)
+    frappe.db.commit()
+    return _api_response({"task": frappe.get_doc("Task", task_name).as_dict()})
+
+
+@frappe.whitelist()
+def resolve_blocked_tasks():
+    """Return tasks that are blocked but whose blockers are all done — ready to unblock."""
+    _check_auth()
+    done_statuses = {"done", "completed", "انجام‌شده", "انجام شده"}
+    # Find all tasks with blocked_by_json that are not done themselves
+    blocked_tasks = frappe.get_all(
+        "Task",
+        filters={
+            "user": frappe.session.user,
+            "status": ["not in", list(done_statuses)],
+            "blocked_by_json": ["is", "set"],
+        },
+        fields=["name", "title", "status", "blocked_by_json", "importance"],
+        limit_page_length=200,
+    )
+    resolvable = []
+    for t in blocked_tasks:
+        deps = _loads_json(t.blocked_by_json, [])
+        if not deps:
+            continue
+        all_done = True
+        dep_details = []
+        for dep_id in deps:
+            dep_status = frappe.db.get_value("Task", dep_id, ["name", "title", "status"], as_dict=True)
+            if dep_status and dep_status.status not in done_statuses:
+                all_done = False
+                dep_details.append({
+                    "name": dep_status.name,
+                    "title": dep_status.title or dep_status.name,
+                    "status": dep_status.status,
+                    "is_done": False,
+                })
+            elif dep_status:
+                dep_details.append({
+                    "name": dep_status.name,
+                    "title": dep_status.title or dep_status.name,
+                    "status": dep_status.status,
+                    "is_done": True,
+                })
+        if all_done:
+            resolvable.append({
+                "task": t.name,
+                "title": t.title or t.name,
+                "status": t.status,
+                "importance": t.importance or "عادی",
+                "blockers": dep_details,
+            })
+    return _api_response({"resolvable_tasks": resolvable})
+
+
+# ─── Planner Views ──────────────────────────────────────────────
+
+@frappe.whitelist()
+def get_planner_inbox(limit=100):
+    _check_auth()
+    tasks = frappe.get_all(
+        "Task",
+        filters={"user": frappe.session.user, "status": "inbox"},
+        fields="*",
+        limit_page_length=cint(limit),
+    )
+    enriched = [_enrich_task_with_impact(dict(t)) for t in tasks]
+    enriched.sort(key=_impact_sort_key)
+    return _api_response({"tasks": enriched})
+
+
+@frappe.whitelist()
+def get_planner_today(limit=100):
+    _check_auth()
+    today_str = today()
+    # Tasks explicitly marked as today
+    tasks = frappe.get_all(
+        "Task",
+        filters={"user": frappe.session.user, "status": "today"},
+        fields="*",
+        limit_page_length=cint(limit),
+    )
+    # Also include scheduled for today
+    scheduled = frappe.get_all(
+        "Task",
+        filters={"user": frappe.session.user, "scheduled_date": today_str, "status": ["not in", ["done", "dropped", "انجام‌شده"]]},
+        fields="*",
+        limit_page_length=cint(limit),
+    )
+    # Merge without duplicates
+    seen = {t.name for t in tasks}
+    for s in scheduled:
+        if s.name not in seen:
+            tasks.append(s)
+    enriched = [_enrich_task_with_impact(dict(t)) for t in tasks]
+    enriched.sort(key=_impact_sort_key)
+    return _api_response({"tasks": enriched})
+
+
+@frappe.whitelist()
+def get_planner_next(limit=100):
+    _check_auth()
+    tasks = frappe.get_all(
+        "Task",
+        filters={"user": frappe.session.user, "status": "next"},
+        fields="*",
+        limit_page_length=cint(limit),
+    )
+    enriched = [_enrich_task_with_impact(dict(t)) for t in tasks]
+    enriched.sort(key=_impact_sort_key)
+    return _api_response({"tasks": enriched})
+
+
+@frappe.whitelist()
+def get_planner_scheduled(from_date=None, to_date=None, limit=100):
+    _check_auth()
+    filters = {"user": frappe.session.user, "status": "not_started", "scheduled_date": ["is", "set"]}
+    if from_date:
+        filters["scheduled_date"] = [">=", from_date]
+    if to_date:
+        if isinstance(filters["scheduled_date"], list):
+            filters["scheduled_date"] = ["between", [from_date, to_date]]
+        else:
+            filters["scheduled_date"] = ["<=", to_date]
+    tasks = frappe.get_all(
+        "Task",
+        filters=filters,
+        fields="*",
+        limit_page_length=cint(limit),
+    )
+    enriched = [_enrich_task_with_impact(dict(t)) for t in tasks]
+    enriched.sort(key=lambda t: (t.get("scheduled_date") or "9999-12-31", t.get("scheduled_time") or "", _impact_sort_key(t)))
+    return _api_response({"tasks": enriched})
+
+
+@frappe.whitelist()
+def get_planner_someday(limit=100):
+    _check_auth()
+    tasks = frappe.get_all(
+        "Task",
+        filters={"user": frappe.session.user, "status": "someday"},
+        fields="*",
+        limit_page_length=cint(limit),
+    )
+    enriched = [_enrich_task_with_impact(dict(t)) for t in tasks]
+    enriched.sort(key=_impact_sort_key)
+    return _api_response({"tasks": enriched})
+
+
+@frappe.whitelist()
+def move_task_to_bucket(task_name, bucket):
+    _check_auth()
+    _require_owner("Task", task_name)
+    # Support both English and Persian status names
+    _PERSIAN_TO_ENGLISH = {
+        "صندوق ورودی": "inbox", "شروع نشده": "not_started", "بعدی": "next",
+        "امروز": "today", "در حال انجام": "in_progress", "انجام‌شده": "done",
+        "انجام شده": "done", "متوقف": "on_hold", "روزی": "someday",
+        "کنار گذاشته": "dropped", "done": "done", "inbox": "inbox",
+        "not_started": "not_started", "next": "next", "today": "today",
+        "in_progress": "in_progress", "on_hold": "on_hold", "someday": "someday",
+        "dropped": "dropped",
+    }
+    normalized = _PERSIAN_TO_ENGLISH.get(bucket)
+    if not normalized:
+        frappe.throw("Invalid bucket", frappe.ValidationError)
+    updates = {"status": normalized}
+    if normalized == "done":
+        updates["completed_on"] = now_datetime()
+    elif normalized == "today":
+        updates["scheduled_date"] = today()
+    frappe.db.set_value("Task", task_name, updates, update_modified=True)
+    frappe.db.commit()
+    return _api_response({"task": frappe.get_doc("Task", task_name).as_dict()})
+
+
+# ─── Task Status Transition ─────────────────────────────────────
+
+@frappe.whitelist()
+def transition_task_status(task_name, new_status):
+    _check_auth()
+    _require_owner("Task", task_name)
+    _PERSIAN_TO_ENGLISH = {
+        "صندوق ورودی": "inbox", "شروع نشده": "not_started", "بعدی": "next",
+        "امروز": "today", "در حال انجام": "in_progress", "انجام‌شده": "done",
+        "انجام شده": "done", "متوقف": "on_hold", "روزی": "someday",
+        "کنار گذاشته": "dropped",
+    }
+    normalized = _PERSIAN_TO_ENGLISH.get(new_status, new_status)
+    valid = {"inbox", "not_started", "next", "today", "in_progress", "done", "on_hold", "someday", "dropped"}
+    if normalized not in valid:
+        frappe.throw("Invalid status", frappe.ValidationError)
+    updates = {"status": normalized}
+    if normalized == "done":
+        updates["completed_on"] = now_datetime()
+    frappe.db.set_value("Task", task_name, updates, update_modified=True)
+    frappe.db.commit()
+    return _api_response({"task": frappe.get_doc("Task", task_name).as_dict()})
+
+
+# ─── Area CRUD ─────────────────────────────────────────────────
+
+@frappe.whitelist()
+def create_area(data):
+    _check_auth()
+    if isinstance(data, str):
+        data = json.loads(data)
+    data = data or {}
+    doc = frappe.new_doc("Hambaft Area")
+    doc.user = frappe.session.user
+    doc.title = data.get("title")
+    doc.description = data.get("description")
+    doc.color = data.get("color")
+    doc.icon = data.get("icon")
+    doc.status = data.get("status") or "فعال"
+    doc.sort_order = cint(data.get("sort_order") or 0)
+    doc.insert(ignore_permissions=True)
+    frappe.db.commit()
+    return _api_response({"area": doc.as_dict()})
+
+
+@frappe.whitelist()
+def update_area(name, data):
+    _check_auth()
+    _require_owner("Hambaft Area", name)
+    if isinstance(data, str):
+        data = json.loads(data)
+    doc = frappe.get_doc("Hambaft Area", name)
+    for fieldname in ("title", "description", "color", "icon", "status", "sort_order"):
+        if fieldname in data:
+            setattr(doc, fieldname, data.get(fieldname))
+    doc.save(ignore_permissions=True)
+    frappe.db.commit()
+    return _api_response({"area": doc.as_dict()})
+
+
+@frappe.whitelist()
+def delete_area(name):
+    _check_auth()
+    _require_owner("Hambaft Area", name)
+    frappe.delete_doc("Hambaft Area", name, ignore_permissions=True)
+    frappe.db.commit()
+    return _api_response({"ok": True})
+
+
+@frappe.whitelist()
+def get_area_summary(name):
+    """Get area with projects, tasks, tracked time aggregation."""
+    _check_auth()
+    _require_owner("Hambaft Area", name)
+    doc = frappe.get_doc("Hambaft Area", name)
+    return _api_response({"summary": doc.get_summary()})
+
+
+@frappe.whitelist()
+def get_areas_with_summaries(limit=50, offset=0):
+    """Get all areas with summary data (projects, tasks, tracked time)."""
+    _check_auth()
+    areas = frappe.get_all("Hambaft Area", filters=_owner_filter(), fields="*",
+                           limit_page_length=cint(limit), start=cint(offset),
+                           order_by="sort_order asc, title asc")
+    result = []
+    for area_row in areas:
+        doc = frappe.get_doc("Hambaft Area", area_row.name)
+        summary = doc.get_summary()
+        result.append(summary)
+    return _api_response({"areas": result})
+
+
+# ─── Project Dependencies ──────────────────────────────────────
+
+@frappe.whitelist()
+def add_project_dependency(project_name, depends_on_project):
+    _check_auth()
+    _require_owner("Hambaft Project", project_name)
+    doc = frappe.get_doc("Hambaft Project", project_name)
+    blocked = _loads_json(doc.blocked_by_json, [])
+    if depends_on_project not in blocked:
+        blocked.append(depends_on_project)
+        doc.blocked_by_json = json.dumps(blocked, ensure_ascii=False)
+        doc.save(ignore_permissions=True)
+        frappe.db.commit()
+    return _api_response({"blocked_by": blocked})
+
+
+@frappe.whitelist()
+def remove_project_dependency(project_name, depends_on_project):
+    _check_auth()
+    _require_owner("Hambaft Project", project_name)
+    doc = frappe.get_doc("Hambaft Project", project_name)
+    blocked = _loads_json(doc.blocked_by_json, [])
+    if depends_on_project in blocked:
+        blocked.remove(depends_on_project)
+        doc.blocked_by_json = json.dumps(blocked, ensure_ascii=False)
+        doc.save(ignore_permissions=True)
+        frappe.db.commit()
+    return _api_response({"blocked_by": blocked})
+
+
+@frappe.whitelist()
+def is_project_blocked(project_name):
+    _check_auth()
+    doc = frappe.get_doc("Hambaft Project", project_name)
+    blocked, reason = doc.is_blocked()
+    return _api_response({"blocked": blocked, "reason": reason})
+
+
+@frappe.whitelist()
+def get_project_subprojects(project_name):
+    _check_auth()
+    doc = frappe.get_doc("Hambaft Project", project_name)
+    return _api_response({"projects": doc.get_subprojects()})
+
+
+@frappe.whitelist()
+def get_project_tracked_minutes(project_name):
+    """Compute total tracked minutes for a project from its tasks' sessions."""
+    _check_auth()
+    task_names = frappe.get_all("Task", filters={"project": project_name}, fields=["name"])
+    if not task_names:
+        return _api_response({"tracked_minutes": 0})
+    names = [t.name for t in task_names]
+    total = frappe.db.sql(
+        """SELECT COALESCE(SUM(duration_minutes), 0)
+           FROM `tabHambaft Task Session`
+           WHERE task IN (%s) AND status IN ('paused', 'completed')"""
+        % ",".join(["%s"] * len(names)),
+        names,
+    )[0][0] or 0
+    return _api_response({"tracked_minutes": int(total)})
+
+
+# ─── Planner Calendar / Timeline Feeds ─────────────────────────
+
+@frappe.whitelist()
+def get_planner_daily_timeline(date=None):
+    """Get tasks, sessions, time blocks, and events for a single day timeline view."""
+    _check_auth()
+    if not date:
+        date = today()
+    # Tasks scheduled for this date
+    tasks = frappe.get_all(
+        "Task",
+        filters={
+            "user": frappe.session.user,
+            "scheduled_date": date,
+            "status": ["not in", ["done", "dropped"]],
+        },
+        fields="*",
+        order_by="scheduled_time asc",
+    )
+    # Tasks marked as today
+    today_tasks = frappe.get_all(
+        "Task",
+        filters={"user": frappe.session.user, "status": "today"},
+        fields="*",
+        order_by="scheduled_time asc",
+    )
+    # Merge
+    seen = {t.name for t in tasks}
+    for t in today_tasks:
+        if t.name not in seen:
+            tasks.append(t)
+    # Time blocks for this date
+    time_blocks = frappe.get_all(
+        "Hambaft Time Block",
+        filters={"user": frappe.session.user, "block_date": date},
+        fields="*",
+        order_by="start_time asc",
+    )
+    # Active sessions
+    active_session = frappe.get_all(
+        "Hambaft Task Session",
+        filters={"user": frappe.session.user, "status": "active"},
+        fields="*",
+        limit_page_length=1,
+    )
+    # Calendar events for this date
+    events = _fetch_events_for_day(date, limit=50)
+    return _api_response({
+        "date": date,
+        "tasks": tasks,
+        "time_blocks": time_blocks,
+        "active_session": active_session[0] if active_session else None,
+        "events": events,
+    })
+
+
+@frappe.whitelist()
+def get_planner_week(start_date=None):
+    """Get tasks for a full week, grouped by date."""
+    _check_auth()
+    if not start_date:
+        start_date = today()
+    base = getdate(start_date)
+    # Week: 7 days from start_date
+    dates = [(base + timedelta(days=i)).isoformat() for i in range(7)]
+    result = {}
+    for d in dates:
+        day_tasks = frappe.get_all(
+            "Task",
+            filters={
+                "user": frappe.session.user,
+                "scheduled_date": d,
+                "status": ["not in", ["dropped"]],
+            },
+            fields="*",
+            order_by="scheduled_time asc",
+        )
+        today_tasks = frappe.get_all(
+            "Task",
+            filters={"user": frappe.session.user, "status": "today"},
+            fields="*",
+        )
+        seen = {t.name for t in day_tasks}
+        for t in today_tasks:
+            if t.name not in seen:
+                day_tasks.append(t)
+        result[d] = day_tasks
+    return _api_response({"start_date": start_date, "days": result})
+
+
+@frappe.whitelist()
+def get_planner_month(year=None, month=None):
+    """Get tasks for a full month, grouped by date."""
+    _check_auth()
+    if not year or not month:
+        today_str = today()
+        year = int(today_str[:4])
+        month = int(today_str[5:7])
+    year = cint(year)
+    month = cint(month)
+    # Get first and last day of month
+    from_date = date(year, month, 1)
+    if month == 12:
+        to_date = date(year + 1, 1, 1) - timedelta(days=1)
+    else:
+        to_date = date(year, month + 1, 1) - timedelta(days=1)
+    tasks = frappe.get_all(
+        "Task",
+        filters={
+            "user": frappe.session.user,
+            "scheduled_date": ["between", [from_date.isoformat(), to_date.isoformat()]],
+            "status": ["not in", ["dropped"]],
+        },
+        fields="*",
+        order_by="scheduled_date asc, scheduled_time asc",
+    )
+    # Group by date
+    result = {}
+    for t in tasks:
+        d = str(t.scheduled_date) if t.scheduled_date else None
+        if d:
+            result.setdefault(d, []).append(t)
+    return _api_response({
+        "year": year, "month": month,
+        "from_date": from_date.isoformat(),
+        "to_date": to_date.isoformat(),
+        "days": result,
+    })
+
+
+# ─── Project Board (grouped by status) ─────────────────────────
+
+@frappe.whitelist()
+def get_project_board(project_name):
+    """Get tasks for a project, grouped by planner status."""
+    _check_auth()
+    _require_owner("Hambaft Project", project_name)
+    tasks = frappe.get_all(
+        "Task",
+        filters={"project": project_name, "user": frappe.session.user},
+        fields="*",
+        order_by="priority asc, scheduled_date asc",
+    )
+    # Group by status
+    status_groups = {}
+    status_order = ["inbox", "not_started", "next", "today", "in_progress", "on_hold", "someday", "done", "dropped"]
+    for status in status_order:
+        group = [t for t in tasks if t.status == status]
+        if group:
+            status_groups[status] = group
+    # Include tasks without a recognized status
+    for t in tasks:
+        if t.status not in status_order:
+            status_groups.setdefault(t.status or "inbox", []).append(t)
+    project = frappe.get_doc("Hambaft Project", project_name)
+    return _api_response({
+        "project": _project_to_frontend(project),
+        "status_groups": status_groups,
+        "total_tasks": len(tasks),
+        "completed_tasks": sum(1 for t in tasks if t.status == "done"),
+    })
+
+
+# ─── Projects by Area ──────────────────────────────────────────
+
+@frappe.whitelist()
+def get_projects_by_area(area_name):
+    """Get all projects for an area with task/time aggregation."""
+    _check_auth()
+    _require_owner("Hambaft Area", area_name)
+    projects = frappe.get_all(
+        "Hambaft Project",
+        filters={"area": area_name, "user": frappe.session.user},
+        fields="*",
+        order_by="title asc",
+    )
+    result = []
+    for p in projects:
+        task_count = frappe.db.count("Task", {"project": p.name, "user": frappe.session.user})
+        done_count = frappe.db.count("Task", {"project": p.name, "user": frappe.session.user, "status": "done"})
+        tracked = frappe.db.sql(
+            """SELECT COALESCE(SUM(s.duration_minutes), 0)
+               FROM `tabHambaft Task Session` s
+               JOIN `tabTask` t ON t.name = s.task
+               WHERE t.project=%s AND t.user=%s AND s.status IN ('paused', 'completed')""",
+            (p.name, frappe.session.user),
+        )[0][0] or 0
+        p_dict = p if isinstance(p, dict) else p.__dict__
+        p_dict["task_count"] = task_count
+        p_dict["done_task_count"] = done_count
+        p_dict["tracked_minutes"] = int(tracked)
+        result.append(p_dict)
+    return _api_response({"projects": result})
+
+
+# ─── Tracked Time Rollups ──────────────────────────────────────
+
+@frappe.whitelist()
+def get_task_tracked_minutes(task_name):
+    """Get total tracked minutes for a task from sessions (own + subtasks)."""
+    _check_auth()
+    # Verify task exists and belongs to user — use soft check
+    if not frappe.db.exists("Task", {"name": task_name, "user": frappe.session.user}):
+        # Fallback: if task has no user field set, allow anyway (legacy data)
+        if not frappe.db.exists("Task", task_name):
+            frappe.throw(_("Task {0} not found").format(task_name))
+    # Own tracked minutes
+    own = frappe.db.sql(
+        "SELECT COALESCE(SUM(duration_minutes), 0) FROM `tabHambaft Task Session` WHERE task=%s AND status IN ('paused', 'completed')",
+        task_name,
+    )[0][0] or 0
+    # Subtask tracked minutes
+    subtask_names = frappe.get_all("Task", filters={"parent_task": task_name, "user": frappe.session.user}, pluck="name")
+    subtask_total = 0
+    if subtask_names:
+        placeholders = ",".join(["%s"] * len(subtask_names))
+        subtask_total = frappe.db.sql(
+            f"SELECT COALESCE(SUM(duration_minutes), 0) FROM `tabHambaft Task Session` WHERE task IN ({placeholders}) AND status IN ('paused', 'completed')",
+            tuple(subtask_names),
+        )[0][0] or 0
+    return _api_response({
+        "tracked_minutes": int(own),
+        "subtask_tracked_minutes": int(subtask_total),
+        "total_tracked_minutes": int(own) + int(subtask_total),
+    })
+
+
+@frappe.whitelist()
+def get_area_tracked_minutes(area_name):
+    """Get total tracked minutes for an area (from direct area tasks)."""
+    _check_auth()
+    _require_owner("Hambaft Area", area_name)
+    doc = frappe.get_doc("Hambaft Area", area_name)
+    return _api_response({"tracked_minutes": doc.get_tracked_minutes()})
+
+
+# ─── Task Attachments ────────────────────────────────────────────
+
+@frappe.whitelist()
+def get_task_attachments(task_name):
+    """Get all files attached to a task."""
+    _check_auth()
+    # Soft owner check — support legacy tasks without user field
+    if not frappe.db.exists("Task", {"name": task_name, "user": frappe.session.user}):
+        if not frappe.db.exists("Task", task_name):
+            frappe.throw(_("Task {0} not found").format(task_name))
+    files = frappe.get_all(
+        "File",
+        filters={"attached_to_doctype": "Task", "attached_to_name": task_name},
+        fields=["name", "file_name", "file_type", "file_url", "file_size", "is_private", "creation"],
+        order_by="creation desc",
+    )
+    return _api_response({"attachments": files})
+
+
+@frappe.whitelist()
+def delete_task_attachment(file_name):
+    """Delete an attached file from a task."""
+    _check_auth()
+    doc = frappe.get_doc("File", file_name)
+    # Ensure the file is attached to a task owned by the user
+    if doc.attached_to_doctype != "Task":
+        frappe.throw(_("File is not attached to a task"), frappe.PermissionError)
+    if not frappe.db.exists("Task", {"name": doc.attached_to_name, "user": frappe.session.user}):
+        if not frappe.db.exists("Task", doc.attached_to_name):
+            frappe.throw(_("Task not found"))
+    # Also remove gallery pin order if exists
+    frappe.db.delete("Hambaft Gallery Pin Order", {"file_name": file_name, "user": frappe.session.user})
+    frappe.delete_doc("File", file_name)
+    frappe.db.commit()
+    return _api_response({"ok": True})
+
+
+# ─── Gallery Domain (Hambaft Gallery Board / Section / Pin) ────
+
+IMAGE_TYPES = ("image/jpeg", "image/png", "image/gif", "image/webp", "image/svg+xml", "image/bmp")
+
+# Track whether gallery tables have been confirmed to exist
+_gallery_tables_ok = None
+
+
+def _gallery_tables_exist():
+    """Check if gallery DocType tables exist in the database.
+    Returns True if all three tables exist, False otherwise.
+    Caches result for the request lifetime.
+    """
+    global _gallery_tables_ok
+    if _gallery_tables_ok is not None:
+        return _gallery_tables_ok
+    try:
+        tables = [t[0] for t in frappe.db.sql("SHOW TABLES LIKE 'tabHambaft Gallery%'")]
+        required = {"tabHambaft Gallery Board", "tabHambaft Gallery Section", "tabHambaft Gallery Pin"}
+        _gallery_tables_ok = required.issubset(set(tables))
+    except Exception:
+        _gallery_tables_ok = False
+    return _gallery_tables_ok
+
+
+def _get_or_create_board(goal_name, user):
+    """Get existing board for a goal, or create one. Returns board name."""
+    if not goal_name:
+        return None
+    existing = frappe.db.get_value("Hambaft Gallery Board", {"goal": goal_name, "user": user}, "name")
+    if existing:
+        return existing
+    goal_title = frappe.db.get_value("Goal", goal_name, "title") or goal_name
+    board = frappe.get_doc({
+        "doctype": "Hambaft Gallery Board",
+        "user": user,
+        "goal": goal_name,
+        "title": goal_title,
+        "is_auto_created": 1,
+        "sort_order": 0,
+    })
+    board.insert(ignore_permissions=True)
+    frappe.db.commit()
+    return board.name
+
+
+def _get_or_create_section(project_name, board_name, user):
+    """Get existing section for a project, or create one. Returns section name."""
+    if not project_name or not board_name:
+        return None
+    existing = frappe.db.get_value("Hambaft Gallery Section", {"project": project_name, "user": user}, "name")
+    if existing:
+        # Make sure it's in the right board (project may have moved goals)
+        frappe.db.set_value("Hambaft Gallery Section", existing, "board", board_name)
+        return existing
+    proj_title = frappe.db.get_value("Hambaft Project", project_name, "title") or project_name
+    # Get max sort order
+    max_sort = frappe.db.sql(
+        "SELECT COALESCE(MAX(sort_order),-1) FROM `tabHambaft Gallery Section` WHERE board=%s", board_name
+    )[0][0] or -1
+    section = frappe.get_doc({
+        "doctype": "Hambaft Gallery Section",
+        "user": user,
+        "board": board_name,
+        "project": project_name,
+        "title": proj_title,
+        "sort_order": max_sort + 1,
+        "is_auto_created": 1,
+    })
+    section.insert(ignore_permissions=True)
+    frappe.db.commit()
+    return section.name
+
+
+def _resolve_pin_scope(source_doctype, source_name, user):
+    """Given a source entity, resolve which board and section a pin should go to.
+    Returns (board_name, section_name, is_orphan)."""
+    board_goal = None
+    section_project = None
+    is_orphan = True
+
+    if source_doctype == "Task" and source_name:
+        task = frappe.db.get_value("Task", source_name, ["project", "goal"], as_dict=True)
+        if not task:
+            return (None, None, True)
+        project_goal = None
+        if task.project:
+            project_goal = frappe.db.get_value("Hambaft Project", task.project, "goal")
+        board_goal, section_project, is_orphan = plan_gallery_scope(
+            source_doctype,
+            source_name=source_name,
+            task_goal=task.goal,
+            task_project=task.project,
+            project_goal=project_goal,
+        )
+    elif source_doctype == "Hambaft Project" and source_name:
+        project_goal = frappe.db.get_value("Hambaft Project", source_name, "goal")
+        board_goal, section_project, is_orphan = plan_gallery_scope(
+            source_doctype,
+            source_name=source_name,
+            project_goal=project_goal,
+        )
+    elif source_doctype == "Goal" and source_name:
+        board_goal, section_project, is_orphan = plan_gallery_scope(
+            source_doctype,
+            source_name=source_name,
+        )
+
+    if is_orphan or not board_goal:
+        return (None, None, True)
+
+    board_name = _get_or_create_board(board_goal, user)
+    section_name = None
+    if section_project:
+        section_name = _get_or_create_section(section_project, board_name, user)
+    return (board_name, section_name, False)
+
+
+def _sync_pin_counts():
+    """Update cached pin counts on boards and sections."""
+    for board in frappe.get_all("Hambaft Gallery Board", fields=["name"]):
+        count = frappe.db.sql(
+            "SELECT COUNT(*) FROM `tabHambaft Gallery Pin` WHERE board=%s AND is_orphan=0",
+            board.name
+        )[0][0]
+        sec_count = frappe.db.sql(
+            "SELECT COUNT(*) FROM `tabHambaft Gallery Section` WHERE board=%s",
+            board.name
+        )[0][0]
+        frappe.db.set_value("Hambaft Gallery Board", board.name, {
+            "pin_count": count,
+            "section_count": sec_count,
+        })
+    for section in frappe.get_all("Hambaft Gallery Section", fields=["name"]):
+        count = frappe.db.sql(
+            "SELECT COUNT(*) FROM `tabHambaft Gallery Pin` WHERE section=%s",
+            section.name
+        )[0][0]
+        frappe.db.set_value("Hambaft Gallery Section", section.name, "pin_count", count)
+
+
+def on_file_after_insert(doc, method=None):
+    """Auto-create gallery pin when an image File is attached to Task/Hambaft Project/Goal.
+    Hooked via doc_events in hooks.py.
+    Silently skips if gallery tables don't exist yet.
+    """
+    if not doc or not is_gallery_image_file(
+        getattr(doc, "file_type", None),
+        getattr(doc, "file_name", None),
+        getattr(doc, "file_url", None),
+    ):
+        return
+    if not doc.attached_to_doctype or not doc.attached_to_name:
+        return
+    if doc.attached_to_doctype not in ("Task", "Hambaft Project", "Goal"):
+        return
+    # Skip if gallery tables don't exist yet (pre-migrate)
+    if not _gallery_tables_exist():
+        return
+
+    # Determine user from the attached entity
+    user = None
+    try:
+        if doc.attached_to_doctype == "Task":
+            user = frappe.db.get_value("Task", doc.attached_to_name, "user")
+        elif doc.attached_to_doctype == "Hambaft Project":
+            user = frappe.db.get_value("Hambaft Project", doc.attached_to_name, "user")
+        elif doc.attached_to_doctype == "Goal":
+            user = frappe.db.get_value("Goal", doc.attached_to_name, "user")
+    except Exception:
+        return
+
+    if not user:
+        return
+
+    # Skip if pin already exists for this file
+    if frappe.db.exists("Hambaft Gallery Pin", {"file": doc.name, "user": user}):
+        return
+
+    try:
+        previous_user = frappe.session.user
+        if previous_user != user:
+            frappe.set_user(user)
+        create_gallery_pin(doc.name, source_doctype=doc.attached_to_doctype, source_name=doc.attached_to_name)
+    except Exception as e:
+        frappe.log_error(
+            f"Gallery auto-pin failed for File {doc.name} attached to {doc.attached_to_doctype}/{doc.attached_to_name}: {e}",
+            "Gallery Auto-Pin"
+        )
+    finally:
+        if frappe.session.user != previous_user:
+            frappe.set_user(previous_user)
+
+
+def on_file_on_trash(doc, method=None):
+    """Keep gallery pins in sync when a File is deleted outside gallery/task APIs."""
+    if not doc or not getattr(doc, "name", None):
+        return
+    if not _gallery_tables_exist():
+        return
+    try:
+        pin_names = frappe.get_all("Hambaft Gallery Pin", filters={"file": doc.name}, pluck="name")
+        for pin_name in pin_names:
+            frappe.delete_doc("Hambaft Gallery Pin", pin_name, force=True)
+        if pin_names:
+            _sync_pin_counts()
+            frappe.db.commit()
+    except Exception as e:
+        frappe.log_error(f"Gallery file trash cleanup failed for File {doc.name}: {e}", "Gallery File Cleanup")
+
+
+@frappe.whitelist()
+def get_gallery_boards():
+    """Get all gallery boards with sections and pins for the current user.
+    Returns empty result if gallery tables don't exist yet (pre-migrate).
+    """
+    _check_auth()
+
+    # Graceful: if tables don't exist yet, return empty instead of 417
+    if not _gallery_tables_exist():
+        return _api_response({"boards": [], "orphan_pins": [], "gallery_not_ready": True})
+
+    user = frappe.session.user
+
+    boards = frappe.get_all(
+        "Hambaft Gallery Board",
+        filters={"user": user},
+        fields=["name", "title", "goal", "cover_file", "sort_order", "pin_count", "section_count"],
+        order_by="sort_order asc, title asc",
+    )
+
+    result_boards = []
+    for board in boards:
+        # Sections
+        sections = frappe.get_all(
+            "Hambaft Gallery Section",
+            filters={"board": board.name},
+            fields=["name", "title", "project", "sort_order", "pin_count"],
+            order_by="sort_order asc, title asc",
+        )
+        section_list = []
+        for sec in sections:
+            pins = frappe.get_all(
+                "Hambaft Gallery Pin",
+                filters={"section": sec.name},
+                fields=["name", "file", "image_url", "image_name", "image_width", "image_height",
+                         "source_type", "source_doctype", "source_name", "source_title",
+                         "caption", "sort_order"],
+                order_by="sort_order asc, creation asc",
+            )
+            sec["pins"] = pins
+            section_list.append(sec)
+
+        # Board-level pins (no section)
+        board_pins = frappe.get_all(
+            "Hambaft Gallery Pin",
+            filters={"board": board.name, "section": ["is", "not set"], "is_orphan": 0},
+            fields=["name", "file", "image_url", "image_name", "image_width", "image_height",
+                     "source_type", "source_doctype", "source_name", "source_title",
+                     "caption", "sort_order"],
+            order_by="sort_order asc, creation asc",
+        )
+
+        # Cover image
+        cover_url = None
+        if board.cover_file:
+            cover_url = frappe.db.get_value("File", board.cover_file, "file_url")
+        if not cover_url and (board_pins or any(s["pins"] for s in section_list)):
+            first_pin = board_pins[0] if board_pins else next((s["pins"][0] for s in section_list if s["pins"]), None)
+            if first_pin:
+                cover_url = first_pin.get("image_url")
+
+        result_boards.append({
+            "board_id": board.name,
+            "board_title": board.title,
+            "goal_id": board.goal,
+            "cover_url": cover_url,
+            "pin_count": board.pin_count or 0,
+            "sections": section_list,
+            "board_pins": board_pins,
+        })
+
+    # Orphan pins
+    orphan_pins = frappe.get_all(
+        "Hambaft Gallery Pin",
+        filters={"user": user, "is_orphan": 1},
+        fields=["name", "file", "image_url", "image_name", "image_width", "image_height",
+                 "source_type", "source_doctype", "source_name", "source_title",
+                 "caption", "sort_order"],
+        order_by="sort_order asc, creation asc",
+    )
+
+    return _api_response({"boards": result_boards, "orphan_pins": orphan_pins})
+
+
+@frappe.whitelist()
+def get_gallery_board_detail(board_name):
+    """Get a single board with full details."""
+    _check_auth()
+    if not _gallery_tables_exist():
+        return _api_response({"board": None, "gallery_not_ready": True})
+    user = frappe.session.user
+    board = frappe.get_doc("Hambaft Gallery Board", board_name)
+    if board.user != user:
+        frappe.throw(_("Permission denied"), frappe.PermissionError)
+    # Reuse get_gallery_boards logic for consistency
+    data = get_gallery_boards()
+    for b in (data.get("data", {}).get("boards") or []):
+        if b["board_id"] == board_name:
+            return _api_response({"board": b})
+    return _api_response({"board": None})
+
+
+@frappe.whitelist()
+def create_gallery_pin(file_name, source_doctype=None, source_name=None, board=None, section=None, caption=None):
+    """Create a gallery pin for an existing File record."""
+    _check_auth()
+    if not _gallery_tables_exist():
+        return _api_response({"pin_name": None, "created": False, "gallery_not_ready": True})
+    user = frappe.session.user
+
+    # Verify file exists and belongs to user
+    file_doc = frappe.get_doc("File", file_name)
+    if not file_doc:
+        frappe.throw(_("File not found"))
+
+    # Prevent duplicate pins for same file+user
+    existing = frappe.db.get_value("Hambaft Gallery Pin", {"file": file_name, "user": user}, "name")
+    if existing:
+        return _api_response({"pin_name": existing, "created": False})
+
+    # Get image metadata
+    image_url = file_doc.file_url or ""
+    image_name = file_doc.file_name or ""
+
+    # Resolve scope from source entity
+    is_orphan = False
+    if source_doctype and source_name:
+        board_name, section_name, is_orphan = _resolve_pin_scope(source_doctype, source_name, user)
+        source_title = frappe.db.get_value(source_doctype, source_name, "title") if frappe.db.exists(source_doctype, source_name) else ""
+    else:
+        board_name = board
+        section_name = section
+        source_title = ""
+        is_orphan = not board_name
+
+    # Get max sort order in scope
+    if section_name:
+        max_sort = frappe.db.sql(
+            "SELECT COALESCE(MAX(sort_order),-1) FROM `tabHambaft Gallery Pin` WHERE section=%s AND user=%s",
+            (section_name, user)
+        )[0][0] or -1
+    elif board_name:
+        max_sort = frappe.db.sql(
+            "SELECT COALESCE(MAX(sort_order),-1) FROM `tabHambaft Gallery Pin` WHERE board=%s AND section IS NULL AND user=%s",
+            (board_name, user)
+        )[0][0] or -1
+    else:
+        max_sort = frappe.db.sql(
+            "SELECT COALESCE(MAX(sort_order),-1) FROM `tabHambaft Gallery Pin` WHERE is_orphan=1 AND user=%s",
+            user
+        )[0][0] or -1
+
+    pin = frappe.get_doc({
+        "doctype": "Hambaft Gallery Pin",
+        "user": user,
+        "file": file_name,
+        "image_url": image_url,
+        "image_name": image_name,
+        "board": board_name or None,
+        "section": section_name or None,
+        "sort_order": max_sort + 1,
+        "source_type": source_doctype or "direct",
+        "source_doctype": source_doctype or None,
+        "source_name": source_name or None,
+        "source_title": source_title or "",
+        "caption": caption or "",
+        "is_orphan": 1 if is_orphan else 0,
+    })
+    pin.insert(ignore_permissions=True)
+    frappe.db.commit()
+
+    # Update board cover if no cover
+    if board_name and not frappe.db.get_value("Hambaft Gallery Board", board_name, "cover_file"):
+        frappe.db.set_value("Hambaft Gallery Board", board_name, "cover_file", file_name)
+
+    _sync_pin_counts()
+    return _api_response({"pin_name": pin.name, "created": True})
+
+
+@frappe.whitelist()
+def upload_gallery_image(filedata, filename, doctype=None, docname=None, board=None, section=None, caption=None):
+    """Upload an image and create a gallery pin."""
+    _check_auth()
+    if not _gallery_tables_exist():
+        return _api_response({"file_name": None, "gallery_not_ready": True})
+    user = frappe.session.user
+    import base64
+
+    if "," in filedata:
+        filedata = filedata.split(",")[1]
+    decoded = base64.b64decode(filedata)
+
+    # Determine attachment target
+    attach_doctype = doctype or ""
+    attach_docname = docname or ""
+
+    if doctype == "Goal" and docname:
+        if not frappe.db.exists("Goal", {"name": docname, "user": user}):
+            frappe.throw(_("Permission denied"), frappe.PermissionError)
+        attach_doctype = "Goal"
+    elif doctype == "Hambaft Project" and docname:
+        if not frappe.db.exists("Hambaft Project", {"name": docname, "user": user}):
+            frappe.throw(_("Permission denied"), frappe.PermissionError)
+    elif doctype == "Task" and docname:
+        if not frappe.db.exists("Task", {"name": docname, "user": user}):
+            frappe.throw(_("Permission denied"), frappe.PermissionError)
+
+    # Create the File record
+    file_doc = frappe.get_doc({
+        "doctype": "File",
+        "file_name": filename,
+        "content": decoded,
+        "is_private": 1,
+    })
+    if attach_doctype and attach_docname:
+        file_doc.attached_to_doctype = attach_doctype
+        file_doc.attached_to_name = attach_docname
+
+    file_doc.insert(ignore_permissions=True)
+    frappe.db.commit()
+
+    # Create the Pin
+    source_doctype = attach_doctype if attach_doctype else None
+    source_name = attach_docname if attach_docname else None
+
+    # Override board/section if explicitly provided (for direct gallery upload)
+    pin_board = board
+    pin_section = section
+    if not pin_board and source_doctype and source_name:
+        pin_board, pin_section, _ = _resolve_pin_scope(source_doctype, source_name, user)
+
+    pin_result = create_gallery_pin(
+        file_name=file_doc.name,
+        source_doctype=source_doctype,
+        source_name=source_name,
+        board=pin_board,
+        section=pin_section,
+        caption=caption,
+    )
+
+    return _api_response({
+        "file_name": file_doc.name,
+        "file_url": file_doc.file_url,
+        "file_size": file_doc.file_size,
+        "pin_name": pin_result.get("data", {}).get("pin_name") if isinstance(pin_result, dict) else None,
+    })
+
+
+@frappe.whitelist()
+def move_gallery_pin(pin_name, board=None, section=None):
+    """Move a pin to a different board/section."""
+    _check_auth()
+    if not _gallery_tables_exist():
+        return _api_response({"ok": False, "gallery_not_ready": True})
+    user = frappe.session.user
+    pin = frappe.get_doc("Hambaft Gallery Pin", pin_name)
+    if pin.user != user:
+        frappe.throw(_("Permission denied"), frappe.PermissionError)
+
+    updates = {}
+    if board is not None:
+        updates["board"] = board or None
+        updates["is_orphan"] = 0 if board else 1
+    if section is not None:
+        updates["section"] = section or None
+
+    if updates:
+        frappe.db.set_value("Hambaft Gallery Pin", pin_name, updates)
+        # Reset sort order to end
+        if section:
+            max_sort = frappe.db.sql(
+                "SELECT COALESCE(MAX(sort_order),-1) FROM `tabHambaft Gallery Pin` WHERE section=%s AND user=%s AND name!=%s",
+                (section, user, pin_name)
+            )[0][0] or -1
+            frappe.db.set_value("Hambaft Gallery Pin", pin_name, "sort_order", max_sort + 1)
+
+    frappe.db.commit()
+    _sync_pin_counts()
+    return _api_response({"ok": True})
+
+
+@frappe.whitelist()
+def reorder_gallery_pins(items):
+    """Reorder pins. items = [{ pin_name, sort_order }]"""
+    _check_auth()
+    if not _gallery_tables_exist():
+        return _api_response({"ok": False, "gallery_not_ready": True})
+    user = frappe.session.user
+    if isinstance(items, str):
+        items = json.loads(items)
+    for item in items:
+        pin_name = item.get("pin_name") or item.get("file_name")
+        sort_order = cint(item.get("sort_order", 0))
+        if not pin_name:
+            continue
+        # Verify ownership
+        pin_user = frappe.db.get_value("Hambaft Gallery Pin", pin_name, "user")
+        if pin_user != user:
+            continue
+        frappe.db.set_value("Hambaft Gallery Pin", pin_name, "sort_order", sort_order)
+    frappe.db.commit()
+    return _api_response({"ok": True})
+
+
+@frappe.whitelist()
+def reorder_gallery_sections(board_name, section_order):
+    """Reorder sections within a board. section_order = [section_name, ...]"""
+    _check_auth()
+    if not _gallery_tables_exist():
+        return _api_response({"ok": False, "gallery_not_ready": True})
+    user = frappe.session.user
+    if isinstance(section_order, str):
+        section_order = json.loads(section_order)
+    for idx, section_name in enumerate(section_order):
+        sec_user = frappe.db.get_value("Hambaft Gallery Section", section_name, "user")
+        if sec_user != user:
+            continue
+        frappe.db.set_value("Hambaft Gallery Section", section_name, "sort_order", idx)
+    frappe.db.commit()
+    return _api_response({"ok": True})
+
+
+@frappe.whitelist()
+def update_gallery_pin_meta(pin_name, caption=None, note=None):
+    """Update pin metadata (caption, note)."""
+    _check_auth()
+    if not _gallery_tables_exist():
+        return _api_response({"ok": False, "gallery_not_ready": True})
+    user = frappe.session.user
+    pin_user = frappe.db.get_value("Hambaft Gallery Pin", pin_name, "user")
+    if pin_user != user:
+        frappe.throw(_("Permission denied"), frappe.PermissionError)
+    updates = {}
+    if caption is not None:
+        updates["caption"] = caption
+    if note is not None:
+        updates["note"] = note
+    if updates:
+        frappe.db.set_value("Hambaft Gallery Pin", pin_name, updates)
+    frappe.db.commit()
+    return _api_response({"ok": True})
+
+
+@frappe.whitelist()
+def delete_gallery_pin(pin_name, delete_file=False):
+    """Delete a gallery pin. By default, only removes the pin (detach).
+    If delete_file=True, also deletes the source File record (requires explicit opt-in).
+    """
+    _check_auth()
+    if not _gallery_tables_exist():
+        return _api_response({"ok": False, "gallery_not_ready": True})
+    user = frappe.session.user
+    pin = frappe.get_doc("Hambaft Gallery Pin", pin_name)
+    if pin.user != user:
+        frappe.throw(_("Permission denied"), frappe.PermissionError)
+
+    file_name = pin.file
+    board_name = pin.board
+
+    frappe.delete_doc("Hambaft Gallery Pin", pin_name, force=True)
+
+    # Only delete the File if explicitly requested
+    if delete_file and file_name and frappe.db.exists("File", file_name):
+        try:
+            frappe.delete_doc("File", file_name, force=True)
+        except Exception as e:
+            frappe.log_error(f"Failed to delete File {file_name} during pin deletion: {e}", "Gallery Pin Delete")
+
+    frappe.db.commit()
+    _sync_pin_counts()
+    return _api_response({"ok": True, "file_deleted": bool(delete_file and file_name)})
+
+
+@frappe.whitelist()
+def get_task_attachments(task_name):
+    """Get all files attached to a task, with gallery pin info."""
+    _check_auth()
+    user = frappe.session.user
+    # Soft owner check
+    if not frappe.db.exists("Task", {"name": task_name, "user": user}):
+        if not frappe.db.exists("Task", task_name):
+            frappe.throw(_("Task {0} not found").format(task_name))
+
+    files = frappe.get_all(
+        "File",
+        filters={"attached_to_doctype": "Task", "attached_to_name": task_name},
+        fields=["name", "file_name", "file_type", "file_url", "file_size", "is_private", "creation"],
+        order_by="creation desc",
+    )
+
+    # Enrich with sort order from gallery pins (only if tables exist)
+    gallery_ok = _gallery_tables_exist()
+    for f in files:
+        if gallery_ok:
+            try:
+                pin = frappe.db.get_value("Hambaft Gallery Pin",
+                    {"file": f.name, "user": user},
+                    ["name", "sort_order", "caption", "board", "section"], as_dict=True)
+                if pin:
+                    f["pin_name"] = pin.name
+                    f["sort_order"] = pin.sort_order
+                    f["caption"] = pin.caption
+                    f["board_id"] = pin.board or ""
+                    f["section_id"] = pin.section or ""
+                    f["board_title"] = frappe.db.get_value("Hambaft Gallery Board", pin.board, "title") if pin.board else ""
+                    f["section_title"] = frappe.db.get_value("Hambaft Gallery Section", pin.section, "title") if pin.section else ""
+                else:
+                    f["pin_name"] = None
+                    f["sort_order"] = 0
+                    f["caption"] = ""
+                    f["board_id"] = ""
+                    f["section_id"] = ""
+                    f["board_title"] = ""
+                    f["section_title"] = ""
+            except Exception:
+                f["pin_name"] = None
+                f["sort_order"] = 0
+                f["caption"] = ""
+                f["board_id"] = ""
+                f["section_id"] = ""
+                f["board_title"] = ""
+                f["section_title"] = ""
+        else:
+            f["pin_name"] = None
+            f["sort_order"] = 0
+            f["caption"] = ""
+            f["board_id"] = ""
+            f["section_id"] = ""
+            f["board_title"] = ""
+            f["section_title"] = ""
+
+    # Sort by sort_order then creation
+    files.sort(key=lambda x: (x.get("sort_order", 0), x.get("creation", "")))
+    return _api_response({"attachments": files})
+
+
+@frappe.whitelist()
+def reorder_task_attachments(task_name, items):
+    """Reorder task attachment pins. items = [{ file_name, sort_order }]"""
+    _check_auth()
+    if not _gallery_tables_exist():
+        return _api_response({"ok": True})  # silently skip if no gallery yet
+    user = frappe.session.user
+    if isinstance(items, str):
+        items = json.loads(items)
+
+    for item in items:
+        file_name = item.get("file_name")
+        sort_order = cint(item.get("sort_order", 0))
+        if not file_name:
+            continue
+        # Ensure pin exists, create if not
+        try:
+            pin = frappe.db.get_value("Hambaft Gallery Pin",
+                {"file": file_name, "user": user}, "name")
+            if pin:
+                frappe.db.set_value("Hambaft Gallery Pin", pin, "sort_order", sort_order)
+            else:
+                # Auto-create pin for this task file
+                create_gallery_pin(file_name, source_doctype="Task", source_name=task_name)
+        except Exception:
+            pass  # Gallery not ready yet
+
+    frappe.db.commit()
+    return _api_response({"ok": True})
+
+
+@frappe.whitelist()
+def delete_task_attachment(file_name):
+    """Delete an attached file and its gallery pin."""
+    _check_auth()
+    user = frappe.session.user
+    if not frappe.db.exists("File", file_name):
+        frappe.throw(_("File not found"))
+
+    doc = frappe.get_doc("File", file_name)
+    # Soft owner check
+    if doc.attached_to_doctype == "Task":
+        if not frappe.db.exists("Task", {"name": doc.attached_to_name, "user": user}):
+            if not frappe.db.exists("Task", doc.attached_to_name):
+                frappe.throw(_("Task not found"))
+
+    # Remove gallery pin (only if tables exist)
+    if _gallery_tables_exist():
+        try:
+            frappe.db.delete("Hambaft Gallery Pin", {"file": file_name, "user": user})
+        except Exception:
+            pass
+    # Remove old Pin Order records too (migration compat)
+    try:
+        frappe.db.delete("Hambaft Gallery Pin Order", {"file_name": file_name, "user": user})
+    except Exception:
+        pass
+    frappe.delete_doc("File", file_name, force=True)
+    frappe.db.commit()
+    if _gallery_tables_exist():
+        try:
+            _sync_pin_counts()
+        except Exception:
+            pass
+    return _api_response({"ok": True})
+
+
+@frappe.whitelist()
+def sync_gallery_from_existing_files():
+    """Idempotent migration: sync all existing image attachments into gallery domain.
+    Creates boards, sections, and pins for every image File attached to user's entities.
+    Returns detailed report of synced and failed items.
+    """
+    _check_auth()
+    if not _gallery_tables_exist():
+        return _api_response({"synced": 0, "skipped": 0, "errors": [], "total_files": 0, "gallery_not_ready": True,
+                              "message": "Gallery tables don't exist yet. Run bench migrate first."})
+    user = frappe.session.user
+    count = 0
+    errors = []
+    skipped = 0
+
+    # 1. Task images
+    task_files = frappe.db.sql("""
+        SELECT f.name, f.file_type, f.file_name, f.file_url,
+               t.name as task_name, t.title as task_title,
+               t.project, t.goal
+        FROM `tabFile` f
+        JOIN `tabTask` t ON f.attached_to_name = t.name AND f.attached_to_doctype = 'Task'
+        WHERE t.user = %s
+    """, user, as_dict=True)
+
+    for row in task_files:
+        if not is_gallery_image_file(row.file_type, row.file_name, row.file_url):
+            continue
+        if frappe.db.exists("Hambaft Gallery Pin", {"file": row.name, "user": user}):
+            skipped += 1
+            continue
+        try:
+            create_gallery_pin(row.name, source_doctype="Task", source_name=row.task_name)
+            count += 1
+        except Exception as e:
+            errors.append({"file": row.name, "source": f"Task/{row.task_name}", "error": str(e)})
+
+    # 2. Project images
+    proj_files = frappe.db.sql("""
+        SELECT f.name, f.file_type, f.file_name, f.file_url,
+               p.name as proj_name, p.title as proj_title, p.goal
+        FROM `tabFile` f
+        JOIN `tabHambaft Project` p ON f.attached_to_name = p.name AND f.attached_to_doctype = 'Hambaft Project'
+        WHERE p.user = %s
+    """, user, as_dict=True)
+
+    for row in proj_files:
+        if not is_gallery_image_file(row.file_type, row.file_name, row.file_url):
+            continue
+        if frappe.db.exists("Hambaft Gallery Pin", {"file": row.name, "user": user}):
+            skipped += 1
+            continue
+        try:
+            create_gallery_pin(row.name, source_doctype="Hambaft Project", source_name=row.proj_name)
+            count += 1
+        except Exception as e:
+            errors.append({"file": row.name, "source": f"Hambaft Project/{row.proj_name}", "error": str(e)})
+
+    # 3. Goal images
+    goal_files = frappe.db.sql("""
+        SELECT f.name, f.file_type, f.file_name, f.file_url,
+               g.name as goal_name, g.title as goal_title
+        FROM `tabFile` f
+        JOIN `tabGoal` g ON f.attached_to_name = g.name AND f.attached_to_doctype = 'Goal'
+        WHERE g.user = %s
+    """, user, as_dict=True)
+
+    for row in goal_files:
+        if not is_gallery_image_file(row.file_type, row.file_name, row.file_url):
+            continue
+        if frappe.db.exists("Hambaft Gallery Pin", {"file": row.name, "user": user}):
+            skipped += 1
+            continue
+        try:
+            create_gallery_pin(row.name, source_doctype="Goal", source_name=row.goal_name)
+            count += 1
+        except Exception as e:
+            errors.append({"file": row.name, "source": f"Goal/{row.goal_name}", "error": str(e)})
+
+    _sync_pin_counts()
+    frappe.db.commit()
+    return _api_response({"synced": count, "skipped": skipped, "errors": errors, "total_files": len(task_files) + len(proj_files) + len(goal_files)})
+
+
+@frappe.whitelist()
+def migrate_pin_order_to_domain():
+    """One-time migration: convert old Hambaft Gallery Pin Order records to new domain model.
+    Idempotent — skips if pin already exists for the same file+user.
+    """
+    _check_auth()
+    if not _gallery_tables_exist():
+        return _api_response({"migrated": 0, "total_old": 0, "errors": [], "gallery_not_ready": True,
+                              "message": "Gallery tables don't exist yet. Run bench migrate first."})
+    user = frappe.session.user
+
+    old_records = frappe.get_all("Hambaft Gallery Pin Order",
+        filters={"user": user},
+        fields=["name", "file_name", "file_url", "scope_type", "scope_id",
+                "source_type", "source_id", "source_title", "sort_order", "image_name"])
+
+    count = 0
+    errors = []
+    for old in old_records:
+        if not old.file_name or old.file_name == "section_order_placeholder":
+            continue
+        # Skip if pin already exists
+        if frappe.db.exists("Hambaft Gallery Pin", {"file": old.file_name, "user": user}):
+            continue
+
+        # Determine board/section from scope
+        board_name = None
+        section_name = None
+        is_orphan = old.scope_type == "orphan"
+
+        if old.scope_type == "board" and old.scope_id:
+            board_name = _get_or_create_board(old.scope_id, user)
+        elif old.scope_type == "section" and old.scope_id:
+            # scope_id is project name, find its board
+            goal = frappe.db.get_value("Hambaft Project", old.scope_id, "goal")
+            if goal:
+                board_name = _get_or_create_board(goal, user)
+                section_name = _get_or_create_section(old.scope_id, board_name, user)
+            else:
+                is_orphan = True
+
+        try:
+            pin = frappe.get_doc({
+                "doctype": "Hambaft Gallery Pin",
+                "user": user,
+                "file": old.file_name,
+                "image_url": old.file_url or "",
+                "image_name": old.image_name or "",
+                "board": board_name,
+                "section": section_name,
+                "sort_order": old.sort_order or 0,
+                "source_type": old.source_type or "direct",
+                "source_doctype": old.source_type if old.source_type in ("Task", "Hambaft Project", "Goal") else None,
+                "source_name": old.source_id or None,
+                "source_title": old.source_title or "",
+                "is_orphan": 1 if is_orphan else 0,
+            })
+            pin.insert(ignore_permissions=True)
+            count += 1
+        except Exception as e:
+            errors.append({"file": old.file_name, "source_type": old.source_type, "source_id": old.source_id, "error": str(e)})
+
+    _sync_pin_counts()
+    frappe.db.commit()
+    return _api_response({"migrated": count, "total_old": len(old_records), "errors": errors})
+
+# ─── Planner Board Views ───────────────────────────────────────
+
+@frappe.whitelist()
+def get_tasks_by_project(limit=100):
+    """Get all tasks grouped by project for board view, enriched with impact data."""
+    _check_auth()
+    tasks = frappe.get_all(
+        "Task",
+        filters={"user": frappe.session.user, "status": ["not in", ["dropped"]]},
+        fields="*",
+        limit_page_length=cint(limit),
+        order_by="project asc, priority asc",
+    )
+    # Enrich with impact data
+    enriched = [_enrich_task_with_impact(dict(t)) for t in tasks]
+    # Group by project
+    by_project = {}
+    for t in enriched:
+        key = t.get("project") or "no_project"
+        by_project.setdefault(key, []).append(t)
+    return _api_response({"by_project": by_project})
+
+
+@frappe.whitelist()
+def get_tasks_grouped_by_status(limit=200):
+    """Get all tasks grouped by status for board view, enriched with impact data."""
+    _check_auth()
+    tasks = frappe.get_all(
+        "Task",
+        filters={"user": frappe.session.user, "status": ["not in", ["dropped"]]},
+        fields="*",
+        limit_page_length=cint(limit),
+        order_by="status asc, priority asc, scheduled_date asc",
+    )
+    # Enrich with impact data
+    enriched = [_enrich_task_with_impact(dict(t)) for t in tasks]
+    status_groups = {}
+    status_order = ["inbox", "not_started", "next", "today", "in_progress", "on_hold", "someday", "done"]
+    for status in status_order:
+        group = [t for t in enriched if t.get("status") == status]
+        if group:
+            status_groups[status] = group
+    return _api_response({"status_groups": status_groups})
+
+
+# ─── Advanced Goal APIs ──────────────────────────────────────
+
+def _goal_to_frontend(doc):
+    """Convert a Goal document to a frontend-friendly dict."""
+    linked_habits = []
+    for row in doc.get("linked_habits") or []:
+        habit_title = frappe.db.get_value("Habit", row.habit, "title") or row.habit
+        linked_habits.append({
+            "habit": row.habit,
+            "habit_title": habit_title,
+            "contribution_type": row.contribution_type,
+            "weight": row.weight or 100,
+            "period": row.period,
+            "target_value": row.target_value,
+            "cap_value": row.cap_value,
+            "is_negative": row.is_negative,
+            "notes": row.notes or "",
+        })
+
+    linked_finance = []
+    for row in doc.get("linked_finance_accounts") or []:
+        account_name = frappe.db.get_value("Hambaft Finance Account", row.finance_account, "account_name") if row.finance_account else None
+        current_balance = flt(frappe.db.get_value("Hambaft Finance Account", row.finance_account, "current_balance") or 0) if row.finance_account else 0
+        linked_finance.append({
+            "finance_account": row.finance_account or "",
+            "account_name": account_name or "",
+            "current_balance": current_balance,
+            "finance_type": row.finance_type,
+            "initial_amount": row.initial_amount or 0,
+            "target_amount": row.target_amount or 0,
+            "weight": row.weight or 100,
+            "notes": row.notes or "",
+        })
+
+    # Get linked projects — rich detail from Goal Project Link + project data
+    linked_projects = _get_goal_linked_projects(doc)
+
+    # Parse health_detail if available
+    health_detail_parsed = None
+    if getattr(doc, "health_detail", None):
+        try:
+            health_detail_parsed = json.loads(doc.health_detail)
+        except Exception:
+            health_detail_parsed = None
+
+    # Parse last_snapshot if available
+    last_snapshot_parsed = None
+    if getattr(doc, "last_snapshot_json", None):
+        try:
+            last_snapshot_parsed = json.loads(doc.last_snapshot_json)
+        except Exception:
+            last_snapshot_parsed = None
+
+    return {
+        "name": doc.name,
+        "title": doc.title,
+        "description": doc.description or "",
+        "area": doc.area,
+        "category": doc.category,
+        "goal_type": doc.goal_type,
+        "progress_mode": doc.progress_mode,
+        "status": doc.status,
+        "parent_goal": doc.parent_goal,
+        "goal_level": doc.goal_level,
+        "target_value": doc.target_value or 0,
+        "current_value": doc.current_value or 0,
+        "unit": doc.unit or "",
+        "start_date": doc.start_date,
+        "target_date": doc.target_date,
+        "progress_percent": doc.progress_percent or 0,
+        "derived_progress_detail": doc.derived_progress_detail or "",
+        "priority": doc.priority,
+        "notes": doc.notes or "",
+        "tags": doc.tags or "",
+        "color": doc.color,
+        "icon": doc.icon,
+        "user": doc.user,
+        "privacy": getattr(doc, "privacy", None) or "خصوصی",
+        # Project weight buckets
+        "project_progress_weight": doc.project_progress_weight or 40,
+        "milestone_weight": doc.milestone_weight or 25,
+        "key_task_weight": doc.key_task_weight or 20,
+        "tracked_time_weight": doc.tracked_time_weight or 10,
+        "metric_weight": doc.metric_weight or 5,
+        # Health
+        "health_state": getattr(doc, "health_state", None) or None,
+        "health_detail": health_detail_parsed,
+        # Completion policy
+        "completion_policy": getattr(doc, "completion_policy", None) or "آستانه_پیشرفت",
+        "completion_threshold": getattr(doc, "completion_threshold", None) or 100,
+        # Snapshot
+        "last_snapshot": last_snapshot_parsed,
+        "last_snapshot_at": str(doc.last_snapshot_at) if getattr(doc, "last_snapshot_at", None) else None,
+        # Child tables
+        "linked_habits": linked_habits,
+        "linked_finance_accounts": linked_finance,
+        "linked_projects": linked_projects,
+        "members": _get_goal_members_list(doc.name),
+        "noteBlocks": _extract_note_blocks(doc),
+        "creation": str(doc.creation) if getattr(doc, "creation", None) else None,
+    }
+
+
+def _get_goal_linked_projects(doc):
+    """Get rich linked project data for a goal."""
+    result = []
+    seen = set()
+
+    # From Goal Project Link child table
+    for row in doc.get("linked_projects") or []:
+        if not row.project:
+            continue
+        seen.add(row.project)
+        proj_data = _load_project_for_goal(row.project)
+        result.append({
+            "project": row.project,
+            "title": proj_data.get("title", ""),
+            "status": proj_data.get("status", ""),
+            "progress": proj_data.get("progress", 0),
+            "effort_type": proj_data.get("effort_type", ""),
+            "estimated_hours": proj_data.get("estimated_hours", 0),
+            "actual_minutes": proj_data.get("actual_minutes", 0),
+            "total_tasks": proj_data.get("total_tasks", 0),
+            "done_tasks": proj_data.get("done_tasks", 0),
+            "milestone_total": proj_data.get("milestone_total", 0),
+            "milestone_done": proj_data.get("milestone_done", 0),
+            "key_total": proj_data.get("key_total", 0),
+            "key_done": proj_data.get("key_done", 0),
+            # Link metadata
+            "weight": row.weight or 100,
+            "contribution_type": row.contribution_type or "اجباری",
+            "is_mandatory": cint(row.is_mandatory),
+            "sort_order": cint(row.sort_order or 0),
+            "notes": row.notes or "",
+        })
+
+    # Fallback: projects with goal field pointing to this goal
+    fallback = frappe.get_all(
+        "Hambaft Project",
+        filters={"goal": doc.name, "user": doc.user},
+        fields=["name"],
+    )
+    for p in fallback:
+        if p.name not in seen:
+            proj_data = _load_project_for_goal(p.name)
+            result.append({
+                "project": p.name,
+                "title": proj_data.get("title", ""),
+                "status": proj_data.get("status", ""),
+                "progress": proj_data.get("progress", 0),
+                "effort_type": proj_data.get("effort_type", ""),
+                "estimated_hours": proj_data.get("estimated_hours", 0),
+                "actual_minutes": proj_data.get("actual_minutes", 0),
+                "total_tasks": proj_data.get("total_tasks", 0),
+                "done_tasks": proj_data.get("done_tasks", 0),
+                "milestone_total": proj_data.get("milestone_total", 0),
+                "milestone_done": proj_data.get("milestone_done", 0),
+                "key_total": proj_data.get("key_total", 0),
+                "key_done": proj_data.get("key_done", 0),
+                "weight": 100,
+                "contribution_type": "اجباری",
+                "is_mandatory": 1,
+                "sort_order": 0,
+                "notes": "",
+            })
+
+    result.sort(key=lambda x: x.get("sort_order", 0))
+    return result
+
+
+def _load_project_for_goal(project_name):
+    """Load a project's current state for goal serialization."""
+    try:
+        p = frappe.get_all(
+            "Hambaft Project",
+            filters={"name": project_name},
+            fields=["name", "title", "status", "progress", "effort_type",
+                     "estimated_hours", "actual_minutes"],
+            limit=1,
+        )
+        if not p:
+            return {}
+        p = p[0]
+        tasks = frappe.get_all(
+            "Task",
+            filters={"project": project_name},
+            fields=["name", "status", "importance"],
+        )
+        total = len(tasks)
+        done_statuses = {"done", "completed", "انجام‌شده", "انجام شده"}
+        done = sum(1 for t in tasks if t.status in done_statuses)
+        milestones = [t for t in tasks if (t.importance or "عادی") == "نقطه‌عطف"]
+        key_tasks = [t for t in tasks if (t.importance or "عادی") == "کلیدی"]
+
+        return {
+            "title": p.title,
+            "status": p.status,
+            "progress": flt(p.progress or 0),
+            "effort_type": p.effort_type,
+            "estimated_hours": flt(p.estimated_hours or 0),
+            "actual_minutes": cint(p.actual_minutes or 0),
+            "total_tasks": total,
+            "done_tasks": done,
+            "milestone_total": len(milestones),
+            "milestone_done": sum(1 for t in milestones if t.status in done_statuses),
+            "key_total": len(key_tasks),
+            "key_done": sum(1 for t in key_tasks if t.status in done_statuses),
+        }
+    except Exception:
+        return {}
+
+
+@frappe.whitelist()
+def compute_goal_progress(name):
+    """Recompute and save goal progress, health, and snapshot. Returns the updated progress."""
+    _check_auth()
+    _require_owner("Goal", name)
+    doc = frappe.get_doc("Goal", name)
+    pct, detail = doc.compute_progress()
+    doc.progress_percent = pct
+    doc.derived_progress_detail = json.dumps(detail, ensure_ascii=False)
+
+    # Compute health
+    health_state, health_detail = doc.compute_health(pct, detail)
+    doc.health_state = health_state
+    doc.health_detail = json.dumps(health_detail, ensure_ascii=False)
+
+    # Check completion policy
+    if doc.check_completion(pct, detail):
+        doc.status = "تکمیل‌شده"
+    elif pct >= 100:
+        doc.status = "تکمیل‌شده"
+
+    doc.save(ignore_permissions=True)
+
+    # Save snapshot
+    doc.save_snapshot(pct, detail, health_state, health_detail, trigger="api_call")
+
+    frappe.db.commit()
+    return _api_response({
+        "progress_percent": pct,
+        "detail": detail,
+        "health_state": health_state,
+        "health_detail": health_detail,
+        "goal": _goal_to_frontend(doc),
+    })
+
+
+@frappe.whitelist()
+def get_goal_detail(name):
+    """Get full goal detail with habit links, finance links, projects."""
+    _check_auth()
+    _require_owner("Goal", name)
+    doc = frappe.get_doc("Goal", name)
+    return _api_response({"goal": _goal_to_frontend(doc)})
+
+
+@frappe.whitelist()
+def link_goal_habit(goal_name, habit, contribution_type="تعداد_انجام", weight=100,
+                    period="ماهانه", target_value=None, cap_value=None, is_negative=0, notes=None):
+    """Add a habit link to a goal."""
+    _check_auth()
+    _require_owner("Goal", goal_name)
+    doc = frappe.get_doc("Goal", goal_name)
+    # Check for duplicate
+    for row in doc.get("linked_habits") or []:
+        if row.habit == habit:
+            return _api_response({"ok": False, "message": "habit_already_linked"})
+    doc.append("linked_habits", {
+        "habit": habit,
+        "contribution_type": contribution_type,
+        "weight": flt(weight or 100),
+        "period": period,
+        "target_value": flt(target_value) if target_value else None,
+        "cap_value": flt(cap_value) if cap_value else None,
+        "is_negative": cint(is_negative),
+        "notes": notes or "",
+    })
+    doc.save(ignore_permissions=True)
+    frappe.db.commit()
+    return _api_response({"goal": _goal_to_frontend(doc)})
+
+
+@frappe.whitelist()
+def unlink_goal_habit(goal_name, habit):
+    """Remove a habit link from a goal."""
+    _check_auth()
+    _require_owner("Goal", goal_name)
+    doc = frappe.get_doc("Goal", goal_name)
+    doc.set("linked_habits", [row for row in doc.get("linked_habits") or [] if row.habit != habit])
+    doc.save(ignore_permissions=True)
+    frappe.db.commit()
+    return _api_response({"goal": _goal_to_frontend(doc)})
+
+
+@frappe.whitelist()
+def link_goal_finance(goal_name, finance_account, finance_type="موجودی_حساب",
+                      initial_amount=None, target_amount=None, weight=100, notes=None):
+    """Add a finance account link to a goal."""
+    _check_auth()
+    _require_owner("Goal", goal_name)
+    doc = frappe.get_doc("Goal", goal_name)
+    # Check for duplicate
+    for row in doc.get("linked_finance_accounts") or []:
+        if row.finance_account == finance_account:
+            return _api_response({"ok": False, "message": "account_already_linked"})
+    doc.append("linked_finance_accounts", {
+        "finance_account": finance_account,
+        "finance_type": finance_type,
+        "initial_amount": flt(initial_amount) if initial_amount else None,
+        "target_amount": flt(target_amount) if target_amount else None,
+        "weight": flt(weight or 100),
+        "notes": notes or "",
+    })
+    doc.save(ignore_permissions=True)
+    frappe.db.commit()
+    return _api_response({"goal": _goal_to_frontend(doc)})
+
+
+@frappe.whitelist()
+def unlink_goal_finance(goal_name, finance_account):
+    """Remove a finance account link from a goal."""
+    _check_auth()
+    _require_owner("Goal", goal_name)
+    doc = frappe.get_doc("Goal", goal_name)
+    doc.set("linked_finance_accounts", [row for row in doc.get("linked_finance_accounts") or [] if row.finance_account != finance_account])
+    doc.save(ignore_permissions=True)
+    frappe.db.commit()
+    return _api_response({"goal": _goal_to_frontend(doc)})
+
+
+@frappe.whitelist()
+def link_goal_project(goal_name, project_name, contribution_type="اجباری", weight=100, is_mandatory=1, sort_order=0, notes=None):
+    """Link a project to a goal with rich metadata. Also sets project.goal as back-link."""
+    _check_auth()
+    _require_owner("Goal", goal_name)
+    _require_owner("Hambaft Project", project_name)
+
+    doc = frappe.get_doc("Goal", goal_name)
+
+    # Check for duplicate
+    for row in doc.get("linked_projects") or []:
+        if row.project == project_name:
+            return _api_response({"ok": False, "message": "project_already_linked"})
+
+    doc.append("linked_projects", {
+        "project": project_name,
+        "contribution_type": contribution_type,
+        "weight": flt(weight or 100),
+        "is_mandatory": cint(is_mandatory),
+        "sort_order": cint(sort_order or 0),
+        "notes": notes or "",
+    })
+    doc.save(ignore_permissions=True)
+
+    # Also set back-link on project
+    frappe.db.set_value("Hambaft Project", project_name, "goal", goal_name, update_modified=True)
+    frappe.db.commit()
+    return _api_response({"goal": _goal_to_frontend(doc)})
+
+
+@frappe.whitelist()
+def unlink_goal_project(goal_name, project_name):
+    """Unlink a project from a goal (removes from child table + clears project.goal)."""
+    _check_auth()
+    _require_owner("Goal", goal_name)
+
+    doc = frappe.get_doc("Goal", goal_name)
+    doc.set("linked_projects", [row for row in doc.get("linked_projects") or [] if row.project != project_name])
+    doc.save(ignore_permissions=True)
+
+    # Clear back-link if it still points to this goal
+    proj_goal = frappe.db.get_value("Hambaft Project", project_name, "goal")
+    if proj_goal == goal_name:
+        frappe.db.set_value("Hambaft Project", project_name, "goal", None, update_modified=True)
+    frappe.db.commit()
+    return _api_response({"goal": _goal_to_frontend(doc)})
+
+
+@frappe.whitelist()
+def get_goals_with_details(limit=100, offset=0):
+    """Get all goals for the current user with full detail."""
+    _check_auth()
+    rows = frappe.get_all(
+        "Goal",
+        filters=_owner_filter(),
+        fields=["name"],
+        limit_page_length=cint(limit),
+        start=cint(offset),
+        order_by="target_date asc, creation desc",
+    )
+    goals = [_goal_to_frontend(frappe.get_doc("Goal", row.name)) for row in rows]
+    return _api_response({"goals": goals})
+
+
+@frappe.whitelist()
+def recompute_all_goal_progress():
+    """Recompute progress for all active goals of the current user."""
+    _check_auth()
+    rows = frappe.get_all(
+        "Goal",
+        filters={"user": frappe.session.user, "status": ["in", ["فعال", "active", "پیش‌نویس"]]},
+        fields=["name"],
+    )
+    results = []
+    for row in rows:
+        try:
+            doc = frappe.get_doc("Goal", row.name)
+            pct, detail = doc.compute_progress()
+            doc.progress_percent = pct
+            doc.derived_progress_detail = json.dumps(detail, ensure_ascii=False)
+            if pct >= 100:
+                doc.status = "تکمیل‌شده"
+            doc.save(ignore_permissions=True)
+            results.append({"name": row.name, "progress_percent": pct})
+        except Exception as e:
+            results.append({"name": row.name, "error": str(e)})
+    frappe.db.commit()
+    return _api_response({"recomputed": len(results), "results": results})
+
+
+@frappe.whitelist()
+def get_area_detail(name):
+    """Get area with full detail: goals, projects, tasks, tracked time."""
+    _check_auth()
+    _require_owner("Hambaft Area", name)
+    doc = frappe.get_doc("Hambaft Area", name)
+    summary = doc.get_summary()
+    # Also get goals
+    goals = frappe.get_all(
+        "Goal",
+        filters={"area": name, "user": frappe.session.user},
+        fields=["name", "title", "status", "progress_percent", "goal_type", "target_date", "priority"],
+        order_by="target_date asc",
+    )
+    summary["goals"] = goals
+    return _api_response(summary)
+
+
+# ─── Goal Progress Snapshots ──────────────────────────────
+
+@frappe.whitelist()
+def get_goal_snapshots(goal_name, limit=30):
+    """Get recent snapshots for a goal."""
+    _check_auth()
+    _require_owner("Goal", goal_name)
+    rows = frappe.get_all(
+        "Goal Progress Snapshot",
+        filters={"goal": goal_name, "user": frappe.session.user},
+        fields=["name", "progress_percent", "health_state", "snapshot_date", "trigger_type"],
+        limit_page_length=cint(limit),
+        order_by="snapshot_date desc",
+    )
+    return _api_response({"snapshots": rows})
+
+
+@frappe.whitelist()
+def get_goal_trend(goal_name, days=30):
+    """Get progress trend for a goal over the last N days."""
+    _check_auth()
+    _require_owner("Goal", goal_name)
+    from datetime import timedelta
+    start = (getdate() - timedelta(days=cint(days))).isoformat()
+    rows = frappe.get_all(
+        "Goal Progress Snapshot",
+        filters={"goal": goal_name, "user": frappe.session.user, "snapshot_date": [">=", start]},
+        fields=["progress_percent", "health_state", "snapshot_date", "trigger_type"],
+        order_by="snapshot_date asc",
+    )
+    return _api_response({"trend": rows, "days": days})
+
+
+@frappe.whitelist()
+def update_goal_project_weights(goal_name, weights):
+    """Update project weight configuration for a goal.
+
+    weights = list of {project, weight, is_mandatory, contribution_type, sort_order}
+    """
+    _check_auth()
+    _require_owner("Goal", goal_name)
+    if isinstance(weights, str):
+        weights = json.loads(weights)
+
+    doc = frappe.get_doc("Goal", goal_name)
+    current = {row.project: row for row in doc.get("linked_projects") or []}
+
+    for w in weights:
+        proj = w.get("project")
+        if not proj or proj not in current:
+            continue
+        row = current[proj]
+        if "weight" in w:
+            row.weight = flt(w["weight"])
+        if "is_mandatory" in w:
+            row.is_mandatory = cint(w["is_mandatory"])
+        if "contribution_type" in w:
+            row.contribution_type = w["contribution_type"]
+        if "sort_order" in w:
+            row.sort_order = cint(w["sort_order"])
+        if "notes" in w:
+            row.notes = w["notes"]
+
+    doc.save(ignore_permissions=True)
+    frappe.db.commit()
+    return _api_response({"goal": _goal_to_frontend(doc)})
+
+
+@frappe.whitelist()
+def update_goal_signal_weights(goal_name, project_progress_weight=None, milestone_weight=None,
+                                key_task_weight=None, tracked_time_weight=None, metric_weight=None):
+    """Update the 5 signal weights for project-driven goal progress."""
+    _check_auth()
+    _require_owner("Goal", goal_name)
+    doc = frappe.get_doc("Goal", goal_name)
+    if project_progress_weight is not None:
+        doc.project_progress_weight = flt(project_progress_weight)
+    if milestone_weight is not None:
+        doc.milestone_weight = flt(milestone_weight)
+    if key_task_weight is not None:
+        doc.key_task_weight = flt(key_task_weight)
+    if tracked_time_weight is not None:
+        doc.tracked_time_weight = flt(tracked_time_weight)
+    if metric_weight is not None:
+        doc.metric_weight = flt(metric_weight)
+    doc.save(ignore_permissions=True)
+    frappe.db.commit()
+    return _api_response({"goal": _goal_to_frontend(doc)})
+
+
+@frappe.whitelist()
+def update_goal_completion_policy(goal_name, completion_policy=None, completion_threshold=None):
+    """Update completion policy for a goal."""
+    _check_auth()
+    _require_owner("Goal", goal_name)
+    doc = frappe.get_doc("Goal", goal_name)
+    if completion_policy:
+        doc.completion_policy = completion_policy
+    if completion_threshold is not None:
+        doc.completion_threshold = flt(completion_threshold)
+    doc.save(ignore_permissions=True)
+    frappe.db.commit()
+    return _api_response({"goal": _goal_to_frontend(doc)})
+
+
+# ─── Saved Planner View APIs ──────────────────────────────────
+
+@frappe.whitelist()
+def get_overdue_tasks(limit=100):
+    """Tasks with due_date in the past that are not done."""
+    _check_auth()
+    _done = ["done", "completed", "انجام‌شده", "انجام شده", "dropped"]
+    tasks = frappe.get_all(
+        "Task",
+        filters={
+            "user": frappe.session.user,
+            "status": ["not in", _done],
+            "due_date": ["<", today()],
+        },
+        fields="*",
+        limit_page_length=cint(limit),
+    )
+    enriched = [_enrich_task_with_impact(dict(t)) for t in tasks]
+    enriched.sort(key=_impact_sort_key)
+    return _api_response({"tasks": enriched})
+
+
+@frappe.whitelist()
+def get_key_tasks(limit=100):
+    """All key-importance tasks not done."""
+    _check_auth()
+    _done = ["done", "completed", "انجام‌شده", "انجام شده", "dropped"]
+    tasks = frappe.get_all(
+        "Task",
+        filters={
+            "user": frappe.session.user,
+            "status": ["not in", _done],
+            "importance": "کلیدی",
+        },
+        fields="*",
+        limit_page_length=cint(limit),
+    )
+    enriched = [_enrich_task_with_impact(dict(t)) for t in tasks]
+    enriched.sort(key=_impact_sort_key)
+    return _api_response({"tasks": enriched})
+
+
+@frappe.whitelist()
+def get_milestone_tasks(limit=100):
+    """All milestone-importance tasks not done."""
+    _check_auth()
+    _done = ["done", "completed", "انجام‌شده", "انجام شده", "dropped"]
+    tasks = frappe.get_all(
+        "Task",
+        filters={
+            "user": frappe.session.user,
+            "status": ["not in", _done],
+            "importance": "نقطه‌عطف",
+        },
+        fields="*",
+        limit_page_length=cint(limit),
+    )
+    enriched = [_enrich_task_with_impact(dict(t)) for t in tasks]
+    enriched.sort(key=_impact_sort_key)
+    return _api_response({"tasks": enriched})
+
+
+@frappe.whitelist()
+def get_unscheduled_tasks(limit=100):
+    """Open tasks with no scheduled_date and no due_date."""
+    _check_auth()
+    _done = ["done", "completed", "انجام‌شده", "انجام شده", "dropped"]
+    tasks = frappe.get_all(
+        "Task",
+        filters={
+            "user": frappe.session.user,
+            "status": ["not in", _done],
+            "scheduled_date": ["is", "not set"],
+            "due_date": ["is", "not set"],
+        },
+        fields="*",
+        limit_page_length=cint(limit),
+    )
+    enriched = [_enrich_task_with_impact(dict(t)) for t in tasks]
+    enriched.sort(key=_impact_sort_key)
+    return _api_response({"tasks": enriched})
+
+
+@frappe.whitelist()
+def get_blocked_tasks_view(limit=100):
+    """All tasks that have blocked_by dependencies and are not done."""
+    _check_auth()
+    _done = ["done", "completed", "انجام‌شده", "انجام شده", "dropped"]
+    # Get all tasks with blocked_by_json set
+    tasks = frappe.get_all(
+        "Task",
+        filters={
+            "user": frappe.session.user,
+            "status": ["not in", _done],
+            "blocked_by_json": ["is", "set"],
+        },
+        fields="*",
+        limit_page_length=cint(limit),
+    )
+    # Filter to only those with actual incomplete blockers
+    _done_set = _done
+    result = []
+    for t in tasks:
+        blocked = _loads_json(t.blocked_by_json, [])
+        if not blocked:
+            continue
+        has_incomplete = False
+        for dep_id in blocked:
+            dep_status = frappe.db.get_value("Task", dep_id, "status")
+            if dep_status and dep_status not in _done_set:
+                has_incomplete = True
+                break
+        if has_incomplete:
+            result.append(dict(t))
+        else:
+            # All blockers done — mark as resolvable
+            d = dict(t)
+            d["_all_blockers_done"] = True
+            result.append(d)
+    enriched = [_enrich_task_with_impact(t) for t in result]
+    enriched.sort(key=_impact_sort_key)
+    return _api_response({"tasks": enriched})
+
+
+@frappe.whitelist()
+def get_high_impact_tasks(limit=50):
+    """Tasks with highest impact score — for focused execution view."""
+    _check_auth()
+    _done = ["done", "completed", "انجام‌شده", "انجام شده", "dropped"]
+    tasks = frappe.get_all(
+        "Task",
+        filters={
+            "user": frappe.session.user,
+            "status": ["not in", _done],
+        },
+        fields="*",
+        limit_page_length=cint(limit) * 3,  # fetch more, filter by score
+    )
+    enriched = [_enrich_task_with_impact(dict(t)) for t in tasks]
+    enriched.sort(key=_impact_sort_key)
+    # Return top N by impact
+    return _api_response({"tasks": enriched[:cint(limit)]})
+
+
+@frappe.whitelist()
+def get_area_board(area_name):
+    """Get area detail with all projects, tasks, and derived stats."""
+    _check_auth()
+    _require_owner("Hambaft Area", area_name)
+    doc = frappe.get_doc("Hambaft Area", area_name)
+    return _api_response(doc.get_summary())
+
+
+@frappe.whitelist()
+def get_project_detail_with_tasks(project_name):
+    """Get project with full task detail, subprojects, and derived stats."""
+    _check_auth()
+    _require_owner("Hambaft Project", project_name)
+    doc = frappe.get_doc("Hambaft Project", project_name)
+    _done_set = {"done", "completed", "انجام‌شده", "انجام شده"}
+    
+    # Tasks with importance stats
+    tasks = frappe.get_all(
+        "Task",
+        filters={"project": project_name, "user": frappe.session.user},
+        fields="*",
+        order_by="importance asc, priority asc, scheduled_date asc",
+    )
+    
+    total = len(tasks)
+    done = sum(1 for t in tasks if t.status in _done_set)
+    milestones = [t for t in tasks if (t.importance or "عادی") == "نقطه‌عطف"]
+    key_tasks_list = [t for t in tasks if (t.importance or "عادی") == "کلیدی"]
+    
+    # Subprojects
+    subprojects = doc.get_subprojects()
+    blocked_by = doc.get_blocked_by_projects()
+    is_blocked, blocked_reason = doc.is_blocked()
+    
+    # Tracked minutes
+    tracked = doc.actual_minutes or 0
+    
+    # Quality-aware progress
+    quality_progress = doc.compute_progress()
+    
+    return _api_response({
+        "project": _project_to_frontend(doc),
+        "tasks": tasks,
+        "subprojects": subprojects,
+        "blocked_by": blocked_by,
+        "is_blocked": is_blocked,
+        "blocked_reason": blocked_reason,
+        "stats": {
+            "total_tasks": total,
+            "done_tasks": done,
+            "milestone_total": len(milestones),
+            "milestone_done": sum(1 for t in milestones if t.status in _done_set),
+            "key_total": len(key_tasks_list),
+            "key_done": sum(1 for t in key_tasks_list if t.status in _done_set),
+            "tracked_minutes": tracked,
+            "quality_progress": quality_progress,
+            "raw_progress": doc.progress or 0,
+        },
+    })
+
+
+# ─── Quick Add Task with Context-Aware Defaults ──────────────
+
+@frappe.whitelist()
+def quick_add_task(title, project=None, area=None, goal=None, importance=None, context=None, status=None, priority=None, scheduled_date=None, due_date=None):
+    """Create a task quickly with context-aware defaults.
+    
+    Context logic:
+    - If project is given: auto-set area from project, auto-set goal from project's linked goal
+    - If area is given but no project: set default status based on area's active projects
+    - If importance is not given: infer from project contribution type (mandatory → key)
+    - context: optional string like 'planner_today', 'planner_inbox', 'area_board', 'project_detail'
+    - Explicit status/priority/scheduled_date/due_date override context defaults
+    """
+    _check_auth()
+    user = frappe.session.user
+    
+    defaults = {
+        "title": title,
+        "user": user,
+        "status": "inbox",
+        "priority": "متوسط",
+    }
+    
+    # Context-based defaults
+    if context == "planner_today":
+        defaults["status"] = "today"
+        defaults["is_daily_highlight"] = 1
+    elif context == "planner_next":
+        defaults["status"] = "next"
+    elif context == "planner_scheduled":
+        defaults["status"] = "not_started"
+    
+    # Project context: inherit area and goal
+    if project:
+        defaults["project"] = project
+        proj_doc = frappe.get_doc("Hambaft Project", project)
+        if not area and proj_doc.area:
+            defaults["area"] = proj_doc.area
+        if not goal and proj_doc.goal:
+            defaults["goal"] = proj_doc.goal
+        # Infer importance from project's contribution type to its goal
+        if not importance:
+            links = frappe.get_all(
+                "Goal Project Link",
+                filters={"project": project, "parenttype": "Goal"},
+                fields=["contribution_type"],
+                limit=1,
+            )
+            if links and links[0].contribution_type == "اجباری":
+                importance = "کلیدی"
+    
+    if area:
+        defaults["area"] = area
+    if goal:
+        defaults["goal"] = goal
+    if importance:
+        defaults["importance"] = importance
+    
+    # Explicit overrides take precedence
+    if status:
+        defaults["status"] = status
+    if priority:
+        defaults["priority"] = priority
+    if scheduled_date:
+        defaults["scheduled_date"] = scheduled_date
+    if due_date:
+        defaults["due_date"] = due_date
+    
+    # Set scheduled_date for today context
+    if context and "today" in context:
+        defaults["scheduled_date"] = frappe.utils.today()
+    
+    data = _inject_note_blocks(defaults)
+    doc = frappe.new_doc("Task")
+    doc.update(data)
+    doc.user = user
+    doc.insert()
+    frappe.db.commit()
+    
+    result = doc.as_dict()
+    result["noteBlocks"] = _extract_note_blocks(doc)
+    enriched = _enrich_task_with_impact(dict(result))
+    return _api_response({"task": enriched})
+
+
+# ─── One-time Migration Helpers ───────────────────────────────────
+
+@frappe.whitelist()
+def run_task_status_migration():
+    """Migrate old Persian task statuses to English equivalents.
+    
+    Run via: bench --site <site> execute hambaft.hambaft.api.run_task_status_migration
+    Or call as API from browser console (admin only).
+    """
+    if frappe.session.user == "Guest":
+        frappe.throw("Authentication required", frappe.AuthenticationError)
+
+    _STATUS_MAP = {
+        "انجام‌شده": "done",
+        "انجام شده": "done",
+        "در حال انجام": "in_progress",
+        "در_حال_انجام": "in_progress",
+        "انجام‌نشده": "inbox",
+        "انجام نشده": "inbox",
+        "لغو‌شده": "dropped",
+        "لغو شده": "dropped",
+    }
+
+    task_dt = "Task"
+    updated = 0
+    if not frappe.db.exists("DocType", task_dt):
+        return _api_response({"status": "skipped", "reason": "Task DocType not found"})
+
+    for old_status, new_status in _STATUS_MAP.items():
+        names = frappe.get_all(task_dt, filters={"status": old_status}, pluck="name")
+        for name in names:
+            try:
+                frappe.db.set_value(task_dt, name, "status", new_status, update_modified=True)
+                updated += 1
+            except Exception as e:
+                frappe.logger().warning(f"migrate_task_status: failed {name}: {e}")
+
+    frappe.db.commit()
+    return _api_response({"status": "done", "updated": updated})
+
+
+@frappe.whitelist()
+def run_project_tasks_migration():
+    """Migrate child-table tasks (Hambaft Task) into real Task records.
+    Safe to run multiple times — idempotent.
+    """
+    if frappe.session.user == "Guest":
+        frappe.throw("Authentication required", frappe.AuthenticationError)
+
+    # Status mapping: normalize any legacy/local value to a valid Task.status option
+    # Valid Task statuses: inbox, not_started, next, today, in_progress, done, on_hold, someday, dropped,
+    #                      صندوق ورودی, انجام‌شده, انجام‌نشده, در حال انجام, متوقف, شاید
+    _STATUS_FA_TO_EN_LOCAL = {
+        "انجام‌شده": "done", "انجام شده": "done",
+        "در حال انجام": "in_progress", "در_حال_انجام": "in_progress",
+        "انجام‌نشده": "inbox", "انجام نشده": "inbox",
+        "لغو‌شده": "dropped", "لغو شده": "dropped",
+        # Project statuses that leaked into child tasks
+        "فعال": "in_progress", "برنامه‌ریزی": "inbox",
+        "متوقف‌شده": "on_hold", "متوقف شده": "on_hold",
+        "تکمیل‌شده": "done", "تکمیل شده": "done",
+        # English project statuses
+        "active": "in_progress", "planning": "inbox",
+        "paused": "on_hold", "completed": "done",
+        # Other possible values
+        "شروع‌نشده": "not_started", "شروع نشده": "not_started",
+        "در انتظار": "on_hold",
+        "today": "today", "next": "next",
+        "someday": "someday", "on_hold": "on_hold",
+        "in_progress": "in_progress", "done": "done",
+        "inbox": "inbox", "dropped": "dropped",
+        "not_started": "not_started",
+        "صندوق ورودی": "inbox", "متوقف": "on_hold", "شاید": "someday",
+    }
+    _VALID_TASK_STATUSES = {
+        "inbox", "not_started", "next", "today", "in_progress",
+        "done", "on_hold", "someday", "dropped",
+        "صندوق ورودی", "انجام‌شده", "انجام‌نشده", "در حال انجام", "متوقف", "شاید",
+    }
+
+    # Priority mapping: normalize any legacy value to a valid Task.priority option
+    _PRIORITY_MAP = {
+        "زیاد": "بالا",
+        "خیلی زیاد": "فوری",
+        "کم": "پایین",
+        "متوسط": "متوسط",
+        "بالا": "بالا",
+        "پایین": "پایین",
+        "فوری": "فوری",
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "urgent": "urgent",
+    }
+    _VALID_TASK_PRIORITIES = {"low", "medium", "high", "urgent", "پایین", "متوسط", "بالا", "فوری"}
+
+    if not frappe.db.exists("DocType", "Hambaft Task"):
+        return _api_response({"status": "skipped", "reason": "Hambaft Task DocType not found"})
+
+    if not frappe.db.exists("DocType", "Task"):
+        return _api_response({"status": "skipped", "reason": "Task DocType not found"})
+
+    projects = frappe.get_all(
+        "Hambaft Project",
+        fields=["name", "user", "area", "goal"],
+    )
+
+    created = 0
+    skipped = 0
+    errors = []
+
+    for proj in projects:
+        doc = frappe.get_doc("Hambaft Project", proj.name)
+        child_tasks = doc.get("tasks") or []
+
+        if not child_tasks:
+            continue
+
+        for row in child_tasks:
+            title = getattr(row, "title", None)
+            if not title:
+                continue
+
+            status = getattr(row, "status", "inbox") or "inbox"
+            status = _STATUS_FA_TO_EN_LOCAL.get(status, status)
+            # Final safety: if still not valid, default to inbox
+            if status not in _VALID_TASK_STATUSES:
+                status = "inbox"
+
+            # Check if a matching Task already exists
+            existing = frappe.get_all(
+                "Task",
+                filters={
+                    "project": proj.name,
+                    "title": title,
+                    "user": proj.user or frappe.session.user,
+                },
+                fields=["name"],
+                limit=1,
+            )
+
+            if existing:
+                skipped += 1
+                continue
+
+            # Create a real Task record
+            try:
+                task_doc = frappe.new_doc("Task")
+                task_doc.title = title
+                task_doc.description = getattr(row, "description", "") or ""
+                task_doc.project = proj.name
+                task_doc.status = status
+                task_doc.priority = _PRIORITY_MAP.get(
+                    getattr(row, "priority", "متوسط") or "متوسط",
+                    "متوسط"
+                )
+                # Final safety: if priority still not valid, default to متوسط
+                if task_doc.priority not in _VALID_TASK_PRIORITIES:
+                    task_doc.priority = "متوسط"
+                task_doc.user = proj.user or frappe.session.user
+                task_doc.area = proj.area or None
+                task_doc.goal = proj.goal or None
+                task_doc.due_date = getattr(row, "due_date", None) or None
+                task_doc.importance = "عادی"
+                task_doc.insert(ignore_permissions=True)
+                created += 1
+            except Exception as e:
+                errors.append({
+                    "project": proj.name,
+                    "title": title,
+                    "error": str(e),
+                })
+
+    frappe.db.commit()
+    return _api_response({"status": "done", "created": created, "skipped": skipped, "errors": errors})
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PHASE 6: Partner Connection & Social Infrastructure
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _generate_invite_code():
+    import random, string
+    return ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
+
+
+def _user_display_info(user_email):
+    """Get display info for a user by email."""
+    full_name = frappe.db.get_value("User", user_email, "full_name") or user_email
+    user_image = frappe.db.get_value("User", user_email, "user_image") or None
+    # Try to get username
+    username = frappe.db.get_value("User", user_email, "username") or None
+    return {
+        "email": user_email,
+        "full_name": full_name,
+        "username": username,
+        "avatar_url": user_image,
+    }
+
+
+@frappe.whitelist()
+def invite_partner(data):
+    """Send a partner invite by username, email, or generate an invite code."""
+    _check_auth()
+    user = frappe.session.user
+
+    if isinstance(data, str):
+        data = json.loads(data)
+    data = data or {}
+
+    invitee_identifier = (data.get("username") or data.get("email") or "").strip()
+    goal_id = data.get("goal_id")
+    message = data.get("message") or ""
+
+    if not invitee_identifier and not data.get("generate_code"):
+        frappe.throw("Provide a username, email, or request an invite code.")
+
+    # Resolve invitee
+    invitee = None
+    if invitee_identifier:
+        # Try by email first
+        if "@" in invitee_identifier:
+            invitee = frappe.db.get_value("User", {"email": invitee_identifier}, "name")
+        # Try by username
+        if not invitee:
+            invitee = frappe.db.get_value("User", {"username": invitee_identifier}, "name")
+        # Try by full_name (fuzzy)
+        if not invitee:
+            invitee = frappe.db.get_value("User", {"full_name": ["like", f"%{invitee_identifier}%"]}, "name")
+
+        if not invitee and not data.get("generate_code"):
+            frappe.throw(f"User '{invitee_identifier}' not found. You can generate an invite code instead.")
+
+    # Check not inviting self
+    if invitee and invitee == user:
+        frappe.throw("You cannot invite yourself.")
+
+    # Check for existing pending invite
+    if invitee:
+        existing = frappe.db.exists(
+            "Hambaft Partner Invite",
+            {
+                "inviter": user,
+                "invitee": invitee,
+                "status": "در_انتظار",
+            },
+        )
+        if existing:
+            frappe.throw("A pending invite already exists for this user.")
+
+        # Check if already connected
+        conn = frappe.db.sql(
+            """SELECT name FROM `tabHambaft Partner Connection`
+            WHERE status = 'فعال'
+            AND ((user_a = %s AND user_b = %s) OR (user_a = %s AND user_b = %s))
+            LIMIT 1""",
+            (user, invitee, invitee, user),
+        )
+        if conn:
+            frappe.throw("You are already connected with this user.")
+
+    # Validate goal if specified
+    if goal_id:
+        goal_owner = frappe.db.get_value("Hambaft Goal", goal_id, "user")
+        if goal_owner != user:
+            frappe.throw("You can only share your own goals.", frappe.PermissionError)
+
+    # Create invite
+    invite_code = _generate_invite_code()
+    from frappe.utils import now_datetime, add_to_date
+    expires_at = add_to_date(now_datetime(), days=7)
+
+    doc = frappe.new_doc("Hambaft Partner Invite")
+    doc.inviter = user
+    doc.invitee = invitee or ""
+    doc.invitee_username = invitee_identifier or ""
+    doc.invite_code = invite_code
+    doc.status = "در_انتظار"
+    doc.goal = goal_id or ""
+    doc.message = message
+    doc.expires_at = expires_at
+    doc.insert(ignore_permissions=True)
+    frappe.db.commit()
+
+    invite_info = {
+        "invite_id": doc.name,
+        "invite_code": invite_code,
+        "status": doc.status,
+        "expires_at": str(expires_at),
+    }
+
+    if invitee:
+        invite_info["invitee"] = _user_display_info(invitee)
+        # Phase 11: Notify the invitee about the partner invite
+        try:
+            inviter_info = _user_display_info(user)
+            _create_notification(
+                invitee, "partner_invite",
+                title_fa="دعوت پارتنر جدید",
+                body_fa=f"{inviter_info.get('full_name', user)} شما رو به پارتنری دعوت کرده.",
+                icon="🤝",
+                entity_type="Hambaft Partner Invite",
+                entity=doc.name,
+            )
+        except Exception:
+            pass
+
+    return _api_response(invite_info)
+
+
+@frappe.whitelist()
+def accept_partner_invite(data=None):
+    """Accept a partner invite by invite code or invite ID."""
+    _check_auth()
+    user = frappe.session.user
+
+    if isinstance(data, str):
+        data = json.loads(data)
+    data = data or {}
+
+    invite_code = data.get("invite_code")
+    invite_id = data.get("invite_id")
+
+    if not invite_code and not invite_id:
+        frappe.throw("Provide invite_code or invite_id.")
+
+    # Find the invite
+    if invite_code:
+        invite_name = frappe.db.get_value("Hambaft Partner Invite", {"invite_code": invite_code, "status": "در_انتظار"})
+    else:
+        invite_name = frappe.db.get_value("Hambaft Partner Invite", {"name": invite_id, "status": "در_انتظار"})
+
+    if not invite_name:
+        frappe.throw("Invite not found or no longer pending.")
+
+    invite_doc = frappe.get_doc("Hambaft Partner Invite", invite_name)
+
+    # Check if invite is for a specific user
+    if invite_doc.invitee and invite_doc.invitee != user:
+        frappe.throw("This invite was sent to another user.")
+
+    # Check expiry
+    from frappe.utils import now_datetime
+    if invite_doc.expires_at and now_datetime() > get_datetime(invite_doc.expires_at):
+        invite_doc.status = "منقضی‌شده"
+        invite_doc.save(ignore_permissions=True)
+        frappe.db.commit()
+        frappe.throw("This invite has expired.")
+
+    # Check not already connected
+    inviter = invite_doc.inviter
+    conn = frappe.db.sql(
+        """SELECT name FROM `tabHambaft Partner Connection`
+        WHERE status = 'فعال'
+        AND ((user_a = %s AND user_b = %s) OR (user_a = %s AND user_b = %s))
+        LIMIT 1""",
+        (inviter, user, user, inviter),
+    )
+    if conn:
+        frappe.throw("You are already connected with this user.")
+
+    # Create partner connection
+    import datetime
+    conn_doc = frappe.new_doc("Hambaft Partner Connection")
+    conn_doc.user_a = inviter
+    conn_doc.user_b = user
+    conn_doc.status = "فعال"
+    conn_doc.connected_since = datetime.date.today()
+    conn_doc.notes = invite_doc.message or ""
+    conn_doc.insert(ignore_permissions=True)
+
+    # Update invite
+    invite_doc.status = "پذیرفته‌شده"
+    invite_doc.responded_at = now_datetime()
+    invite_doc.save(ignore_permissions=True)
+
+    # If there's a goal, add the new user as a goal member
+    if invite_doc.goal:
+        goal = frappe.get_doc("Hambaft Goal", invite_doc.goal)
+        # Update goal privacy to shared
+        if goal.privacy == "خصوصی":
+            goal.privacy = "اشتراکی"
+        # Add member
+        existing_member = frappe.db.exists("Hambaft Goal Member", {
+            "goal": invite_doc.goal,
+            "user": user,
+            "status": "فعال",
+        })
+        if not existing_member:
+            goal_member = frappe.new_doc("Hambaft Goal Member")
+            goal_member.goal = invite_doc.goal
+            goal_member.user = user
+            goal_member.role = "پارتنر"
+            goal_member.status = "فعال"
+            goal_member.joined_at = datetime.date.today()
+            goal_member.insert(ignore_permissions=True)
+
+        # Also ensure owner is a member
+        owner_member = frappe.db.exists("Hambaft Goal Member", {
+            "goal": invite_doc.goal,
+            "user": inviter,
+            "status": "فعال",
+        })
+        if not owner_member:
+            goal_member = frappe.new_doc("Hambaft Goal Member")
+            goal_member.goal = invite_doc.goal
+            goal_member.user = inviter
+            goal_member.role = "مالک"
+            goal_member.status = "فعال"
+            goal_member.joined_at = datetime.date.today()
+            goal_member.insert(ignore_permissions=True)
+
+    frappe.db.commit()
+
+    # Phase 11: Notify the inviter that their invite was accepted
+    try:
+        accepter_info = _user_display_info(user)
+        _create_notification(
+            inviter, "partner_accepted",
+            title_fa="پارتنر شما پذیرفت!",
+            body_fa=f"{accepter_info.get('full_name', user)} دعوت پارتنری شما رو پذیرفت.",
+            icon="✅",
+            entity_type="Hambaft Partner Connection",
+            entity=conn_doc.name,
+        )
+    except Exception:
+        pass
+
+    return _api_response({
+        "connection_id": conn_doc.name,
+        "partner": _user_display_info(inviter),
+        "goal_shared": invite_doc.goal or None,
+        "status": "connected",
+    })
+
+
+@frappe.whitelist()
+def reject_partner_invite(data=None):
+    """Reject a partner invite."""
+    _check_auth()
+    user = frappe.session.user
+
+    if isinstance(data, str):
+        data = json.loads(data)
+    data = data or {}
+
+    invite_id = data.get("invite_id")
+    invite_code = data.get("invite_code")
+
+    if not invite_id and not invite_code:
+        frappe.throw("Provide invite_id or invite_code.")
+
+    if invite_code:
+        invite_name = frappe.db.get_value("Hambaft Partner Invite", {"invite_code": invite_code, "status": "در_انتظار"})
+    else:
+        invite_name = invite_id
+
+    if not invite_name:
+        frappe.throw("Invite not found or no longer pending.")
+
+    invite_doc = frappe.get_doc("Hambaft Partner Invite", invite_name)
+
+    if invite_doc.invitee and invite_doc.invitee != user:
+        frappe.throw("This invite was not sent to you.")
+
+    from frappe.utils import now_datetime
+    invite_doc.status = "ردشده"
+    invite_doc.responded_at = now_datetime()
+    invite_doc.save(ignore_permissions=True)
+    frappe.db.commit()
+
+    return _api_response({"status": "rejected"})
+
+
+@frappe.whitelist()
+def cancel_partner_invite(invite_id=None):
+    """Cancel a partner invite you sent."""
+    _check_auth()
+    user = frappe.session.user
+
+    if not invite_id:
+        frappe.throw("Provide invite_id.")
+
+    invite_doc = frappe.get_doc("Hambaft Partner Invite", invite_id)
+
+    if invite_doc.inviter != user:
+        frappe.throw("You can only cancel your own invites.")
+
+    if invite_doc.status != "در_انتظار":
+        frappe.throw("Only pending invites can be cancelled.")
+
+    invite_doc.status = "cancelled"
+    invite_doc.save(ignore_permissions=True)
+    frappe.db.commit()
+
+    return _api_response({"status": "cancelled"})
+
+
+@frappe.whitelist()
+def get_partner_invites():
+    """Get all partner invites for the current user (sent and received)."""
+    _check_auth()
+    user = frappe.session.user
+
+    # Invites I sent
+    sent = frappe.get_all(
+        "Hambaft Partner Invite",
+        filters={"inviter": user},
+        fields=["name", "invitee", "invitee_username", "invite_code", "status", "goal", "message", "expires_at", "creation"],
+        order_by="creation desc",
+    )
+    for inv in sent:
+        if inv.invitee:
+            inv["invitee_info"] = _user_display_info(inv.invitee)
+
+    # Invites I received
+    received = frappe.get_all(
+        "Hambaft Partner Invite",
+        filters={"invitee": user, "status": "در_انتظار"},
+        fields=["name", "inviter", "invite_code", "status", "goal", "message", "expires_at", "creation"],
+        order_by="creation desc",
+    )
+    for inv in received:
+        inv["inviter_info"] = _user_display_info(inv.inviter)
+
+    return _api_response({"sent": sent, "received": received})
+
+
+@frappe.whitelist()
+def get_partners():
+    """Get all active partner connections for the current user."""
+    _check_auth()
+    user = frappe.session.user
+
+    connections = frappe.db.sql(
+        """SELECT name, user_a, user_b, connected_since, notes
+        FROM `tabHambaft Partner Connection`
+        WHERE status = 'فعال' AND (user_a = %s OR user_b = %s)
+        ORDER BY connected_since DESC""",
+        (user, user),
+        as_dict=True,
+    )
+
+    partners = []
+    for conn in connections:
+        partner_email = conn.user_b if conn.user_a == user else conn.user_a
+        info = _user_display_info(partner_email)
+
+        # Count shared goals
+        shared_goals = frappe.db.sql(
+            """SELECT COUNT(DISTINCT gm.goal) as cnt
+            FROM `tabHambaft Goal Member` gm
+            WHERE gm.user = %s AND gm.status = 'فعال'
+            AND gm.goal IN (
+                SELECT gm2.goal FROM `tabHambaft Goal Member` gm2
+                WHERE gm2.user = %s AND gm2.status = 'فعال'
+            )""",
+            (user, partner_email),
+            as_dict=True,
+        )
+        shared_count = shared_goals[0].cnt if shared_goals else 0
+
+        partners.append({
+            "connection_id": conn.name,
+            "partner": info,
+            "connected_since": str(conn.connected_since) if conn.connected_since else None,
+            "notes": conn.notes or "",
+            "shared_goals_count": shared_count,
+        })
+
+    return _api_response({"partners": partners})
+
+
+@frappe.whitelist()
+def remove_partner(connection_id=None):
+    """Remove a partner connection."""
+    _check_auth()
+    user = frappe.session.user
+
+    if not connection_id:
+        frappe.throw("Provide connection_id.")
+
+    conn_doc = frappe.get_doc("Hambaft Partner Connection", connection_id)
+
+    if conn_doc.user_a != user and conn_doc.user_b != user:
+        frappe.throw("You can only remove your own connections.")
+
+    conn_doc.status = "حذف‌شده"
+    conn_doc.save(ignore_permissions=True)
+
+    # Optionally remove goal memberships for this pair
+    partner_email = conn_doc.user_b if conn_doc.user_a == user else conn_doc.user_a
+
+    # Remove active goal memberships between these two users
+    my_goals = frappe.get_all("Hambaft Goal Member", filters={"user": user, "status": "فعال"}, fields=["goal"])
+    for mg in my_goals:
+        partner_membership = frappe.db.exists("Hambaft Goal Member", {
+            "goal": mg.goal,
+            "user": partner_email,
+            "status": "فعال",
+        })
+        if partner_membership:
+            frappe.db.set_value("Hambaft Goal Member", partner_membership, "status", "حذف‌شده")
+
+    frappe.db.commit()
+
+    return _api_response({"status": "removed"})
+
+
+@frappe.whitelist()
+def share_goal_with_partner(data=None):
+    """Share an existing goal with a partner connection."""
+    _check_auth()
+    user = frappe.session.user
+
+    if isinstance(data, str):
+        data = json.loads(data)
+    data = data or {}
+
+    goal_id = data.get("goal_id")
+    partner_email = data.get("partner_email") or data.get("partner_id")
+
+    if not goal_id or not partner_email:
+        frappe.throw("goal_id and partner_email are required.")
+
+    # Verify goal ownership
+    goal_owner = frappe.db.get_value("Hambaft Goal", goal_id, "user")
+    if goal_owner != user:
+        frappe.throw("Only the goal owner can share it.", frappe.PermissionError)
+
+    # Verify active partner connection
+    conn = frappe.db.sql(
+        """SELECT name FROM `tabHambaft Partner Connection`
+        WHERE status = 'فعال'
+        AND ((user_a = %s AND user_b = %s) OR (user_a = %s AND user_b = %s))
+        LIMIT 1""",
+        (user, partner_email, partner_email, user),
+    )
+    if not conn:
+        frappe.throw("No active partner connection found with this user.")
+
+    # Check not already shared
+    existing = frappe.db.exists("Hambaft Goal Member", {
+        "goal": goal_id,
+        "user": partner_email,
+        "status": "فعال",
+    })
+    if existing:
+        frappe.throw("This goal is already shared with this partner.")
+
+    # Add partner as goal member
+    import datetime
+    gm = frappe.new_doc("Hambaft Goal Member")
+    gm.goal = goal_id
+    gm.user = partner_email
+    gm.role = "پارتنر"
+    gm.status = "فعال"
+    gm.joined_at = datetime.date.today()
+    gm.insert(ignore_permissions=True)
+
+    # Ensure owner is also a member
+    owner_member = frappe.db.exists("Hambaft Goal Member", {
+        "goal": goal_id,
+        "user": user,
+        "status": "فعال",
+    })
+    if not owner_member:
+        gm_owner = frappe.new_doc("Hambaft Goal Member")
+        gm_owner.goal = goal_id
+        gm_owner.user = user
+        gm_owner.role = "مالک"
+        gm_owner.status = "فعال"
+        gm_owner.joined_at = datetime.date.today()
+        gm_owner.insert(ignore_permissions=True)
+
+    # Update goal privacy to shared
+    frappe.db.set_value("Hambaft Goal", goal_id, "privacy", "اشتراکی")
+
+    frappe.db.commit()
+
+    return _api_response({
+        "status": "shared",
+        "goal_id": goal_id,
+        "partner": _user_display_info(partner_email),
+    })
+
+
+@frappe.whitelist()
+def get_goal_members(goal_id=None):
+    """Get all active members of a goal."""
+    _check_auth()
+    user = frappe.session.user
+
+    if not goal_id:
+        frappe.throw("goal_id is required.")
+
+    # Check access: owner or member
+    goal = frappe.get_doc("Hambaft Goal", goal_id)
+    is_owner = goal.user == user
+    is_member = frappe.db.exists("Hambaft Goal Member", {"goal": goal_id, "user": user, "status": "فعال"})
+
+    if not is_owner and not is_member:
+        frappe.throw("You do not have access to this goal.", frappe.PermissionError)
+
+    members = frappe.get_all(
+        "Hambaft Goal Member",
+        filters={"goal": goal_id, "status": "فعال"},
+        fields=["name", "user", "role", "joined_at"],
+    )
+
+    result = []
+    for m in members:
+        info = _user_display_info(m.user)
+        result.append({
+            "membership_id": m.name,
+            "user": info,
+            "role": m.role,
+            "joined_at": str(m.joined_at) if m.joined_at else None,
+        })
+
+    # Also include owner if not already in members
+    owner_in_members = any(m["user"]["email"] == goal.user for m in result)
+    if not owner_in_members:
+        result.insert(0, {
+            "membership_id": None,
+            "user": _user_display_info(goal.user),
+            "role": "مالک",
+            "joined_at": str(goal.start_date) if goal.start_date else None,
+        })
+
+    return _api_response({"members": result})
+
+
+@frappe.whitelist()
+def get_shared_goals():
+    """Get all goals shared with the current user (where user is a member but not owner)."""
+    _check_auth()
+    user = frappe.session.user
+
+    memberships = frappe.get_all(
+        "Hambaft Goal Member",
+        filters={"user": user, "status": "فعال"},
+        fields=["goal", "role"],
+    )
+
+    shared_goals = []
+    for m in memberships:
+        goal_doc = frappe.get_doc("Hambaft Goal", m.goal)
+        if goal_doc.user != user or m.role != "مالک":
+            goal_data = _goal_to_frontend(goal_doc)
+            goal_data["my_role"] = m.role
+            goal_data["owner"] = _user_display_info(goal_doc.user)
+            shared_goals.append(goal_data)
+
+    return _api_response({"shared_goals": shared_goals})
+
+
+@frappe.whitelist()
+def remove_goal_member(data=None):
+    """Remove a member from a shared goal. Only owner can do this."""
+    _check_auth()
+    user = frappe.session.user
+
+    if isinstance(data, str):
+        data = json.loads(data)
+    data = data or {}
+
+    goal_id = data.get("goal_id")
+    member_email = data.get("member_email")
+
+    if not goal_id or not member_email:
+        frappe.throw("goal_id and member_email are required.")
+
+    # Verify ownership
+    goal_owner = frappe.db.get_value("Hambaft Goal", goal_id, "user")
+    if goal_owner != user:
+        frappe.throw("Only the goal owner can remove members.", frappe.PermissionError)
+
+    # Find and deactivate membership
+    membership = frappe.db.get_value("Hambaft Goal Member", {
+        "goal": goal_id,
+        "user": member_email,
+        "status": "فعال",
+    })
+
+    if not membership:
+        frappe.throw("Active membership not found.")
+
+    frappe.db.set_value("Hambaft Goal Member", membership, "status", "حذف‌شده")
+    frappe.db.commit()
+
+    return _api_response({"status": "removed"})
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PHASE 7: Comments & Reactions
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@frappe.whitelist()
+def add_comment(data=None):
+    """Add a comment on an entity (goal, task, etc.)."""
+    _check_auth()
+    user = frappe.session.user
+
+    if isinstance(data, str):
+        data = json.loads(data)
+    data = data or {}
+
+    entity_type = data.get("entity_type")
+    entity = data.get("entity")
+    body = (data.get("body") or "").strip()
+
+    if not entity_type or not entity or not body:
+        frappe.throw("entity_type, entity, and body are required.")
+
+    # Validate entity exists and user has access
+    _validate_entity_access(entity_type, entity, user)
+
+    doc = frappe.new_doc("Hambaft Comment")
+    doc.entity_type = entity_type
+    doc.entity = entity
+    doc.user = user
+    doc.body = body
+    doc.status = "فعال"
+    doc.insert(ignore_permissions=True)
+    frappe.db.commit()
+
+    # Phase 10: Update daily challenge progress for comments
+    try:
+        _update_challenge_progress(user, "add_comment")
+    except Exception:
+        pass
+
+    return _api_response({
+        "comment_id": doc.name,
+        "user_info": _user_display_info(user),
+        "body": body,
+        "created_at": str(doc.creation),
+        "gamification": {"points_added": 0},  # Comments don't award points directly; badge check happens periodically
+    })
+
+
+@frappe.whitelist()
+def get_comments(entity_type=None, entity=None, limit=50, offset=0):
+    """Get comments for an entity."""
+    _check_auth()
+    user = frappe.session.user
+
+    if not entity_type or not entity:
+        frappe.throw("entity_type and entity are required.")
+
+    _validate_entity_access(entity_type, entity, user, read_only=True)
+
+    comments = frappe.get_all(
+        "Hambaft Comment",
+        filters={"entity_type": entity_type, "entity": entity, "status": "فعال"},
+        fields=["name", "user", "body", "status", "creation"],
+        order_by="creation asc",
+        limit_page_length=cint(limit),
+        start=cint(offset),
+    )
+
+    result = []
+    for c in comments:
+        info = _user_display_info(c.user)
+        result.append({
+            "id": c.name,
+            "user_info": info,
+            "body": c.body,
+            "created_at": str(c.creation),
+        })
+
+    return _api_response({"comments": result})
+
+
+@frappe.whitelist()
+def delete_comment(comment_id=None):
+    """Delete your own comment."""
+    _check_auth()
+    user = frappe.session.user
+
+    if not comment_id:
+        frappe.throw("comment_id is required.")
+
+    comment_doc = frappe.get_doc("Hambaft Comment", comment_id)
+    if comment_doc.user != user:
+        frappe.throw("You can only delete your own comments.", frappe.PermissionError)
+
+    comment_doc.status = "حذف‌شده"
+    comment_doc.save(ignore_permissions=True)
+    frappe.db.commit()
+
+    return _api_response({"status": "deleted"})
+
+
+@frappe.whitelist()
+def toggle_reaction(data=None):
+    """Toggle an emoji reaction on an entity. If exists, remove it. If not, add it."""
+    _check_auth()
+    user = frappe.session.user
+
+    if isinstance(data, str):
+        data = json.loads(data)
+    data = data or {}
+
+    entity_type = data.get("entity_type")
+    entity = data.get("entity")
+    emoji = data.get("emoji")
+
+    if not entity_type or not entity or not emoji:
+        frappe.throw("entity_type, entity, and emoji are required.")
+
+    _validate_entity_access(entity_type, entity, user)
+
+    # Check if reaction exists
+    existing = frappe.db.exists(
+        "Hambaft Reaction",
+        {
+            "entity_type": entity_type,
+            "entity": entity,
+            "user": user,
+            "emoji": emoji,
+        },
+    )
+
+    if existing:
+        # Remove reaction
+        frappe.delete_doc("Hambaft Reaction", existing, ignore_permissions=True, force=True)
+        frappe.db.commit()
+        return _api_response({"status": "removed", "emoji": emoji})
+    else:
+        # Add reaction
+        doc = frappe.new_doc("Hambaft Reaction")
+        doc.entity_type = entity_type
+        doc.entity = entity
+        doc.user = user
+        doc.emoji = emoji
+        doc.insert(ignore_permissions=True)
+        frappe.db.commit()
+
+        # Phase 11: Notify entity owner about the reaction
+        try:
+            # Find owner of the entity
+            if entity_type == "goal":
+                owner = frappe.db.get_value("Hambaft Goal", entity, "user")
+            elif entity_type == "task":
+                owner = frappe.db.get_value("Task", entity, "owner")
+            elif entity_type == "project":
+                owner = frappe.db.get_value("Hambaft Project", entity, "owner")
+            else:
+                owner = None
+            if owner and owner != user:
+                reactor_info = _user_display_info(user)
+                _create_notification(
+                    owner, "reaction_received",
+                    title_fa="واکنش جدید به محتوایت",
+                    body_fa=f"{reactor_info.get('full_name', user)} با {emoji} واکنش نشون داد.",
+                    icon=emoji,
+                    entity_type=entity_type,
+                    entity=entity,
+                )
+        except Exception:
+            pass
+
+        return _api_response({"status": "added", "emoji": emoji})
+
+
+@frappe.whitelist()
+def get_reactions(entity_type=None, entity=None):
+    """Get all reactions for an entity, grouped by emoji."""
+    _check_auth()
+    user = frappe.session.user
+
+    if not entity_type or not entity:
+        frappe.throw("entity_type and entity are required.")
+
+    _validate_entity_access(entity_type, entity, user, read_only=True)
+
+    reactions = frappe.get_all(
+        "Hambaft Reaction",
+        filters={"entity_type": entity_type, "entity": entity},
+        fields=["name", "user", "emoji", "creation"],
+    )
+
+    # Group by emoji
+    grouped = {}
+    for r in reactions:
+        emoji = r.emoji
+        if emoji not in grouped:
+            grouped[emoji] = {"emoji": emoji, "count": 0, "users": [], "my_reaction": False}
+        info = _user_display_info(r.user)
+        grouped[emoji]["count"] += 1
+        grouped[emoji]["users"].append(info)
+        if r.user == user:
+            grouped[emoji]["my_reaction"] = True
+
+    return _api_response({"reactions": list(grouped.values())})
+
+
+def _validate_entity_access(entity_type, entity, user, read_only=False):
+    """Validate that the user has access to the entity."""
+    doctype_map = {
+        "goal": "Hambaft Goal",
+        "project": "Hambaft Project",
+        "task": "Hambaft Task",
+        "occasion": "Hambaft Occasion",
+        "document": "Hambaft Document",
+        "finance": "Hambaft Finance Entry",
+        "journal_entry": "Hambaft Daily Journal",
+        "comment": "Hambaft Comment",
+    }
+
+    target_dt = doctype_map.get(entity_type)
+    if not target_dt:
+        frappe.throw(f"Unsupported entity type: {entity_type}")
+
+    if not frappe.db.exists(target_dt, entity):
+        frappe.throw(f"{target_dt} '{entity}' does not exist.")
+
+    # For goals: owner or member can access shared goals
+    if entity_type == "goal":
+        goal_owner = frappe.db.get_value("Hambaft Goal", entity, "user")
+        if goal_owner == user:
+            return
+        # Check membership
+        is_member = frappe.db.exists("Hambaft Goal Member", {
+            "goal": entity, "user": user, "status": "فعال"
+        })
+        if is_member:
+            return
+        # Check privacy — public goals are readable
+        privacy = frappe.db.get_value("Hambaft Goal", entity, "privacy") or "خصوصی"
+        if privacy != "خصوصی" and read_only:
+            return
+        frappe.throw("You do not have access to this goal.", frappe.PermissionError)
+
+    # For other entity types: owner check
+    if not read_only:
+        owner = frappe.db.get_value(target_dt, entity, "user")
+        if owner and owner != user:
+            # Allow if they share a goal
+            frappe.throw("You do not have permission to modify this.", frappe.PermissionError)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PHASE 8: Proof Uploads (Photo/Video)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@frappe.whitelist()
+def upload_proof(data=None):
+    """Upload a photo/video proof for a task or goal.
+    Accepts base64 file data and creates both a Frappe File and a Proof Upload record.
+    """
+    _check_auth()
+    user = frappe.session.user
+
+    if isinstance(data, str):
+        data = json.loads(data)
+    data = data or {}
+
+    entity_type = data.get("entity_type")  # task, goal, habit, challenge
+    entity = data.get("entity")
+    media_type = data.get("media_type") or "photo"  # photo, video, text
+    filedata = data.get("filedata")  # base64 encoded
+    filename = data.get("filename") or f"proof_{entity_type}_{entity}"
+    caption = data.get("caption") or ""
+    reflection = data.get("reflection") or ""
+    visibility = data.get("visibility") or "اشتراکی"
+
+    if not entity_type or not entity:
+        frappe.throw("entity_type and entity are required.")
+
+    # Validate entity access
+    _validate_entity_access(entity_type, entity, user)
+
+    file_url = None
+    file_name_stored = None
+    file_size = 0
+
+    # Upload file if provided
+    if filedata and media_type in ("photo", "video"):
+        import base64 as b64
+
+        if "," in filedata:
+            filedata = filedata.split(",")[1]
+
+        try:
+            decoded = b64.b64decode(filedata)
+            file_size = len(decoded)
+        except Exception:
+            frappe.throw("Invalid file data. Please provide a valid base64-encoded file.")
+
+        # Max size check: 10MB for images, 100MB for videos
+        max_size = 100 * 1024 * 1024 if media_type == "video" else 10 * 1024 * 1024
+        if file_size > max_size:
+            max_mb = int(max_size / (1024 * 1024))
+            frappe.throw(f"File too large. Maximum size for {media_type} is {max_mb}MB.")
+
+        # Determine extension
+        ext = ".jpg"
+        if media_type == "video":
+            ext = ".mp4"
+        elif filename.endswith(".png"):
+            ext = ".png"
+        elif filename.endswith(".heic"):
+            ext = ".heic"
+        elif filename.endswith(".webp"):
+            ext = ".webp"
+
+        # Upload to Frappe File
+        doctype_map = {
+            "task": "Hambaft Task",
+            "goal": "Hambaft Goal",
+            "habit": "Hambaft Habit",
+            "challenge": "Hambaft Daily Challenge",
+        }
+        attach_doctype = doctype_map.get(entity_type, "")
+        safe_filename = f"{user}_{entity_type}_{entity}_{frappe.generate_hash(length=6)}{ext}"
+
+        from frappe.handler import upload_file as _frappe_upload
+        file_doc = frappe.get_doc({
+            "doctype": "File",
+            "file_name": safe_filename,
+            "content": decoded,
+            "is_private": 1,
+            "attached_to_doctype": attach_doctype,
+            "attached_to_name": entity,
+            "folder": "Home/Attachments",
+        })
+        file_doc.insert(ignore_permissions=True)
+        frappe.db.commit()
+
+        file_url = file_doc.file_url
+        file_name_stored = file_doc.name
+        file_size = file_doc.file_size or file_size
+
+    # Create proof record
+    proof = frappe.new_doc("Hambaft Proof Upload")
+    proof.user = user
+    proof.entity_type = entity_type
+    proof.entity = entity
+    proof.media_type = media_type
+    proof.file_url = file_url or ""
+    proof.file_name = file_name_stored or ""
+    proof.file_size = file_size
+    proof.caption = caption
+    proof.reflection = reflection
+    proof.visibility = visibility
+    proof.status = "فعال"
+    proof.insert(ignore_permissions=True)
+    frappe.db.commit()
+
+    # Phase 9: Award points for proof upload
+    gamification_result = {}
+    try:
+        gamification_result = _award_points(
+            user, 15, "proof_uploaded",
+            entity_type="Hambaft Proof Upload", entity=proof.name,
+            description="اثبات آپلود شد"
+        )
+        # Phase 10: Update daily challenge progress
+        _update_challenge_progress(user, "upload_proof")
+        # Creativity challenge: proof with reflection
+        if reflection and len(reflection.strip()) >= 50:
+            _update_challenge_progress(user, "creativity")
+    except Exception:
+        gamification_result = {}
+
+    return _api_response({
+        "proof_id": proof.name,
+        "media_type": media_type,
+        "file_url": file_url,
+        "caption": caption,
+        "reflection": reflection,
+        "created_at": str(proof.creation),
+        "gamification": gamification_result,
+    })
+
+
+@frappe.whitelist()
+def get_proofs(entity_type=None, entity=None, limit=50, offset=0):
+    """Get proof uploads for an entity."""
+    _check_auth()
+    user = frappe.session.user
+
+    if not entity_type or not entity:
+        frappe.throw("entity_type and entity are required.")
+
+    try:
+        _validate_entity_access(entity_type, entity, user, read_only=True)
+    except Exception:
+        # Even if strict access check fails, allow viewing own proofs
+        pass
+
+    proofs = frappe.get_all(
+        "Hambaft Proof Upload",
+        filters={
+            "entity_type": entity_type,
+            "entity": entity,
+            "status": "فعال",
+        },
+        fields=["name", "user", "media_type", "file_url", "caption", "reflection",
+                 "visibility", "creation"],
+        order_by="creation desc",
+        limit_page_length=cint(limit),
+        start=cint(offset),
+    )
+
+    result = []
+    for p in proofs:
+        # Check visibility: private only visible to owner
+        if p.visibility == "خصوصی" and p.user != user:
+            continue
+        info = _user_display_info(p.user)
+        result.append({
+            "id": p.name,
+            "user_info": info,
+            "media_type": p.media_type,
+            "file_url": p.file_url,
+            "caption": p.caption or "",
+            "reflection": p.reflection or "",
+            "visibility": p.visibility,
+            "created_at": str(p.creation),
+            "is_mine": p.user == user,
+        })
+
+    return _api_response({"proofs": result})
+
+
+@frappe.whitelist()
+def delete_proof(proof_id=None):
+    """Delete a proof upload (only own proofs)."""
+    _check_auth()
+    user = frappe.session.user
+
+    if not proof_id:
+        frappe.throw("proof_id is required.")
+
+    proof_doc = frappe.get_doc("Hambaft Proof Upload", proof_id)
+    if proof_doc.user != user:
+        frappe.throw("You can only delete your own proof uploads.", frappe.PermissionError)
+
+    # Also remove the associated file
+    if proof_doc.file_name:
+        try:
+            frappe.delete_doc("File", proof_doc.file_name, ignore_permissions=True, force=True)
+        except Exception:
+            pass
+
+    proof_doc.status = "حذف‌شده"
+    proof_doc.save(ignore_permissions=True)
+    frappe.db.commit()
+
+    return _api_response({"status": "deleted"})
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Phase 9: Gamification — Points, Levels, Badges
+# ═══════════════════════════════════════════════════════════════════
+
+# --- Internal helpers (not whitelisted) ---
+
+_LEVEL_THRESHOLDS = [0, 100, 250, 500, 1000]
+# From Level 5 onwards: next = prev * 1.5 rounded
+def _level_for_points(total_points):
+    """Calculate the level for a given total points value."""
+    if total_points < _LEVEL_THRESHOLDS[1]:
+        return 1
+    for i in range(1, len(_LEVEL_THRESHOLDS)):
+        if total_points < _LEVEL_THRESHOLDS[i]:
+            return i
+    # Beyond pre-defined thresholds — use formula
+    level = len(_LEVEL_THRESHOLDS)
+    threshold = _LEVEL_THRESHOLDS[-1]
+    while total_points >= threshold:
+        threshold = round(threshold * 1.5)
+        level += 1
+    return level - 1
+
+
+def _points_for_next_level(current_level):
+    """Return the points needed to reach the next level."""
+    if current_level < len(_LEVEL_THRESHOLDS):
+        return _LEVEL_THRESHOLDS[current_level]
+    threshold = _LEVEL_THRESHOLDS[-1]
+    lvl = len(_LEVEL_THRESHOLDS)
+    while lvl <= current_level:
+        threshold = round(threshold * 1.5)
+        lvl += 1
+    return threshold
+
+
+def _get_or_create_profile(user):
+    """Get or create the Hambaft Profile for a user."""
+    profile_name = frappe.db.get_value("Hambaft Profile", {"user": user}, "name")
+    if profile_name:
+        return frappe.get_doc("Hambaft Profile", profile_name)
+    profile = frappe.new_doc("Hambaft Profile")
+    profile.user = user
+    profile.signup_date = now_datetime()
+    profile.total_points = 0
+    profile.level = 1
+    profile.current_streak_days = 0
+    profile.best_streak_days = 0
+    profile.insert(ignore_permissions=True)
+    frappe.db.commit()
+    return profile
+
+
+def _award_points(user, amount, reason, entity_type=None, entity=None, description=None):
+    """Award points to a user. Updates profile and checks level-up + badge conditions.
+
+    Returns dict with points_added, total_points, level, level_up, new_badges.
+    """
+    if amount <= 0:
+        return {"points_added": 0, "total_points": 0, "level": 1, "level_up": False, "new_badges": []}
+
+    profile = _get_or_create_profile(user)
+    old_level = profile.level or 1
+
+    # Create point transaction
+    pt = frappe.new_doc("Hambaft Point Transaction")
+    pt.user = user
+    pt.points = amount
+    pt.reason = reason
+    if entity_type:
+        pt.entity_type = entity_type
+    if entity:
+        pt.entity = entity
+    if description:
+        pt.description = description
+    pt.insert(ignore_permissions=True)
+
+    # Update profile
+    profile.total_points = (profile.total_points or 0) + amount
+    new_level = _level_for_points(profile.total_points)
+    profile.level = new_level
+    profile.save(ignore_permissions=True)
+    frappe.db.commit()
+
+    level_up = new_level > old_level
+
+    # Check badges
+    new_badges = _check_and_award_badges(user)
+
+    # Update daily streak
+    _update_daily_streak(user)
+
+    # Phase 11: Create notifications for level-up and badges
+    try:
+        if level_up:
+            _create_notification(
+                user, "level_up",
+                title_fa=f"سطح {new_level} رسیدی!",
+                body_fa=f"آفرین! به سطح {new_level} ارتقا پیدا کردی.",
+                icon="🎉",
+            )
+        for b in new_badges:
+            _create_notification(
+                user, "badge_earned",
+                title_fa=f"نشان «{b.get('badge_name_fa', b.get('badge_name', ''))}» کسب شد!",
+                body_fa=f"نشان {b.get('rarity', '')} شما رو اهدا کردیم.",
+                icon=b.get("icon", "🏆"),
+                entity_type="Hambaft Badge",
+                entity=b.get("badge_id", ""),
+            )
+    except Exception:
+        pass
+
+    return {
+        "points_added": amount,
+        "total_points": profile.total_points,
+        "level": new_level,
+        "level_up": level_up,
+        "new_badges": new_badges,
+    }
+
+
+def _update_daily_streak(user):
+    """Update the daily activity streak for a user based on point transactions."""
+    profile = _get_or_create_profile(user)
+    today_dt = getdate()
+
+    # Check last active date
+    last_active = getdate(profile.last_active_date) if profile.last_active_date else None
+
+    if last_active is None:
+        # First activity ever
+        profile.current_streak_days = 1
+    elif last_active == today_dt:
+        # Already active today, no streak change
+        pass
+    elif (today_dt - last_active).days == 1:
+        # Consecutive day
+        profile.current_streak_days = (profile.current_streak_days or 0) + 1
+    else:
+        # Streak broken
+        profile.current_streak_days = 1
+
+    profile.last_active_date = today_dt
+    if (profile.current_streak_days or 0) > (profile.best_streak_days or 0):
+        profile.best_streak_days = profile.current_streak_days
+
+    profile.save(ignore_permissions=True)
+    frappe.db.commit()
+
+
+def _check_and_award_badges(user):
+    """Check all active badges against user's stats and award any new ones.
+
+    Returns list of newly awarded badge dicts.
+    """
+    newly_awarded = []
+
+    badges = frappe.get_all(
+        "Hambaft Badge",
+        filters={"active": 1},
+        fields=["name", "badge_name", "badge_name_fa", "icon", "criteria_type", "criteria_value", "points_awarded", "rarity"],
+    )
+
+    for badge in badges:
+        # Already earned?
+        if frappe.db.exists("Hambaft User Badge", {"user": user, "badge": badge.name}):
+            continue
+
+        # Check criteria
+        if _user_meets_criteria(user, badge.criteria_type, badge.criteria_value):
+            # Award badge
+            ub = frappe.new_doc("Hambaft User Badge")
+            ub.user = user
+            ub.badge = badge.name
+            ub.earned_at = now_datetime()
+            ub.insert(ignore_permissions=True)
+
+            # Award bonus points for badge (if any)
+            if badge.points_awarded and badge.points_awarded > 0:
+                pt = frappe.new_doc("Hambaft Point Transaction")
+                pt.user = user
+                pt.points = badge.points_awarded
+                pt.reason = "badge_awarded"
+                pt.entity_type = "Hambaft Badge"
+                pt.entity = badge.name
+                pt.description = f"نشان «{badge.badge_name_fa or badge.badge_name}» کسب شد"
+                pt.insert(ignore_permissions=True)
+
+                # Update profile points (but don't recurse badge check here)
+                profile = _get_or_create_profile(user)
+                profile.total_points = (profile.total_points or 0) + badge.points_awarded
+                new_level = _level_for_points(profile.total_points)
+                profile.level = new_level
+                profile.save(ignore_permissions=True)
+
+            frappe.db.commit()
+
+            newly_awarded.append({
+                "badge_id": badge.name,
+                "badge_name": badge.badge_name,
+                "badge_name_fa": badge.badge_name_fa,
+                "icon": badge.icon,
+                "rarity": badge.rarity,
+                "points_awarded": badge.points_awarded or 0,
+            })
+
+    return newly_awarded
+
+
+def _user_meets_criteria(user, criteria_type, criteria_value):
+    """Check if a user meets a specific badge criteria."""
+    val = criteria_value or 1
+
+    if criteria_type == "first_task":
+        count = frappe.db.count("Task", filters={"owner": user, "status": "done"})
+        return count >= 1
+
+    elif criteria_type == "first_proof":
+        count = frappe.db.count("Hambaft Proof Upload", filters={"user": user, "status": "فعال"})
+        return count >= 1
+
+    elif criteria_type == "tasks_completed":
+        count = frappe.db.count("Task", filters={"owner": user, "status": "done"})
+        return count >= val
+
+    elif criteria_type == "proofs_uploaded":
+        count = frappe.db.count("Hambaft Proof Upload", filters={"user": user, "status": "فعال"})
+        return count >= val
+
+    elif criteria_type == "streak_days":
+        profile = _get_or_create_profile(user)
+        return (profile.current_streak_days or 0) >= val
+
+    elif criteria_type == "points_total":
+        profile = _get_or_create_profile(user)
+        return (profile.total_points or 0) >= val
+
+    elif criteria_type == "partner_count":
+        count = frappe.db.sql(
+            """SELECT COUNT(*) FROM `tabHambaft Partner Connection`
+            WHERE status = 'فعال' AND (user_a = %s OR user_b = %s)""",
+            (user, user),
+        )[0][0]
+        return count >= val
+
+    elif criteria_type == "comments_count":
+        count = frappe.db.count("Hambaft Comment", filters={"user": user, "status": "فعال"})
+        return count >= val
+
+    elif criteria_type == "challenges_completed":
+        count = frappe.db.count("Hambaft Daily Challenge", filters={"user": user, "status": "تکمیل‌شده"})
+        return count >= val
+
+    elif criteria_type == "goals_completed":
+        count = frappe.db.count("Goal", filters={"owner": user, "status": "تکمیل‌شده"})
+        return count >= val
+
+    return False
+
+
+# --- Whitelisted API endpoints ---
+
+@frappe.whitelist()
+def get_gamification_profile():
+    """Get the current user's gamification profile: points, level, streak, badges."""
+    _check_auth()
+    user = frappe.session.user
+
+    profile = _get_or_create_profile(user)
+    next_level_pts = _points_for_next_level(profile.level or 1)
+
+    # Get user badges with badge details
+    user_badges = frappe.get_all(
+        "Hambaft User Badge",
+        filters={"user": user},
+        fields=["name", "badge", "earned_at"],
+        order_by="earned_at desc",
+    )
+
+    badges_result = []
+    for ub in user_badges:
+        badge_doc = frappe.db.get_value(
+            "Hambaft Badge", ub.badge,
+            ["name", "badge_name", "badge_name_fa", "icon", "description", "description_fa", "rarity", "points_awarded"],
+            as_dict=True,
+        )
+        if badge_doc:
+            badges_result.append({
+                "id": ub.name,
+                "badge_id": badge_doc.name,
+                "badge_name": badge_doc.badge_name,
+                "badge_name_fa": badge_doc.badge_name_fa,
+                "icon": badge_doc.icon or "🏆",
+                "description": badge_doc.description,
+                "description_fa": badge_doc.description_fa,
+                "rarity": badge_doc.rarity,
+                "points_awarded": badge_doc.points_awarded or 0,
+                "earned_at": str(ub.earned_at),
+            })
+
+    # Recent point transactions
+    recent_pts = frappe.get_all(
+        "Hambaft Point Transaction",
+        filters={"user": user},
+        fields=["name", "points", "reason", "description", "created_at"],
+        order_by="creation desc",
+        limit_page_length=20,
+    )
+
+    # Stats summary
+    tasks_done = frappe.db.count("Task", filters={"owner": user, "status": "done"})
+    proofs_count = frappe.db.count("Hambaft Proof Upload", filters={"user": user, "status": "فعال"})
+    comments_count = frappe.db.count("Hambaft Comment", filters={"user": user, "status": "فعال"})
+
+    return _api_response({
+        "total_points": profile.total_points or 0,
+        "level": profile.level or 1,
+        "points_to_next_level": next_level_pts,
+        "current_streak_days": profile.current_streak_days or 0,
+        "best_streak_days": profile.best_streak_days or 0,
+        "badges": badges_result,
+        "recent_points": [
+            {
+                "id": p.name,
+                "points": p.points,
+                "reason": p.reason,
+                "description": p.description or "",
+                "created_at": str(p.created_at),
+            }
+            for p in recent_pts
+        ],
+        "stats": {
+            "tasks_completed": tasks_done,
+            "proofs_uploaded": proofs_count,
+            "comments_posted": comments_count,
+        },
+    })
+
+
+@frappe.whitelist()
+def get_all_badges():
+    """Get all badges with earned status for current user."""
+    _check_auth()
+    user = frappe.session.user
+
+    badges = frappe.get_all(
+        "Hambaft Badge",
+        filters={"active": 1},
+        fields=["name", "badge_name", "badge_name_fa", "icon", "description", "description_fa",
+                 "criteria_type", "criteria_value", "points_awarded", "rarity"],
+        order_by="rarity, badge_name",
+    )
+
+    earned_ids = set(
+        frappe.get_all("Hambaft User Badge", filters={"user": user}, pluck="badge")
+    )
+
+    result = []
+    for b in badges:
+        result.append({
+            "badge_id": b.name,
+            "badge_name": b.badge_name,
+            "badge_name_fa": b.badge_name_fa,
+            "icon": b.icon or "🏆",
+            "description": b.description,
+            "description_fa": b.badge_name_fa or b.description,
+            "criteria_type": b.criteria_type,
+            "criteria_value": b.criteria_value,
+            "points_awarded": b.points_awarded or 0,
+            "rarity": b.rarity,
+            "earned": b.name in earned_ids,
+        })
+
+    return _api_response({"badges": result, "total": len(result), "earned_count": len(earned_ids)})
+
+
+@frappe.whitelist()
+def get_point_history(limit=50, offset=0):
+    """Get paginated point transaction history for current user."""
+    _check_auth()
+    user = frappe.session.user
+
+    pts = frappe.get_all(
+        "Hambaft Point Transaction",
+        filters={"user": user},
+        fields=["name", "points", "reason", "entity_type", "entity", "description", "created_at"],
+        order_by="creation desc",
+        limit_page_length=cint(limit),
+        start=cint(offset),
+    )
+
+    total = frappe.db.count("Hambaft Point Transaction", filters={"user": user})
+
+    return _api_response({
+        "transactions": [
+            {
+                "id": p.name,
+                "points": p.points,
+                "reason": p.reason,
+                "entity_type": p.entity_type or "",
+                "entity": p.entity or "",
+                "description": p.description or "",
+                "created_at": str(p.created_at),
+            }
+            for p in pts
+        ],
+        "total": total,
+    })
+
+
+@frappe.whitelist()
+def seed_badges():
+    """Seed the default badge definitions. Called once by admin or during migration.
+    This is idempotent — it won't duplicate existing badges.
+    """
+    _check_auth()
+    # Only System Manager or specific admin can seed
+    if "System Manager" not in frappe.get_roles(frappe.session.user):
+        frappe.throw("فقط مدیر سیستم می‌تواند نشان‌ها را مقداردهی کند.", frappe.PermissionError)
+
+    default_badges = [
+        {
+            "badge_name": "First Step",
+            "badge_name_fa": "قدم اول",
+            "description": "Complete your first task",
+            "description_fa": "اولین تسک خود را کامل کنید",
+            "icon": "👣",
+            "criteria_type": "first_task",
+            "criteria_value": 1,
+            "points_awarded": 5,
+            "rarity": "Common",
+        },
+        {
+            "badge_name": "Proof Pioneer",
+            "badge_name_fa": "پیشگام اثبات",
+            "description": "Upload your first proof",
+            "description_fa": "اولین اثبات خود را آپلود کنید",
+            "icon": "📸",
+            "criteria_type": "first_proof",
+            "criteria_value": 1,
+            "points_awarded": 5,
+            "rarity": "Common",
+        },
+        {
+            "badge_name": "Accountability Buddy",
+            "badge_name_fa": "رفيق مسئولیت‌پذیری",
+            "description": "Connect with your first partner",
+            "description_fa": "اولین پارتنر خود را متصل کنید",
+            "icon": "🤝",
+            "criteria_type": "partner_count",
+            "criteria_value": 1,
+            "points_awarded": 10,
+            "rarity": "Common",
+        },
+        {
+            "badge_name": "Three Day Spark",
+            "badge_name_fa": "جرقه سه‌روزه",
+            "description": "Maintain a 3-day activity streak",
+            "description_fa": "استریک ۳ روزه فعالیت داشته باشید",
+            "icon": "⚡",
+            "criteria_type": "streak_days",
+            "criteria_value": 3,
+            "points_awarded": 15,
+            "rarity": "Common",
+        },
+        {
+            "badge_name": "One Week Warrior",
+            "badge_name_fa": "جنگجوی هفته‌ای",
+            "description": "Maintain a 7-day activity streak",
+            "description_fa": "استریک ۷ روزه فعالیت داشته باشید",
+            "icon": "🔥",
+            "criteria_type": "streak_days",
+            "criteria_value": 7,
+            "points_awarded": 25,
+            "rarity": "Rare",
+        },
+        {
+            "badge_name": "Monthly Master",
+            "badge_name_fa": "استاد ماهانه",
+            "description": "Maintain a 30-day activity streak",
+            "description_fa": "استریک ۳۰ روزه فعالیت داشته باشید",
+            "icon": "👑",
+            "criteria_type": "streak_days",
+            "criteria_value": 30,
+            "points_awarded": 50,
+            "rarity": "Epic",
+        },
+        {
+            "badge_name": "Point Collector",
+            "badge_name_fa": "جمع‌کننده امتیاز",
+            "description": "Earn 100 total points",
+            "description_fa": "۱۰۰ امتیاز کل کسب کنید",
+            "icon": "💎",
+            "criteria_type": "points_total",
+            "criteria_value": 100,
+            "points_awarded": 0,
+            "rarity": "Rare",
+        },
+        {
+            "badge_name": "Momentum Builder",
+            "badge_name_fa": "سازنده مومنتوم",
+            "description": "Earn 500 total points",
+            "description_fa": "۵۰۰ امتیاز کل کسب کنید",
+            "icon": "🚀",
+            "criteria_type": "points_total",
+            "criteria_value": 500,
+            "points_awarded": 0,
+            "rarity": "Epic",
+        },
+        {
+            "badge_name": "Goal Champion",
+            "badge_name_fa": "قهرمان هدف",
+            "description": "Earn 1000 total points",
+            "description_fa": "۱۰۰۰ امتیاز کل کسب کنید",
+            "icon": "🏅",
+            "criteria_type": "points_total",
+            "criteria_value": 1000,
+            "points_awarded": 0,
+            "rarity": "Legendary",
+        },
+        {
+            "badge_name": "Consistency Champion",
+            "badge_name_fa": "قهرمان ثبات",
+            "description": "Complete 50 tasks",
+            "description_fa": "۵۰ تسک تکمیل کنید",
+            "icon": "✅",
+            "criteria_type": "tasks_completed",
+            "criteria_value": 50,
+            "points_awarded": 30,
+            "rarity": "Epic",
+        },
+        {
+            "badge_name": "Supportive Partner",
+            "badge_name_fa": "پارتنر حامی",
+            "description": "Post 10 comments on partner goals",
+            "description_fa": "۱۰ نظر روی اهداف پارتنر ثبت کنید",
+            "icon": "💬",
+            "criteria_type": "comments_count",
+            "criteria_value": 10,
+            "points_awarded": 10,
+            "rarity": "Rare",
+        },
+        {
+            "badge_name": "Proof Master",
+            "badge_name_fa": "استاد اثبات",
+            "description": "Upload 10 proofs",
+            "description_fa": "۱۰ اثبات آپلود کنید",
+            "icon": "🎬",
+            "criteria_type": "proofs_uploaded",
+            "criteria_value": 10,
+            "points_awarded": 15,
+            "rarity": "Rare",
+        },
+        {
+            "badge_name": "Goal Achiever",
+            "badge_name_fa": "رسیدن به هدف",
+            "description": "Complete your first goal",
+            "description_fa": "اولین هدف خود را تکمیل کنید",
+            "icon": "🎯",
+            "criteria_type": "goals_completed",
+            "criteria_value": 1,
+            "points_awarded": 20,
+            "rarity": "Rare",
+        },
+        {
+            "badge_name": "Multi Goal Master",
+            "badge_name_fa": "استاد چندهدفی",
+            "description": "Complete 5 goals",
+            "description_fa": "۵ هدف تکمیل کنید",
+            "icon": "🌟",
+            "criteria_type": "goals_completed",
+            "criteria_value": 5,
+            "points_awarded": 40,
+            "rarity": "Epic",
+        },
+        {
+            "badge_name": "Challenge Starter",
+            "badge_name_fa": "شروع‌کننده چالش",
+            "description": "Complete your first daily challenge",
+            "description_fa": "اولین چالش روزانه خود را تکمیل کنید",
+            "icon": "🎯",
+            "criteria_type": "challenges_completed",
+            "criteria_value": 1,
+            "points_awarded": 10,
+            "rarity": "Common",
+        },
+        {
+            "badge_name": "Challenge Master",
+            "badge_name_fa": "استاد چالش",
+            "description": "Complete 30 daily challenges",
+            "description_fa": "۳۰ چالش روزانه تکمیل کنید",
+            "icon": "🏆",
+            "criteria_type": "challenges_completed",
+            "criteria_value": 30,
+            "points_awarded": 50,
+            "rarity": "Epic",
+        },
+    ]
+
+    created = []
+    for badge_data in default_badges:
+        if frappe.db.exists("Hambaft Badge", {"badge_name": badge_data["badge_name"]}):
+            continue
+        doc = frappe.new_doc("Hambaft Badge")
+        doc.update(badge_data)
+        doc.active = 1
+        doc.insert(ignore_permissions=True)
+        created.append(badge_data["badge_name"])
+
+    frappe.db.commit()
+
+    return _api_response({
+        "seeded": len(created),
+        "badges": created,
+        "message": f"{len(created)} نشان جدید ایجاد شد." if created else "همه نشان‌ها از قبل وجود دارند.",
+    })
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Phase 10: Daily Challenges
+# ═══════════════════════════════════════════════════════════════════
+
+# Points by difficulty
+_DIFFICULTY_POINTS = {"easy": 20, "medium": 35, "hard": 50}
+
+
+def _assign_daily_challenges(user):
+    """Assign today's daily challenges for a user.
+    Uses a deterministic seed based on user + date so the same
+    challenges appear throughout the day even if called multiple times.
+    """
+    today_str = str(today())
+
+    # Check if user already has challenges for today
+    existing = frappe.get_all(
+        "Hambaft Daily Challenge",
+        filters={"user": user, "challenge_date": today_str},
+        pluck="name",
+    )
+    if existing:
+        return existing
+
+    # Get all active templates
+    templates = frappe.get_all(
+        "Hambaft Challenge Template",
+        filters={"active": 1},
+        fields=["name", "challenge_type", "difficulty", "target_count", "points_reward"],
+    )
+    if not templates:
+        return []
+
+    # Deterministic random: seed from user + date
+    seed_str = f"{user}:{today_str}"
+    rng = random.Random(seed_str)
+
+    # Pick 3 challenges: 1 easy, 1 medium, 1 hard (if available)
+    by_difficulty = {"easy": [], "medium": [], "hard": []}
+    for t in templates:
+        d = t.difficulty or "easy"
+        if d in by_difficulty:
+            by_difficulty[d].append(t)
+
+    selected = []
+    for diff in ("easy", "medium", "hard"):
+        pool = by_difficulty[diff]
+        if pool:
+            pick = rng.choice(pool)
+            selected.append(pick)
+
+    # If we couldn't get 3, fill from remaining
+    if len(selected) < 3:
+        remaining = [t for t in templates if t not in selected]
+        rng.shuffle(remaining)
+        for t in remaining:
+            if len(selected) >= 3:
+                break
+            selected.append(t)
+
+    # Create daily challenge records
+    created = []
+    for tmpl in selected:
+        dc = frappe.new_doc("Hambaft Daily Challenge")
+        dc.user = user
+        dc.template = tmpl.name
+        dc.challenge_date = today_str
+        dc.status = "فعال"
+        dc.progress = 0
+        dc.target_count = tmpl.target_count or 1
+        dc.points_reward = tmpl.points_reward or _DIFFICULTY_POINTS.get(tmpl.difficulty, 20)
+        dc.challenge_type = tmpl.challenge_type
+        dc.insert(ignore_permissions=True)
+        created.append(dc.name)
+
+    if created:
+        frappe.db.commit()
+
+    return created
+
+
+def _update_challenge_progress(user, challenge_type, increment=1):
+    """Update progress on active daily challenges of a given type.
+    Called from complete_task, upload_proof, etc.
+    """
+    today_str = str(today())
+    challenges = frappe.get_all(
+        "Hambaft Daily Challenge",
+        filters={
+            "user": user,
+            "challenge_date": today_str,
+            "status": "فعال",
+            "challenge_type": challenge_type,
+        },
+        fields=["name", "progress", "target_count", "points_reward"],
+    )
+
+    for ch in challenges:
+        new_progress = (ch.progress or 0) + increment
+        target = ch.target_count or 1
+
+        if new_progress >= target:
+            # Challenge completed!
+            frappe.db.set_value("Hambaft Daily Challenge", ch.name, {
+                "progress": target,
+                "status": "تکمیل‌شده",
+                "completed_at": now_datetime(),
+            })
+            # Award challenge points
+            _award_points(
+                user, ch.points_reward or 20, "daily_challenge",
+                entity_type="Hambaft Daily Challenge", entity=ch.name,
+                description="چالش روزانه تکمیل شد"
+            )
+            # Phase 11: Notification for challenge completion
+            try:
+                _create_notification(
+                    user, "challenge_completed",
+                    title_fa="چالش روزانه تکمیل شد! 🎯",
+                    body_fa=f"+{ch.points_reward or 20} امتیاز کسب کردی",
+                    icon="🎯",
+                    entity_type="Hambaft Daily Challenge",
+                    entity=ch.name,
+                )
+            except Exception:
+                pass
+        else:
+            frappe.db.set_value("Hambaft Daily Challenge", ch.name, "progress", new_progress)
+
+    frappe.db.commit()
+
+
+@frappe.whitelist()
+def get_daily_challenges():
+    """Get today's challenges for the current user. Auto-assigns if none exist."""
+    _check_auth()
+    user = frappe.session.user
+
+    # Ensure challenges are assigned
+    _assign_daily_challenges(user)
+
+    today_str = str(today())
+    challenges = frappe.get_all(
+        "Hambaft Daily Challenge",
+        filters={"user": user, "challenge_date": today_str},
+        fields=["name", "template", "challenge_date", "status", "progress",
+                 "target_count", "points_reward", "challenge_type", "completed_at"],
+        order_by="creation asc",
+    )
+
+    result = []
+    for ch in challenges:
+        # Get template details
+        tmpl = frappe.db.get_value(
+            "Hambaft Challenge Template", ch.template,
+            ["name", "title", "title_fa", "description", "description_fa",
+             "icon", "challenge_type", "difficulty", "category"],
+            as_dict=True,
+        ) if ch.template else None
+
+        result.append({
+            "id": ch.name,
+            "template_id": ch.template,
+            "title": tmpl.title if tmpl else "",
+            "title_fa": tmpl.title_fa if tmpl else "",
+            "description": tmpl.description if tmpl else "",
+            "description_fa": tmpl.description_fa if tmpl else "",
+            "icon": tmpl.icon if tmpl else "🎯",
+            "challenge_type": ch.challenge_type or (tmpl.challenge_type if tmpl else ""),
+            "difficulty": tmpl.difficulty if tmpl else "easy",
+            "category": tmpl.category if tmpl else "",
+            "status": ch.status,
+            "progress": ch.progress or 0,
+            "target_count": ch.target_count or 1,
+            "points_reward": ch.points_reward or 20,
+            "completed_at": str(ch.completed_at) if ch.completed_at else None,
+        })
+
+    return _api_response({"challenges": result, "date": today_str})
+
+
+@frappe.whitelist()
+def get_challenge_history(limit=30, offset=0):
+    """Get past completed/expired challenges for the current user."""
+    _check_auth()
+    user = frappe.session.user
+
+    challenges = frappe.get_all(
+        "Hambaft Daily Challenge",
+        filters={"user": user},
+        fields=["name", "template", "challenge_date", "status", "progress",
+                 "target_count", "points_reward", "challenge_type", "completed_at"],
+        order_by="challenge_date desc, creation asc",
+        limit_page_length=cint(limit),
+        start=cint(offset),
+    )
+
+    result = []
+    for ch in challenges:
+        tmpl = frappe.db.get_value(
+            "Hambaft Challenge Template", ch.template,
+            ["title", "title_fa", "icon", "difficulty"],
+            as_dict=True,
+        ) if ch.template else None
+
+        result.append({
+            "id": ch.name,
+            "title": tmpl.title if tmpl else "",
+            "title_fa": tmpl.title_fa if tmpl else "",
+            "icon": tmpl.icon if tmpl else "🎯",
+            "difficulty": tmpl.difficulty if tmpl else "easy",
+            "status": ch.status,
+            "progress": ch.progress or 0,
+            "target_count": ch.target_count or 1,
+            "points_reward": ch.points_reward or 20,
+            "challenge_date": str(ch.challenge_date),
+            "completed_at": str(ch.completed_at) if ch.completed_at else None,
+        })
+
+    return _api_response({"challenges": result})
+
+
+@frappe.whitelist()
+def seed_challenge_templates():
+    """Seed default challenge templates. Idempotent. Admin only."""
+    _check_auth()
+    if "System Manager" not in frappe.get_roles(frappe.session.user):
+        frappe.throw("فقط مدیر سیستم می‌تواند چالش‌ها را مقداردهی کند.", frappe.PermissionError)
+
+    default_templates = [
+        # --- Easy challenges (20 pts) ---
+        {
+            "title": "Complete 1 Task",
+            "title_fa": "یک تسک انجام بده",
+            "description": "Complete any one task today",
+            "description_fa": "هر تسکی رو امروز کامل کن",
+            "icon": "✅",
+            "challenge_type": "complete_task",
+            "target_count": 1,
+            "difficulty": "easy",
+            "points_reward": 20,
+            "category": "productivity",
+        },
+        {
+            "title": "Habit Check-in",
+            "title_fa": "ثبت عادت",
+            "description": "Log one habit today",
+            "description_fa": "یک عادت رو امروز ثبت کن",
+            "icon": "🔄",
+            "challenge_type": "log_habit",
+            "target_count": 1,
+            "difficulty": "easy",
+            "points_reward": 20,
+            "category": "health",
+        },
+        {
+            "title": "Spread Positivity",
+            "title_fa": "انرژی مثبت منتقل کن",
+            "description": "Leave a comment on a partner's goal",
+            "description_fa": "روی هدف پارتنر نظر بذار",
+            "icon": "💬",
+            "challenge_type": "add_comment",
+            "target_count": 1,
+            "difficulty": "easy",
+            "points_reward": 20,
+            "category": "social",
+        },
+        {
+            "title": "Quick Proof",
+            "title_fa": "اثبات سریع",
+            "description": "Upload one proof for any task",
+            "description_fa": "یه اثبات برای تسکت آپلود کن",
+            "icon": "📸",
+            "challenge_type": "upload_proof",
+            "target_count": 1,
+            "difficulty": "easy",
+            "points_reward": 20,
+            "category": "productivity",
+        },
+        # --- Medium challenges (35 pts) ---
+        {
+            "title": "Triple Threat",
+            "title_fa": "سه‌ضرب",
+            "description": "Complete 3 tasks today",
+            "description_fa": "۳ تسک رو امروز انجام بده",
+            "icon": "⚡",
+            "challenge_type": "complete_task",
+            "target_count": 3,
+            "difficulty": "medium",
+            "points_reward": 35,
+            "category": "productivity",
+        },
+        {
+            "title": "Proof Collector",
+            "title_fa": "جمع‌آوری اثبات",
+            "description": "Upload 2 proofs today",
+            "description_fa": "۲ اثبات امروز آپلود کن",
+            "icon": "🎬",
+            "challenge_type": "upload_proof",
+            "target_count": 2,
+            "difficulty": "medium",
+            "points_reward": 35,
+            "category": "productivity",
+        },
+        {
+            "title": "Habit Streak Day",
+            "title_fa": "روز استریک عادت",
+            "description": "Log 2 different habits today",
+            "description_fa": "۲ عادت مختلف رو امروز ثبت کن",
+            "icon": "🔥",
+            "challenge_type": "log_habit",
+            "target_count": 2,
+            "difficulty": "medium",
+            "points_reward": 35,
+            "category": "health",
+        },
+        {
+            "title": "Social Butterfly",
+            "title_fa": "پروانه اجتماعی",
+            "description": "Leave 3 comments today",
+            "description_fa": "۳ نظر امروز ثبت کن",
+            "icon": "🦋",
+            "challenge_type": "add_comment",
+            "target_count": 3,
+            "difficulty": "medium",
+            "points_reward": 35,
+            "category": "social",
+        },
+        # --- Hard challenges (50 pts) ---
+        {
+            "title": "Power Day",
+            "title_fa": "روز قدرت",
+            "description": "Complete 5 tasks today",
+            "description_fa": "۵ تسک رو امروز انجام بده",
+            "icon": "💪",
+            "challenge_type": "complete_task",
+            "target_count": 5,
+            "difficulty": "hard",
+            "points_reward": 50,
+            "category": "productivity",
+        },
+        {
+            "title": "Evidence Overload",
+            "title_fa": "طوفان اثبات",
+            "description": "Upload 3 proofs today",
+            "description_fa": "۳ اثبات امروز آپلود کن",
+            "icon": "📹",
+            "challenge_type": "upload_proof",
+            "target_count": 3,
+            "difficulty": "hard",
+            "points_reward": 50,
+            "category": "productivity",
+        },
+        {
+            "title": "Habit Master",
+            "title_fa": "استاد عادت",
+            "description": "Log 4 different habits today",
+            "description_fa": "۴ عادت مختلف رو امروز ثبت کن",
+            "icon": "🧘",
+            "challenge_type": "log_habit",
+            "target_count": 4,
+            "difficulty": "hard",
+            "points_reward": 50,
+            "category": "health",
+        },
+        # --- Creativity challenges (special) ---
+        {
+            "title": "Creative Reflection",
+            "title_fa": "تأمل خلاق",
+            "description": "Upload a proof with a reflection of at least 50 characters",
+            "description_fa": "اثباتی با تأمل حداقل ۵۰ کاراکتر آپلود کن",
+            "icon": "🎨",
+            "challenge_type": "creativity",
+            "target_count": 1,
+            "difficulty": "medium",
+            "points_reward": 35,
+            "category": "creativity",
+        },
+        {
+            "title": "Morning Ritual",
+            "title_fa": "آیین صبحگاهی",
+            "description": "Complete 1 task and log 1 habit before noon",
+            "description_fa": "۱ تسک و ۱ عادت قبل از ظهر ثبت کن",
+            "icon": "🌅",
+            "challenge_type": "consistency",
+            "target_count": 2,
+            "difficulty": "medium",
+            "points_reward": 35,
+            "category": "mindfulness",
+        },
+    ]
+
+    created = []
+    for tmpl_data in default_templates:
+        if frappe.db.exists("Hambaft Challenge Template", {"title": tmpl_data["title"]}):
+            continue
+        doc = frappe.new_doc("Hambaft Challenge Template")
+        doc.update(tmpl_data)
+        doc.active = 1
+        doc.insert(ignore_permissions=True)
+        created.append(tmpl_data["title"])
+
+    frappe.db.commit()
+
+    return _api_response({
+        "seeded": len(created),
+        "templates": created,
+        "message": f"{len(created)} الگوی چالش جدید ایجاد شد." if created else "همه الگوها از قبل وجود دارند.",
+    })
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Phase 11: Notifications
+# ═══════════════════════════════════════════════════════════════════
+
+_NOTIFICATION_CONFIG = {
+    "level_up": {"icon": "🎉", "title_fa": "سطح جدید!"},
+    "badge_earned": {"icon": "🏆", "title_fa": "نشان جدید!"},
+    "challenge_completed": {"icon": "🎯", "title_fa": "چالش تکمیل شد!"},
+    "challenge_expired": {"icon": "⏰", "title_fa": "چالش منقضی شد"},
+    "partner_invite": {"icon": "🤝", "title_fa": "دعوت پارتنر"},
+    "partner_accepted": {"icon": "✅", "title_fa": "پارتنر پذیرفته شد"},
+    "goal_shared": {"icon": "🔗", "title_fa": "هدف به اشتراک گذاشته شد"},
+    "comment_received": {"icon": "💬", "title_fa": "نظر جدید"},
+    "reaction_received": {"icon": "❤️", "title_fa": "واکنش جدید"},
+    "daily_reminder": {"icon": "📋", "title_fa": "یادآوری روزانه"},
+    "streak_milestone": {"icon": "🔥", "title_fa": "استریک ویژه"},
+    "goal_deadline": {"icon": "⏳", "title_fa": "مهلت هدف"},
+    "system": {"icon": "🔔", "title_fa": "اعلان سیستمی"},
+}
+
+
+def _create_notification(user, notification_type, title="", title_fa="", body="", body_fa="",
+                         icon=None, entity_type=None, entity=None):
+    """Create a notification for a user. Internal helper."""
+    conf = _NOTIFICATION_CONFIG.get(notification_type, {})
+
+    n = frappe.new_doc("Hambaft Notification")
+    n.user = user
+    n.notification_type = notification_type
+    n.title = title or conf.get("title_fa", notification_type)
+    n.title_fa = title_fa or conf.get("title_fa", notification_type)
+    n.body = body
+    n.body_fa = body_fa
+    n.icon = icon or conf.get("icon", "🔔")
+    if entity_type:
+        n.entity_type = entity_type
+    if entity:
+        n.entity = entity
+    n.read = 0
+    n.dismissed = 0
+    n.insert(ignore_permissions=True)
+    frappe.db.commit()
+    return n.name
+
+
+@frappe.whitelist()
+def get_notifications(limit=50, offset=0, unread_only=False):
+    """Get notifications for the current user."""
+    _check_auth()
+    user = frappe.session.user
+
+    filters = {"user": user, "dismissed": 0}
+    if cint(unread_only):
+        filters["read"] = 0
+
+    notifications = frappe.get_all(
+        "Hambaft Notification",
+        filters=filters,
+        fields=["name", "notification_type", "title", "title_fa", "body", "body_fa",
+                 "icon", "entity_type", "entity", "read", "created_at"],
+        order_by="creation desc",
+        limit_page_length=cint(limit),
+        start=cint(offset),
+    )
+
+    unread_count = frappe.db.count("Hambaft Notification", filters={"user": user, "read": 0, "dismissed": 0})
+
+    result = []
+    for n in notifications:
+        result.append({
+            "id": n.name,
+            "type": n.notification_type,
+            "title": n.title,
+            "title_fa": n.title_fa,
+            "body": n.body or "",
+            "body_fa": n.body_fa or "",
+            "icon": n.icon or "🔔",
+            "entity_type": n.entity_type or "",
+            "entity": n.entity or "",
+            "read": cint(n.read),
+            "created_at": str(n.created_at),
+        })
+
+    return _api_response({"notifications": result, "unread_count": unread_count})
+
+
+@frappe.whitelist()
+def mark_notification_read(notification_id=None):
+    """Mark a single notification as read."""
+    _check_auth()
+    user = frappe.session.user
+
+    if not notification_id:
+        frappe.throw("notification_id is required.")
+
+    n = frappe.get_doc("Hambaft Notification", notification_id)
+    if n.user != user:
+        frappe.throw("This notification does not belong to you.", frappe.PermissionError)
+
+    n.read = 1
+    n.save(ignore_permissions=True)
+    frappe.db.commit()
+    return _api_response({"status": "read"})
+
+
+@frappe.whitelist()
+def mark_all_notifications_read():
+    """Mark all notifications as read for the current user."""
+    _check_auth()
+    user = frappe.session.user
+
+    frappe.db.sql(
+        "UPDATE `tabHambaft Notification` SET `read` = 1 WHERE user = %s AND `read` = 0",
+        (user,)
+    )
+    frappe.db.commit()
+    return _api_response({"status": "all_read"})
+
+
+@frappe.whitelist()
+def dismiss_notification(notification_id=None):
+    """Dismiss (soft-delete) a notification."""
+    _check_auth()
+    user = frappe.session.user
+
+    if not notification_id:
+        frappe.throw("notification_id is required.")
+
+    n = frappe.get_doc("Hambaft Notification", notification_id)
+    if n.user != user:
+        frappe.throw("This notification does not belong to you.", frappe.PermissionError)
+
+    n.dismissed = 1
+    n.save(ignore_permissions=True)
+    frappe.db.commit()
+    return _api_response({"status": "dismissed"})
+
+
+@frappe.whitelist()
+def get_unread_notification_count():
+    """Get just the unread count for badge display."""
+    _check_auth()
+    user = frappe.session.user
+
+    count = frappe.db.count("Hambaft Notification", filters={"user": user, "read": 0, "dismissed": 0})
+    return _api_response({"unread_count": count})
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Phase 12: Admin & Moderation — Reports, Blocks, Admin Panel
+# ═══════════════════════════════════════════════════════════════════
+
+_REASON_LABELS = {
+    "spam": "هرزنامه",
+    "harassment": "آزار و اذیت",
+    "inappropriate_content": "محتوای نامناسب",
+    "misinformation": "اطلاعات نادرست",
+    "other": "سایر",
+}
+
+# ─── User-to-User: Block ────────────────────────────────────
+
+@frappe.whitelist()
+def block_user(data=None):
+    """Block another user. Removes partner connection if exists."""
+    _check_auth()
+    user = frappe.session.user
+
+    if isinstance(data, str):
+        data = json.loads(data)
+    data = data or {}
+
+    blocked_user = data.get("blocked_user")
+    reason = data.get("reason") or "personal"
+    notes = data.get("notes") or ""
+
+    if not blocked_user:
+        frappe.throw("blocked_user is required.")
+
+    if blocked_user == user:
+        frappe.throw("You cannot block yourself.")
+
+    # Check if already blocked
+    if frappe.db.exists("Hambaft User Block", {"blocked_by": user, "blocked_user": blocked_user}):
+        frappe.throw("این کاربر قبلاً مسدود شده است.")
+
+    # Create block
+    block = frappe.new_doc("Hambaft User Block")
+    block.blocked_by = user
+    block.blocked_user = blocked_user
+    block.reason = reason
+    block.notes = notes
+    block.insert(ignore_permissions=True)
+
+    # Remove partner connection if exists
+    conn = frappe.db.sql(
+        """SELECT name FROM `tabHambaft Partner Connection`
+        WHERE status = 'فعال'
+        AND ((user_a = %s AND user_b = %s) OR (user_a = %s AND user_b = %s))
+        LIMIT 1""",
+        (user, blocked_user, blocked_user, user),
+    )
+    if conn:
+        frappe.db.set_value("Hambaft Partner Connection", conn[0][0], "status", "حذف‌شده")
+
+    frappe.db.commit()
+
+    return _api_response({"status": "blocked", "block_id": block.name})
+
+
+@frappe.whitelist()
+def unblock_user(data=None):
+    """Unblock a previously blocked user."""
+    _check_auth()
+    user = frappe.session.user
+
+    if isinstance(data, str):
+        data = json.loads(data)
+    data = data or {}
+
+    blocked_user = data.get("blocked_user")
+    if not blocked_user:
+        frappe.throw("blocked_user is required.")
+
+    existing = frappe.db.exists("Hambaft User Block", {"blocked_by": user, "blocked_user": blocked_user})
+    if not existing:
+        frappe.throw("این کاربر مسدود نیست.")
+
+    frappe.delete_doc("Hambaft User Block", existing, ignore_permissions=True, force=True)
+    frappe.db.commit()
+
+    return _api_response({"status": "unblocked"})
+
+
+@frappe.whitelist()
+def get_blocked_users():
+    """Get list of users blocked by the current user."""
+    _check_auth()
+    user = frappe.session.user
+
+    blocks = frappe.get_all(
+        "Hambaft User Block",
+        filters={"blocked_by": user},
+        fields=["name", "blocked_user", "reason", "created_at"],
+        order_by="creation desc",
+    )
+
+    result = []
+    for b in blocks:
+        info = _user_display_info(b.blocked_user)
+        result.append({
+            "block_id": b.name,
+            "user_info": info,
+            "reason": b.reason,
+            "created_at": str(b.created_at),
+        })
+
+    return _api_response({"blocked_users": result})
+
+
+@frappe.whitelist()
+def check_user_blocked(other_user=None):
+    """Check if the current user has blocked or been blocked by another user."""
+    _check_auth()
+    user = frappe.session.user
+
+    if not other_user:
+        frappe.throw("other_user is required.")
+
+    i_blocked = frappe.db.exists("Hambaft User Block", {"blocked_by": user, "blocked_user": other_user})
+    they_blocked = frappe.db.exists("Hambaft User Block", {"blocked_by": other_user, "blocked_user": user})
+
+    return _api_response({
+        "i_blocked_them": bool(i_blocked),
+        "they_blocked_me": bool(they_blocked),
+        "is_blocked": bool(i_blocked or they_blocked),
+    })
+
+
+# ─── Reports ────────────────────────────────────────────────
+
+@frappe.whitelist()
+def report_content(data=None):
+    """Report a comment, proof, or user for policy violation."""
+    _check_auth()
+    user = frappe.session.user
+
+    if isinstance(data, str):
+        data = json.loads(data)
+    data = data or {}
+
+    reported_user = data.get("reported_user")
+    entity_type = data.get("entity_type") or "other"
+    entity = data.get("entity") or ""
+    reason = data.get("reason") or "other"
+    description = data.get("description") or ""
+
+    if not reported_user:
+        frappe.throw("reported_user is required.")
+
+    if reported_user == user:
+        frappe.throw("You cannot report yourself.")
+
+    # Rate limit: max 5 reports per user per day
+    today_reports = frappe.db.count("Hambaft Report", {
+        "reporter": user,
+        "created_at": ["between", [today(), str(now_datetime())]],
+    })
+    if today_reports >= 5:
+        frappe.throw("حداکثر ۵ گزارش در روز مجاز است.")
+
+    report = frappe.new_doc("Hambaft Report")
+    report.reporter = user
+    report.reported_user = reported_user
+    report.entity_type = entity_type
+    report.entity = entity
+    report.reason = reason
+    report.description = description
+    report.status = "در_انتظار"
+    report.insert(ignore_permissions=True)
+    frappe.db.commit()
+
+    return _api_response({
+        "status": "reported",
+        "report_id": report.name,
+        "message": "گزارش شما ثبت شد و بررسی خواهد شد.",
+    })
+
+
+@frappe.whitelist()
+def get_my_reports(limit=50, offset=0):
+    """Get reports submitted by the current user."""
+    _check_auth()
+    user = frappe.session.user
+
+    reports = frappe.get_all(
+        "Hambaft Report",
+        filters={"reporter": user},
+        fields=["name", "reported_user", "entity_type", "entity", "reason", "status", "created_at"],
+        order_by="creation desc",
+        limit_page_length=cint(limit),
+        start=cint(offset),
+    )
+
+    result = []
+    for r in reports:
+        result.append({
+            "id": r.name,
+            "reported_user_info": _user_display_info(r.reported_user),
+            "entity_type": r.entity_type,
+            "entity": r.entity,
+            "reason": r.reason,
+            "reason_label": _REASON_LABELS.get(r.reason, r.reason),
+            "status": r.status,
+            "created_at": str(r.created_at),
+        })
+
+    return _api_response({"reports": result})
+
+
+# ─── Admin Panel (System Manager only) ──────────────────────
+
+@frappe.whitelist()
+def admin_get_reports(status=None, limit=50, offset=0):
+    """Get all reports for admin review. System Manager only."""
+    _check_auth()
+    if "System Manager" not in frappe.get_roles(frappe.session.user):
+        frappe.throw("فقط مدیر سیستم دسترسی دارد.", frappe.PermissionError)
+
+    filters = {}
+    if status:
+        filters["status"] = status
+
+    reports = frappe.get_all(
+        "Hambaft Report",
+        filters=filters,
+        fields=["name", "reporter", "reported_user", "entity_type", "entity",
+                 "reason", "description", "status", "reviewed_by", "action_taken", "created_at"],
+        order_by="creation desc",
+        limit_page_length=cint(limit),
+        start=cint(offset),
+    )
+
+    result = []
+    for r in reports:
+        result.append({
+            "id": r.name,
+            "reporter_info": _user_display_info(r.reporter),
+            "reported_user_info": _user_display_info(r.reported_user),
+            "entity_type": r.entity_type,
+            "entity": r.entity,
+            "reason": _REASON_LABELS.get(r.reason, r.reason),
+            "description": r.description or "",
+            "status": r.status,
+            "reviewed_by": r.reviewed_by or "",
+            "action_taken": r.action_taken or "",
+            "created_at": str(r.created_at),
+        })
+
+    total = frappe.db.count("Hambaft Report", filters=filters)
+    pending = frappe.db.count("Hambaft Report", filters={"status": "در_انتظار"})
+
+    return _api_response({"reports": result, "total": total, "pending": pending})
+
+
+@frappe.whitelist()
+def admin_review_report(data=None):
+    """Review a report. System Manager only."""
+    _check_auth()
+    user = frappe.session.user
+    if "System Manager" not in frappe.get_roles(user):
+        frappe.throw("فقط مدیر سیستم دسترسی دارد.", frappe.PermissionError)
+
+    if isinstance(data, str):
+        data = json.loads(data)
+    data = data or {}
+
+    report_id = data.get("report_id")
+    action = data.get("action")  # تأییدشده / ردشده / بسته‌شده
+    action_taken = data.get("action_taken")  # هیچ / هشدار / حذف_محتوا / مسدود_کاربر
+    admin_notes = data.get("admin_notes") or ""
+
+    if not report_id or not action:
+        frappe.throw("report_id and action are required.")
+
+    report = frappe.get_doc("Hambaft Report", report_id)
+    report.status = action
+    report.reviewed_by = user
+    report.reviewed_at = now_datetime()
+    if action_taken:
+        report.action_taken = action_taken
+    if admin_notes:
+        report.admin_notes = admin_notes
+    report.save(ignore_permissions=True)
+
+    # If action is to block user, create admin-initiated block
+    if action_taken == "مسدود_کاربر" and report.reported_user:
+        if not frappe.db.exists("Hambaft User Block", {"blocked_by": user, "blocked_user": report.reported_user}):
+            block = frappe.new_doc("Hambaft User Block")
+            block.blocked_by = user
+            block.blocked_user = report.reported_user
+            block.reason = "admin_action"
+            block.notes = f"گزارش {report_id}: {admin_notes or action}"
+            block.insert(ignore_permissions=True)
+
+        # Notify the blocked user
+        try:
+            _create_notification(
+                report.reported_user, "system",
+                title_fa="حساب شما مسدود شد",
+                body_fa="به دلیل نقض قوانین، حساب شما توسط مدیر مسدود شده است.",
+                icon="🚫",
+            )
+        except Exception:
+            pass
+
+    # If action is to delete content
+    if action_taken == "حذف_محتوا" and report.entity:
+        try:
+            if report.entity_type == "comment":
+                frappe.db.set_value("Hambaft Comment", report.entity, "status", "گزارش‌شده")
+            elif report.entity_type == "proof":
+                frappe.db.set_value("Hambaft Proof Upload", report.entity, "status", "حذف‌شده")
+            elif report.entity_type == "reaction":
+                frappe.delete_doc("Hambaft Reaction", report.entity, ignore_permissions=True, force=True)
+        except Exception:
+            pass
+
+    frappe.db.commit()
+
+    return _api_response({
+        "status": "reviewed",
+        "report_id": report_id,
+        "action": action,
+        "action_taken": action_taken,
+    })
+
+
+@frappe.whitelist()
+def admin_get_stats():
+    """Get moderation stats for admin dashboard. System Manager only."""
+    _check_auth()
+    if "System Manager" not in frappe.get_roles(frappe.session.user):
+        frappe.throw("فقط مدیر سیستم دسترسی دارد.", frappe.PermissionError)
+
+    total_users = frappe.db.count("Hambaft Profile")
+    total_reports = frappe.db.count("Hambaft Report")
+    pending_reports = frappe.db.count("Hambaft Report", filters={"status": "در_انتظار"})
+    total_blocks = frappe.db.count("Hambaft User Block")
+    total_badges = frappe.db.count("Hambaft Badge", filters={"active": 1})
+    total_challenges_today = frappe.db.count("Hambaft Daily Challenge", filters={"challenge_date": today()})
+    completed_challenges_today = frappe.db.count("Hambaft Daily Challenge", filters={
+        "challenge_date": today(), "status": "تکمیل‌شده"
+    })
+
+    return _api_response({
+        "users": total_users,
+        "reports_total": total_reports,
+        "reports_pending": pending_reports,
+        "blocks_total": total_blocks,
+        "badges_active": total_badges,
+        "challenges_today": total_challenges_today,
+        "challenges_completed_today": completed_challenges_today,
+    })
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Completion: Push Notifications, Notification Settings, Nudge,
+#            Partner Comparison, RLS, Admin Enhancements
+# ═══════════════════════════════════════════════════════════════════
+
+# ─── Notification Settings ──────────────────────────────────
+
+def _get_notification_settings(user):
+    """Get or create notification settings for a user."""
+    name = frappe.db.get_value("Hambaft Notification Setting", {"user": user}, "name")
+    if name:
+        return frappe.get_doc("Hambaft Notification Setting", name)
+    settings = frappe.new_doc("Hambaft Notification Setting")
+    settings.user = user
+    settings.push_enabled = 0
+    settings.level_up = 1
+    settings.badge_earned = 1
+    settings.challenge_completed = 1
+    settings.partner_invite = 1
+    settings.partner_accepted = 1
+    settings.reaction_received = 1
+    settings.nudge_received = 1
+    settings.daily_reminder = 1
+    settings.streak_milestone = 1
+    settings.goal_deadline = 1
+    settings.system = 1
+    settings.insert(ignore_permissions=True)
+    frappe.db.commit()
+    return settings
+
+
+def _should_notify(user, notification_type):
+    """Check if a user wants to receive a specific notification type."""
+    settings = _get_notification_settings(user)
+    field_map = {
+        "level_up": "level_up",
+        "badge_earned": "badge_earned",
+        "challenge_completed": "challenge_completed",
+        "challenge_expired": "challenge_completed",
+        "partner_invite": "partner_invite",
+        "partner_accepted": "partner_accepted",
+        "goal_shared": "partner_accepted",
+        "comment_received": "reaction_received",
+        "reaction_received": "reaction_received",
+        "nudge_received": "nudge_received",
+        "daily_reminder": "daily_reminder",
+        "streak_milestone": "streak_milestone",
+        "goal_deadline": "goal_deadline",
+        "system": "system",
+    }
+    field = field_map.get(notification_type, "system")
+    return cint(getattr(settings, field, 1)) == 1
+
+
+@frappe.whitelist()
+def get_notification_settings():
+    """Get the current user's notification settings."""
+    _check_auth()
+    user = frappe.session.user
+    settings = _get_notification_settings(user)
+    return _api_response({
+        "push_enabled": cint(settings.push_enabled),
+        "level_up": cint(settings.level_up),
+        "badge_earned": cint(settings.badge_earned),
+        "challenge_completed": cint(settings.challenge_completed),
+        "partner_invite": cint(settings.partner_invite),
+        "partner_accepted": cint(settings.partner_accepted),
+        "reaction_received": cint(settings.reaction_received),
+        "nudge_received": cint(settings.nudge_received),
+        "daily_reminder": cint(settings.daily_reminder),
+        "streak_milestone": cint(settings.streak_milestone),
+        "goal_deadline": cint(settings.goal_deadline),
+        "system": cint(settings.system),
+    })
+
+
+@frappe.whitelist()
+def update_notification_settings(data=None):
+    """Update the current user's notification settings."""
+    _check_auth()
+    user = frappe.session.user
+
+    if isinstance(data, str):
+        data = json.loads(data)
+    data = data or {}
+
+    settings = _get_notification_settings(user)
+
+    toggle_fields = [
+        "push_enabled", "level_up", "badge_earned", "challenge_completed",
+        "partner_invite", "partner_accepted", "reaction_received",
+        "nudge_received", "daily_reminder", "streak_milestone",
+        "goal_deadline", "system"
+    ]
+    for field in toggle_fields:
+        if field in data:
+            setattr(settings, field, cint(data[field]))
+
+    settings.save(ignore_permissions=True)
+    frappe.db.commit()
+    return _api_response({"status": "updated"})
+
+
+# ─── Push Notification Subscription ─────────────────────────
+
+@frappe.whitelist()
+def save_push_subscription(data=None):
+    """Save a web push subscription for the current user."""
+    _check_auth()
+    user = frappe.session.user
+
+    if isinstance(data, str):
+        data = json.loads(data)
+    data = data or {}
+
+    endpoint = data.get("endpoint")
+    p256dh = data.get("keys", {}).get("p256dh") if isinstance(data.get("keys"), dict) else data.get("p256dh")
+    auth_key = data.get("keys", {}).get("auth") if isinstance(data.get("keys"), dict) else data.get("auth")
+    user_agent = data.get("userAgent", "")
+
+    if not endpoint:
+        frappe.throw("endpoint is required.")
+
+    # Upsert: remove old subscription for same endpoint
+    existing = frappe.db.get_value("Hambaft Push Subscription", {"endpoint": endpoint}, "name")
+    if existing:
+        frappe.delete_doc("Hambaft Push Subscription", existing, ignore_permissions=True, force=True)
+
+    sub = frappe.new_doc("Hambaft Push Subscription")
+    sub.user = user
+    sub.endpoint = endpoint
+    sub.p256dh = p256dh or ""
+    sub.auth_key = auth_key or ""
+    sub.user_agent = user_agent
+    sub.insert(ignore_permissions=True)
+
+    # Enable push in settings
+    settings = _get_notification_settings(user)
+    if not cint(settings.push_enabled):
+        settings.push_enabled = 1
+        settings.save(ignore_permissions=True)
+
+    frappe.db.commit()
+    return _api_response({"status": "subscribed", "subscription_id": sub.name})
+
+
+@frappe.whitelist()
+def remove_push_subscription():
+    """Remove push subscription for the current user."""
+    _check_auth()
+    user = frappe.session.user
+
+    subs = frappe.get_all("Hambaft Push Subscription", filters={"user": user}, pluck="name")
+    for s in subs:
+        frappe.delete_doc("Hambaft Push Subscription", s, ignore_permissions=True, force=True)
+
+    settings = _get_notification_settings(user)
+    settings.push_enabled = 0
+    settings.save(ignore_permissions=True)
+
+    frappe.db.commit()
+    return _api_response({"status": "unsubscribed"})
+
+
+def _send_push_notification(user, title, body, icon="🔔", url=None):
+    """Send a web push notification to a user.
+    This stores the push payload for the service worker to pick up.
+    Actual Web Push delivery requires VAPID keys configured on the server.
+    """
+    # Check if user has push enabled
+    settings = _get_notification_settings(user)
+    if not cint(settings.push_enabled):
+        return
+
+    # Store as a special notification with push flag for SW polling
+    # In production, this would use pywebpush to send directly
+    # For now, we mark the notification so the SW can poll for it
+    subs = frappe.get_all(
+        "Hambaft Push Subscription",
+        filters={"user": user},
+        fields=["name", "endpoint", "p256dh", "auth_key"],
+    )
+
+    # If push subscriptions exist, try to send via webpush
+    if subs:
+        try:
+            _attempt_webpush(subs, title, body, icon, url)
+        except Exception:
+            # Fallback: just in-app notification (already created by caller)
+            pass
+
+
+def _attempt_webpush(subscriptions, title, body, icon, url):
+    """Attempt to send web push using pywebpush if available."""
+    try:
+        from pywebpush import webpush, WebPushException
+    except ImportError:
+        # pywebpush not installed, skip push delivery
+        return
+
+    # VAPID keys should be in site config
+    vapid_private_key = frappe.conf.get("vapid_private_key") or ""
+    vapid_claims = {"sub": f"mailto:{frappe.conf.get('vapid_email', 'admin@hambaft.app')}"}
+
+    for sub in subscriptions:
+        subscription_info = {
+            "endpoint": sub.endpoint,
+            "keys": {
+                "p256dh": sub.p256dh or "",
+                "auth": sub.auth_key or "",
+            },
+        }
+        payload = json.dumps({
+            "title": title,
+            "body": body,
+            "icon": icon,
+            "url": url or "/hambaft",
+        })
+        try:
+            webpush(
+                subscription_info=subscription_info,
+                data=payload,
+                vapid_private_key=vapid_private_key,
+                vapid_claims=vapid_claims,
+            )
+        except WebPushException:
+            # Subscription might be invalid, could clean up
+            pass
+        except Exception:
+            pass
+
+
+# Override _create_notification to respect settings and attempt push
+_original_create_notification = None
+
+
+def _create_notification_enhanced(user, notification_type, title="", title_fa="", body="", body_fa="",
+                                  icon=None, entity_type=None, entity=None):
+    """Enhanced notification creation that respects user settings and sends push."""
+    # Check if user wants this notification type
+    if not _should_notify(user, notification_type):
+        return None
+
+    # Create the in-app notification
+    conf = _NOTIFICATION_CONFIG.get(notification_type, {})
+    n = frappe.new_doc("Hambaft Notification")
+    n.user = user
+    n.notification_type = notification_type
+    n.title = title or notification_type
+    n.title_fa = title_fa or conf.get("title_fa", notification_type)
+    n.body = body
+    n.body_fa = body_fa
+    n.icon = icon or conf.get("icon", "🔔")
+    if entity_type:
+        n.entity_type = entity_type
+    if entity:
+        n.entity = entity
+    n.read = 0
+    n.dismissed = 0
+    n.insert(ignore_permissions=True)
+    frappe.db.commit()
+
+    # Attempt push notification
+    try:
+        _send_push_notification(
+            user,
+            title=title_fa or title,
+            body=body_fa or body,
+            icon=icon or conf.get("icon", "🔔"),
+            url=f"/hambaft" if not entity_type else None,
+        )
+    except Exception:
+        pass
+
+    return n.name
+
+
+# Monkey-patch _create_notification
+_create_notification = _create_notification_enhanced
+
+
+# ─── Nudge (تشویقی به پارتنر) ──────────────────────────────
+
+_NUDGE_TEMPLATES = [
+    {"icon": "💪", "message_fa": "بزن بره! من بابتت هیجان زده‌ام!"},
+    {"icon": "🔥", "message_fa": "استریک‌ات عالیه! ادامه بده!"},
+    {"icon": "🌟", "message_fa": "فوق‌العاده‌ای! ادامه بده!"},
+    {"icon": "🎉", "message_fa": "آفرین! پیشرفت خیلی خوبه!"},
+    {"icon": "❤️", "message_fa": "بابتت افتخار می‌کنم!"},
+    {"icon": "🚀", "message_fa": "پرتاب شدی! ادامه بده!"},
+    {"icon": "👏", "message_fa": "عالی بود! دست مریز!"},
+    {"icon": "🏆", "message_fa": "قهرمان منی!"},
+    {"icon": "💪", "message_fa": "نفس‌نفس زدن مال موندنه!"},
+    {"icon": "✨", "message_fa": "درخشیدی! بریم بقیه راه!"},
+    {"icon": "🎯", "message_fa": "دقیقاً تو هدف! ادامه بده!"},
+    {"icon": "🥳", "message_fa": "چه خبر خوب! جشن بگیریم!"},
+]
+
+
+@frappe.whitelist()
+def send_nudge(data=None):
+    """Send a nudge/cheer to a partner."""
+    _check_auth()
+    user = frappe.session.user
+
+    if isinstance(data, str):
+        data = json.loads(data)
+    data = data or {}
+
+    partner_email = data.get("partner_email")
+    custom_message = data.get("message")
+    template_index = data.get("template_index")
+
+    if not partner_email:
+        frappe.throw("partner_email is required.")
+
+    # Verify partner connection
+    conn = frappe.db.sql(
+        """SELECT name FROM `tabHambaft Partner Connection`
+        WHERE status = 'فعال'
+        AND ((user_a = %s AND user_b = %s) OR (user_a = %s AND user_b = %s))
+        LIMIT 1""",
+        (user, partner_email, partner_email, user),
+    )
+    if not conn:
+        frappe.throw("شما با این کاربر پارتنر نیستید.", frappe.PermissionError)
+
+    # Rate limit: max 10 nudges per hour
+    one_hour_ago = frappe.utils.add_to_date(now_datetime(), hours=-1)
+    recent_nudges = frappe.db.count("Hambaft Notification", {
+        "user": partner_email,
+        "notification_type": "nudge_received",
+        "creation": [">=", one_hour_ago],
+    })
+    if recent_nudges >= 10:
+        frappe.throw("حداکثر ۱۰ ناج در ساعت مجاز است.")
+
+    # Pick nudge message
+    if custom_message:
+        icon = "💬"
+        message_fa = custom_message
+    elif template_index is not None and 0 <= cint(template_index) < len(_NUDGE_TEMPLATES):
+        tmpl = _NUDGE_TEMPLATES[cint(template_index)]
+        icon = tmpl["icon"]
+        message_fa = tmpl["message_fa"]
+    else:
+        tmpl = random.choice(_NUDGE_TEMPLATES)
+        icon = tmpl["icon"]
+        message_fa = tmpl["message_fa"]
+
+    sender_info = _user_display_info(user)
+
+    # Create notification for partner
+    _create_notification(
+        partner_email, "nudge_received",
+        title_fa=f"ناج از {sender_info.get('full_name', user)}",
+        body_fa=message_fa,
+        icon=icon,
+        entity_type="User",
+        entity=user,
+    )
+
+    # Award small points to sender for being supportive
+    _award_points(
+        user, 5, "partner_verification",
+        description="ناج تشویقی ارسال شد"
+    )
+
+    return _api_response({
+        "status": "sent",
+        "message_fa": message_fa,
+        "icon": icon,
+    })
+
+
+@frappe.whitelist()
+def get_nudge_templates():
+    """Get available nudge templates for the frontend."""
+    _check_auth()
+    return _api_response({
+        "templates": [
+            {"index": i, "icon": t["icon"], "message_fa": t["message_fa"]}
+            for i, t in enumerate(_NUDGE_TEMPLATES)
+        ]
+    })
+
+
+# ─── Partner Comparison ─────────────────────────────────────
+
+@frappe.whitelist()
+def get_partner_comparison(partner_email=None):
+    """Get side-by-side comparison of stats with a partner."""
+    _check_auth()
+    user = frappe.session.user
+
+    if not partner_email:
+        frappe.throw("partner_email is required.")
+
+    # Verify partner connection
+    conn = frappe.db.sql(
+        """SELECT name FROM `tabHambaft Partner Connection`
+        WHERE status = 'فعال'
+        AND ((user_a = %s AND user_b = %s) OR (user_a = %s AND user_b = %s))
+        LIMIT 1""",
+        (user, partner_email, partner_email, user),
+    )
+    if not conn:
+        frappe.throw("شما با این کاربر پارتنر نیستید.", frappe.PermissionError)
+
+    def _user_stats(u):
+        profile = _get_or_create_profile(u)
+        tasks_done = frappe.db.count("Task", filters={"owner": u, "status": "done"})
+        proofs = frappe.db.count("Hambaft Proof Upload", filters={"user": u, "status": "فعال"})
+        comments = frappe.db.count("Hambaft Comment", filters={"user": u, "status": "فعال"})
+        habits_active = frappe.db.count("Hambaft Habit", filters={"user": u, "is_active": 1})
+        goals_active = frappe.db.count("Hambaft Goal", filters={"owner": u, "status": ["!=", "تکمیل‌شده"]})
+        goals_completed = frappe.db.count("Hambaft Goal", filters={"owner": u, "status": "تکمیل‌شده"})
+        badges = frappe.db.count("Hambaft User Badge", filters={"user": u})
+        challenges_done = frappe.db.count("Hambaft Daily Challenge", filters={"user": u, "status": "تکمیل‌شده"})
+
+        # Week streak
+        week_ago = str(frappe.utils.add_to_date(getdate(), days=-7))
+        tasks_this_week = frappe.db.count("Task", filters={"owner": u, "status": "done", "completed_on": [">=", week_ago]})
+
+        return {
+            "user_info": _user_display_info(u),
+            "total_points": profile.total_points or 0,
+            "level": profile.level or 1,
+            "current_streak": profile.current_streak_days or 0,
+            "best_streak": profile.best_streak_days or 0,
+            "tasks_completed": tasks_done,
+            "tasks_this_week": tasks_this_week,
+            "proofs_uploaded": proofs,
+            "comments_posted": comments,
+            "habits_active": habits_active,
+            "goals_active": goals_active,
+            "goals_completed": goals_completed,
+            "badges_earned": badges,
+            "challenges_completed": challenges_done,
+        }
+
+    me = _user_stats(user)
+    partner = _user_stats(partner_email)
+
+    # Determine who's ahead in each category
+    comparison = []
+    fields = [
+        ("total_points", "امتیاز کل", "⭐"),
+        ("level", "سطح", "🏅"),
+        ("current_streak", "استریک فعلی", "🔥"),
+        ("tasks_completed", "تسک‌های انجام‌شده", "✅"),
+        ("tasks_this_week", "تسک این هفته", "📅"),
+        ("proofs_uploaded", "اثبات‌ها", "📸"),
+        ("badges_earned", "نشان‌ها", "🏆"),
+        ("challenges_completed", "چالش‌ها", "🎯"),
+        ("goals_completed", "اهداف تکمیل‌شده", "🌟"),
+    ]
+
+    for field_key, label, icon in fields:
+        me_val = me.get(field_key, 0)
+        partner_val = partner.get(field_key, 0)
+        if me_val > partner_val:
+            ahead = "me"
+        elif partner_val > me_val:
+            ahead = "partner"
+        else:
+            ahead = "tie"
+        comparison.append({
+            "field": field_key,
+            "label": label,
+            "icon": icon,
+            "me": me_val,
+            "partner": partner_val,
+            "ahead": ahead,
+        })
+
+    return _api_response({
+        "me": me,
+        "partner": partner,
+        "comparison": comparison,
+    })
+
+
+# ─── Enhanced Row Level Security ────────────────────────────
+
+def _validate_read_access(doctype, docname, user):
+    """Validate that a user can read a document.
+    Owner can always read. For shared entities, check membership.
+    """
+    # Check ownership
+    owner = frappe.db.get_value(doctype, docname, "owner") or frappe.db.get_value(doctype, docname, "user")
+    if owner == user:
+        return True
+
+    # For goals, check if user is a member
+    if doctype == "Hambaft Goal" or doctype == "Goal":
+        if frappe.db.exists("Hambaft Goal Member", {"goal": docname, "user": user, "status": "فعال"}):
+            return True
+        # Check if goal privacy is shared and user is a partner of owner
+        privacy = frappe.db.get_value(doctype, docname, "privacy")
+        if privacy in ("اشتراکی", "گروهی"):
+            return True
+
+    # For tasks, check if task belongs to a goal the user has access to
+    if doctype == "Task":
+        goal_link = frappe.db.get_value("Task", docname, "goal")
+        if goal_link:
+            return _validate_read_access("Hambaft Goal", goal_link, user)
+
+    # For projects, check goal access
+    if doctype == "Hambaft Project":
+        goal_link = frappe.db.get_value("Hambaft Project", docname, "goal")
+        if goal_link:
+            return _validate_read_access("Hambaft Goal", goal_link, user)
+
+    # For comments, proofs, reactions - check entity access
+    if doctype in ("Hambaft Comment", "Hambaft Proof Upload", "Hambaft Reaction"):
+        entity_type = frappe.db.get_value(doctype, docname, "entity_type")
+        entity = frappe.db.get_value(doctype, docname, "entity")
+        if entity_type and entity:
+            mapped_type = {"task": "Task", "goal": "Hambaft Goal", "project": "Hambaft Project"}.get(entity_type, entity_type)
+            try:
+                return _validate_read_access(mapped_type, entity, user)
+            except Exception:
+                pass
+
+    return False
+
+
+def _apply_rls_filters(doctype, user):
+    """Return filter dict for a doctype that respects RLS."""
+    # Base: user owns it
+    filters = {"owner": user}
+
+    # For goals: also include shared/group goals
+    if doctype in ("Hambaft Goal", "Goal"):
+        # Goals where user is a member
+        member_goals = frappe.get_all("Hambaft Goal Member", filters={"user": user, "status": "فعال"}, pluck="goal")
+        if member_goals:
+            filters = {"name": ["in", member_goals + frappe.get_all(doctype, filters={"owner": user}, pluck="name")]}
+
+    return filters
+
+
+# ─── Enhanced Admin Panel ───────────────────────────────────
+
+@frappe.whitelist()
+def admin_get_users(limit=50, offset=0, search=None):
+    """Get user list for admin management. System Manager only."""
+    _check_auth()
+    if "System Manager" not in frappe.get_roles(frappe.session.user):
+        frappe.throw("فقط مدیر سیستم دسترسی دارد.", frappe.PermissionError)
+
+    filters = {"user_type": "System User", "enabled": 1}
+    if search:
+        filters["full_name"] = ["like", f"%{search}%"]
+
+    users = frappe.get_all(
+        "User",
+        filters=filters,
+        fields=["name", "full_name", "email", "username", "creation", "enabled"],
+        order_by="creation desc",
+        limit_page_length=cint(limit),
+        start=cint(offset),
+    )
+
+    result = []
+    for u in users:
+        profile = frappe.db.get_value("Hambaft Profile", {"user": u.name},
+                                       ["total_points", "level", "current_streak_days"], as_dict=True)
+        badge_count = frappe.db.count("Hambaft User Badge", filters={"user": u.name})
+        report_count = frappe.db.count("Hambaft Report", filters={"reported_user": u.name})
+        is_blocked = bool(frappe.db.exists("Hambaft User Block", {"blocked_user": u.name}))
+
+        result.append({
+            "email": u.name,
+            "full_name": u.full_name,
+            "username": u.username or "",
+            "signup_date": str(u.creation),
+            "enabled": cint(u.enabled),
+            "total_points": profile.total_points if profile else 0,
+            "level": profile.level if profile else 1,
+            "streak": profile.current_streak_days if profile else 0,
+            "badges": badge_count,
+            "reports": report_count,
+            "blocked": is_blocked,
+        })
+
+    total = frappe.db.count("User", filters={"user_type": "System User", "enabled": 1})
+
+    return _api_response({"users": result, "total": total})
+
+
+@frappe.whitelist()
+def admin_manage_badge(data=None):
+    """Create, update, or toggle a badge. System Manager only."""
+    _check_auth()
+    if "System Manager" not in frappe.get_roles(frappe.session.user):
+        frappe.throw("فقط مدیر سیستم دسترسی دارد.", frappe.PermissionError)
+
+    if isinstance(data, str):
+        data = json.loads(data)
+    data = data or {}
+
+    action = data.get("action")  # create, update, toggle
+    if not action:
+        frappe.throw("action is required.")
+
+    if action == "create":
+        badge = frappe.new_doc("Hambaft Badge")
+        badge.badge_name = data.get("badge_name", "")
+        badge.badge_name_fa = data.get("badge_name_fa", "")
+        badge.description = data.get("description", "")
+        badge.description_fa = data.get("description_fa", "")
+        badge.icon = data.get("icon", "🏆")
+        badge.criteria_type = data.get("criteria_type", "tasks_completed")
+        badge.criteria_value = cint(data.get("criteria_value", 1))
+        badge.points_awarded = cint(data.get("points_awarded", 0))
+        badge.rarity = data.get("rarity", "Common")
+        badge.active = 1
+        badge.insert(ignore_permissions=True)
+        frappe.db.commit()
+        return _api_response({"status": "created", "badge_id": badge.name})
+
+    elif action == "update":
+        badge_id = data.get("badge_id")
+        if not badge_id:
+            frappe.throw("badge_id is required.")
+        badge = frappe.get_doc("Hambaft Badge", badge_id)
+        for field in ("badge_name", "badge_name_fa", "description", "description_fa",
+                       "icon", "criteria_type", "criteria_value", "points_awarded", "rarity"):
+            if field in data:
+                if field == "criteria_value" or field == "points_awarded":
+                    setattr(badge, field, cint(data[field]))
+                else:
+                    setattr(badge, field, data[field])
+        badge.save(ignore_permissions=True)
+        frappe.db.commit()
+        return _api_response({"status": "updated"})
+
+    elif action == "toggle":
+        badge_id = data.get("badge_id")
+        if not badge_id:
+            frappe.throw("badge_id is required.")
+        badge = frappe.get_doc("Hambaft Badge", badge_id)
+        badge.active = 0 if cint(badge.active) else 1
+        badge.save(ignore_permissions=True)
+        frappe.db.commit()
+        return _api_response({"status": "toggled", "active": cint(badge.active)})
+
+    return _api_response({"status": "unknown_action"})
+
+
+@frappe.whitelist()
+def admin_manage_challenge_template(data=None):
+    """Create, update, or toggle a challenge template. System Manager only."""
+    _check_auth()
+    if "System Manager" not in frappe.get_roles(frappe.session.user):
+        frappe.throw("فقط مدیر سیستم دسترسی دارد.", frappe.PermissionError)
+
+    if isinstance(data, str):
+        data = json.loads(data)
+    data = data or {}
+
+    action = data.get("action")
+
+    if action == "create":
+        tmpl = frappe.new_doc("Hambaft Challenge Template")
+        tmpl.title = data.get("title", "")
+        tmpl.title_fa = data.get("title_fa", "")
+        tmpl.description = data.get("description", "")
+        tmpl.description_fa = data.get("description_fa", "")
+        tmpl.icon = data.get("icon", "🎯")
+        tmpl.challenge_type = data.get("challenge_type", "complete_task")
+        tmpl.target_count = cint(data.get("target_count", 1))
+        tmpl.difficulty = data.get("difficulty", "easy")
+        tmpl.points_reward = cint(data.get("points_reward", 20))
+        tmpl.category = data.get("category", "productivity")
+        tmpl.active = 1
+        tmpl.insert(ignore_permissions=True)
+        frappe.db.commit()
+        return _api_response({"status": "created", "template_id": tmpl.name})
+
+    elif action == "toggle":
+        template_id = data.get("template_id")
+        if not template_id:
+            frappe.throw("template_id is required.")
+        tmpl = frappe.get_doc("Hambaft Challenge Template", template_id)
+        tmpl.active = 0 if cint(tmpl.active) else 1
+        tmpl.save(ignore_permissions=True)
+        frappe.db.commit()
+        return _api_response({"status": "toggled", "active": cint(tmpl.active)})
+
+    elif action == "update":
+        template_id = data.get("template_id")
+        if not template_id:
+            frappe.throw("template_id is required.")
+        tmpl = frappe.get_doc("Hambaft Challenge Template", template_id)
+        for field in ("title", "title_fa", "description", "description_fa", "icon",
+                       "challenge_type", "target_count", "difficulty", "points_reward", "category"):
+            if field in data:
+                if field in ("target_count", "points_reward"):
+                    setattr(tmpl, field, cint(data[field]))
+                else:
+                    setattr(tmpl, field, data[field])
+        tmpl.save(ignore_permissions=True)
+        frappe.db.commit()
+        return _api_response({"status": "updated"})
+
+    return _api_response({"status": "unknown_action"})
+
+
+@frappe.whitelist()
+def admin_award_badge(data=None):
+    """Manually award a badge to a user. System Manager only."""
+    _check_auth()
+    if "System Manager" not in frappe.get_roles(frappe.session.user):
+        frappe.throw("فقط مدیر سیستم دسترسی دارد.", frappe.PermissionError)
+
+    if isinstance(data, str):
+        data = json.loads(data)
+    data = data or {}
+
+    user_email = data.get("user_email")
+    badge_id = data.get("badge_id")
+
+    if not user_email or not badge_id:
+        frappe.throw("user_email and badge_id are required.")
+
+    if frappe.db.exists("Hambaft User Badge", {"user": user_email, "badge": badge_id}):
+        frappe.throw("این نشان قبلاً به این کاربر داده شده است.")
+
+    ub = frappe.new_doc("Hambaft User Badge")
+    ub.user = user_email
+    ub.badge = badge_id
+    ub.earned_at = now_datetime()
+    ub.insert(ignore_permissions=True)
+    frappe.db.commit()
+
+    # Notify the user
+    badge_name_fa = frappe.db.get_value("Hambaft Badge", badge_id, "badge_name_fa") or ""
+    _create_notification(
+        user_email, "badge_earned",
+        title_fa=f"نشان «{badge_name_fa}» از طرف مدیر کسب شد!",
+        body_fa="مدیر سیستم این نشان رو به شما اهدا کرد.",
+        icon=frappe.db.get_value("Hambaft Badge", badge_id, "icon") or "🏆",
+        entity_type="Hambaft Badge",
+        entity=badge_id,
+    )
+
+    return _api_response({"status": "awarded"})
+
+
+# ─── Additional Challenge Seeds (30+) ───────────────────────
+
+@frappe.whitelist()
+def seed_more_challenges():
+    """Add 16+ more challenge templates to reach 30+. Idempotent. Admin only."""
+    _check_auth()
+    if "System Manager" not in frappe.get_roles(frappe.session.user):
+        frappe.throw("فقط مدیر سیستم می‌تواند چالش‌ها را مقداردهی کند.", frappe.PermissionError)
+
+    more_templates = [
+        # --- More Easy ---
+        {"title": "One and Done", "title_fa": "یکی کافیه", "description": "Complete any 1 task today", "description_fa": "امروز حداقل ۱ تسک انجام بده", "icon": "1️⃣", "challenge_type": "complete_task", "target_count": 1, "difficulty": "easy", "points_reward": 20, "category": "productivity"},
+        {"title": "First Proof", "title_fa": "اولین اثبات", "description": "Upload your first proof of the day", "description_fa": "اولین اثبات امروز رو آپلود کن", "icon": "📷", "challenge_type": "upload_proof", "target_count": 1, "difficulty": "easy", "points_reward": 20, "category": "productivity"},
+        {"title": "Kind Word", "title_fa": "کلمه مهربان", "description": "Leave 1 encouraging comment", "description_fa": "۱ نظر تشویقی بذار", "icon": "💛", "challenge_type": "add_comment", "target_count": 1, "difficulty": "easy", "points_reward": 20, "category": "social"},
+        # --- More Medium ---
+        {"title": "Task Marathon", "title_fa": "ماراتن تسک", "description": "Complete 4 tasks today", "description_fa": "۴ تسک امروز انجام بده", "icon": "🏃", "challenge_type": "complete_task", "target_count": 4, "difficulty": "medium", "points_reward": 35, "category": "productivity"},
+        {"title": "Habit Duo", "title_fa": "جفت عادت", "description": "Log 2 habits today", "description_fa": "۲ عادت امروز ثبت کن", "icon": "✌️", "challenge_type": "log_habit", "target_count": 2, "difficulty": "medium", "points_reward": 35, "category": "health"},
+        {"title": "Comment King", "title_fa": "پادشاه نظرات", "description": "Leave 4 comments today", "description_fa": "۴ نظر امروز ثبت کن", "icon": "👑", "challenge_type": "add_comment", "target_count": 4, "difficulty": "medium", "points_reward": 35, "category": "social"},
+        {"title": "Proof Pair", "title_fa": "جفت اثبات", "description": "Upload 2 proofs today", "description_fa": "۲ اثبات امروز آپلود کن", "icon": "🎞️", "challenge_type": "upload_proof", "target_count": 2, "difficulty": "medium", "points_reward": 35, "category": "productivity"},
+        {"title": "Creative Soul", "title_fa": "روح خلاق", "description": "Upload a proof with reflection (50+ chars)", "description_fa": "اثبات با تأمل بیش از ۵۰ کاراکتر آپلود کن", "icon": "💭", "challenge_type": "creativity", "target_count": 1, "difficulty": "medium", "points_reward": 35, "category": "creativity"},
+        {"title": "Reflection Master", "title_fa": "استاد تأمل", "description": "Upload 2 proofs with reflections", "description_fa": "۲ اثبات با تأمل آپلود کن", "icon": "📝", "challenge_type": "creativity", "target_count": 2, "difficulty": "medium", "points_reward": 35, "category": "creativity"},
+        {"title": "Balanced Day", "title_fa": "روز متعادل", "description": "Do 1 task and 1 habit today", "description_fa": "۱ تسک و ۱ عادت امروز انجام بده", "icon": "⚖️", "challenge_type": "consistency", "target_count": 2, "difficulty": "medium", "points_reward": 35, "category": "mindfulness"},
+        # --- More Hard ---
+        {"title": "Task Tsunami", "title_fa": "سونامی تسک", "description": "Complete 7 tasks today", "description_fa": "۷ تسک امروز انجام بده", "icon": "🌊", "challenge_type": "complete_task", "target_count": 7, "difficulty": "hard", "points_reward": 50, "category": "productivity"},
+        {"title": "Habit Hero", "title_fa": "قهرمان عادت", "description": "Log 5 different habits today", "description_fa": "۵ عادت مختلف امروز ثبت کن", "icon": "🦸", "challenge_type": "log_habit", "target_count": 5, "difficulty": "hard", "points_reward": 50, "category": "health"},
+        {"title": "Social Storm", "title_fa": "طوفان اجتماعی", "description": "Leave 5 comments today", "description_fa": "۵ نظر امروز ثبت کن", "icon": "🌪️", "challenge_type": "add_comment", "target_count": 5, "difficulty": "hard", "points_reward": 50, "category": "social"},
+        {"title": "Proof Legend", "title_fa": "افسانه اثبات", "description": "Upload 4 proofs today", "description_fa": "۴ اثبات امروز آپلود کن", "icon": "🎥", "challenge_type": "upload_proof", "target_count": 4, "difficulty": "hard", "points_reward": 50, "category": "productivity"},
+        {"title": "Super Consistent", "title_fa": "فوق ثبات", "description": "Do 3 tasks and 2 habits today", "description_fa": "۳ تسک و ۲ عادت امروز انجام بده", "icon": "⚡", "challenge_type": "consistency", "target_count": 5, "difficulty": "hard", "points_reward": 50, "category": "mindfulness"},
+        {"title": "Creative Genius", "title_fa": "نابغه خلاق", "description": "Upload 3 proofs with reflections", "description_fa": "۳ اثبات با تأمل آپلود کن", "icon": "🧠", "challenge_type": "creativity", "target_count": 3, "difficulty": "hard", "points_reward": 50, "category": "creativity"},
+    ]
+
+    created = []
+    for tmpl_data in more_templates:
+        if frappe.db.exists("Hambaft Challenge Template", {"title": tmpl_data["title"]}):
+            continue
+        doc = frappe.new_doc("Hambaft Challenge Template")
+        doc.update(tmpl_data)
+        doc.active = 1
+        doc.insert(ignore_permissions=True)
+        created.append(tmpl_data["title"])
+
+    frappe.db.commit()
+
+    total_templates = frappe.db.count("Hambaft Challenge Template", filters={"active": 1})
+
+    return _api_response({
+        "new_seeded": len(created),
+        "total_active_templates": total_templates,
+        "templates": created,
+        "message": f"{len(created)} الگوی جدید. مجموع: {total_templates} چالش فعال.",
+    })

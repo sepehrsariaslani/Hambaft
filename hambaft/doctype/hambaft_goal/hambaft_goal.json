@@ -1,163 +1,172 @@
 {
- "name": "Hambaft Goal",
- "doctype": "DocType",
- "module": "Hambaft",
- "custom": 0,
- "autoname": "format:GOAL-{#####}",
- "fields": [
-  {
-   "fieldname": "user",
-   "fieldtype": "Link",
-   "label": "کاربر",
-   "options": "User",
-   "reqd": 1,
-   "in_list_view": 1,
-   "in_standard_filter": 1
-  },
-  {
-   "fieldname": "title",
-   "fieldtype": "Data",
-   "label": "عنوان هدف",
-   "reqd": 1,
-   "in_list_view": 1,
-   "in_standard_filter": 1
-  },
-  {
-   "fieldname": "area",
-   "fieldtype": "Link",
-   "label": "حوزه",
-   "options": "Hambaft Area",
-   "in_list_view": 1,
-   "in_standard_filter": 1
-  },
-  {
-   "fieldname": "goal_type",
-   "fieldtype": "Select",
-   "label": "نوع هدف",
-   "options": "سلامت\nمالی\nکاری\nیادگیری\nشخصی\nرابطه\nسفارشی",
-   "in_list_view": 1,
-   "in_standard_filter": 1
-  },
-  {
-   "fieldname": "status",
-   "fieldtype": "Select",
-   "label": "وضعیت",
-   "options": "پیش‌نویس\nفعال\nمتوقف\nتکمیل‌شده\nلغوشده\nآرشیوشده",
-   "default": "پیش‌نویس",
-   "in_list_view": 1,
-   "in_standard_filter": 1
-  },
-  {
-   "fieldname": "priority",
-   "fieldtype": "Select",
-   "label": "اولویت",
-   "options": "کم\nمتوسط\nزیاد\nحیاتی",
-   "default": "متوسط",
-   "in_list_view": 1,
-   "in_standard_filter": 1
-  },
-  {
-   "fieldname": "start_date",
-   "fieldtype": "Date",
-   "label": "تاریخ شروع",
-   "in_list_view": 1
-  },
-  {
-   "fieldname": "target_date",
-   "fieldtype": "Date",
-   "label": "تاریخ هدف",
-   "in_list_view": 1
-  },
-  {
-   "fieldname": "progress",
-   "fieldtype": "Percent",
-   "label": "پیشرفت",
-   "default": 0,
-   "in_list_view": 1
-  },
-  {
-   "fieldname": "why",
-   "fieldtype": "Text Editor",
-   "label": "چرا"
-  },
-  {
-   "fieldname": "motivation",
-   "fieldtype": "Text Editor",
-   "label": "انگیزه"
-  },
-  {
-   "fieldname": "success_definition",
-   "fieldtype": "Text Editor",
-   "label": "تعریف موفقیت"
-  },
-  {
-   "fieldname": "obstacles",
-   "fieldtype": "Text Editor",
-   "label": "موانع"
-  },
-  {
-   "fieldname": "reward",
-   "fieldtype": "Data",
-   "label": "پاداش"
-  },
-  {
-   "fieldname": "color",
-   "fieldtype": "Color",
-   "label": "رنگ"
-  },
-  {
-   "fieldname": "icon",
-   "fieldtype": "Data",
-   "label": "آیکون"
-  },
-  {
-   "fieldname": "is_pinned",
-   "fieldtype": "Check",
-   "label": "پین در خانه",
-   "default": 0
-  },
-  {
-   "fieldname": "milestones",
-   "fieldtype": "Table",
-   "label": "مراحل هدف",
-   "options": "Hambaft Goal Milestone",
-   "depends_on": ""
-  },
-  {
-   "fieldname": "key_results",
-   "fieldtype": "Table",
-   "label": "نتایج کلیدی",
-   "options": "Hambaft Key Result",
-   "depends_on": ""
-  }
- ],
- "permissions": [
-  {
-   "role": "System Manager",
-   "read": 1,
-   "write": 1,
-   "create": 1,
-   "delete": 1
-  },
-  {
-   "role": "Hambaft User",
-   "read": 1,
-   "write": 1,
-   "create": 1,
-   "delete": 1,
-   "if_owner": 1
-  },
-  {
-   "role": "All",
-   "read": 1,
-   "write": 1,
-   "create": 1,
-   "delete": 1,
-   "if_owner": 1
-  }
- ],
- "sort_field": "target_date",
- "sort_order": "ASC",
- "istable": 0,
- "issingle": 0
+  "name": "Hambaft Goal",
+  "doctype": "DocType",
+  "module": "Hambaft",
+  "custom": 0,
+  "autoname": "format:GOAL-{#####}",
+  "fields": [
+    {
+      "fieldname": "user",
+      "fieldtype": "Link",
+      "label": "کاربر",
+      "options": "User",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "title",
+      "fieldtype": "Data",
+      "label": "عنوان هدف",
+      "reqd": 1,
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "area",
+      "fieldtype": "Link",
+      "label": "حوزه",
+      "options": "Hambaft Area",
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "goal_type",
+      "fieldtype": "Select",
+      "label": "نوع هدف",
+      "options": "سلامت\nمالی\nکاری\nیادگیری\nشخصی\nرابطه\nسفارشی",
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "status",
+      "fieldtype": "Select",
+      "label": "وضعیت",
+      "options": "پیش‌نویس\nفعال\nمتوقف\nتکمیل‌شده\nلغوشده\nآرشیوشده",
+      "default": "پیش‌نویس",
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "privacy",
+      "fieldtype": "Select",
+      "label": "حریم خصوصی",
+      "options": "\nخصوصی\nاشتراکی\nگروهی",
+      "default": "خصوصی",
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "priority",
+      "fieldtype": "Select",
+      "label": "اولویت",
+      "options": "کم\nمتوسط\nزیاد\nحیاتی",
+      "default": "متوسط",
+      "in_list_view": 1,
+      "in_standard_filter": 1
+    },
+    {
+      "fieldname": "start_date",
+      "fieldtype": "Date",
+      "label": "تاریخ شروع",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "target_date",
+      "fieldtype": "Date",
+      "label": "تاریخ هدف",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "progress",
+      "fieldtype": "Percent",
+      "label": "پیشرفت",
+      "default": 0,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "why",
+      "fieldtype": "Text Editor",
+      "label": "چرا"
+    },
+    {
+      "fieldname": "motivation",
+      "fieldtype": "Text Editor",
+      "label": "انگیزه"
+    },
+    {
+      "fieldname": "success_definition",
+      "fieldtype": "Text Editor",
+      "label": "تعریف موفقیت"
+    },
+    {
+      "fieldname": "obstacles",
+      "fieldtype": "Text Editor",
+      "label": "موانع"
+    },
+    {
+      "fieldname": "reward",
+      "fieldtype": "Data",
+      "label": "پاداش"
+    },
+    {
+      "fieldname": "color",
+      "fieldtype": "Color",
+      "label": "رنگ"
+    },
+    {
+      "fieldname": "icon",
+      "fieldtype": "Data",
+      "label": "آیکون"
+    },
+    {
+      "fieldname": "is_pinned",
+      "fieldtype": "Check",
+      "label": "پین در خانه",
+      "default": 0
+    },
+    {
+      "fieldname": "milestones",
+      "fieldtype": "Table",
+      "label": "مراحل هدف",
+      "options": "Hambaft Goal Milestone",
+      "depends_on": ""
+    },
+    {
+      "fieldname": "key_results",
+      "fieldtype": "Table",
+      "label": "نتایج کلیدی",
+      "options": "Hambaft Key Result",
+      "depends_on": ""
+    }
+  ],
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1
+    },
+    {
+      "role": "Hambaft User",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "if_owner": 1
+    },
+    {
+      "role": "All",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1,
+      "if_owner": 1
+    }
+  ],
+  "sort_field": "target_date",
+  "sort_order": "ASC",
+  "istable": 0,
+  "issingle": 0
 }

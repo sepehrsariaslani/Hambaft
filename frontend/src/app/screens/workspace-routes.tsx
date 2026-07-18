@@ -24,6 +24,15 @@ export type WorkspaceTab =
   | 'documents'
   | 'profile'
   | 'task-detail'
+  | 'areas'
+  | 'notes'
+  | 'planner'
+  | 'planner-timeline'
+  | 'planner-week'
+  | 'planner-month'
+  | 'planner-board'
+  | 'planner-areas'
+  | 'gallery'
 
 type WorkspaceRouteConfig = {
   path: string
@@ -34,6 +43,7 @@ export const workspaceRouteConfigs: WorkspaceRouteConfig[] = [
   { path: '', tab: 'dashboard' },
   { path: 'coach', tab: 'coach' },
   { path: 'contacts', tab: 'contacts' },
+  { path: 'contacts/:contactId', tab: 'contacts' },
   { path: 'journal', tab: 'journal' },
   { path: 'tasks', tab: 'tasks' },
   { path: 'mood', tab: 'mood' },
@@ -54,6 +64,15 @@ export const workspaceRouteConfigs: WorkspaceRouteConfig[] = [
   { path: 'documents', tab: 'documents' },
   { path: 'profile', tab: 'profile' },
   { path: 'task/:taskId', tab: 'task-detail' },
+  { path: 'areas', tab: 'areas' },
+  { path: 'notes', tab: 'notes' },
+  { path: 'planner', tab: 'planner' },
+  { path: 'planner/timeline', tab: 'planner-timeline' },
+  { path: 'planner/week', tab: 'planner-week' },
+  { path: 'planner/month', tab: 'planner-month' },
+  { path: 'planner/board', tab: 'planner-board' },
+  { path: 'planner/areas', tab: 'planner-areas' },
+  { path: 'gallery', tab: 'gallery' },
 ]
 
 export function buildWorkspaceRoutes(): RouteObject[] {

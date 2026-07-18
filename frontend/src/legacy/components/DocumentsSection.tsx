@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Document, DocumentType, BankAccount, AssetInvestment } from '../types';
+import LinkedContacts from './LinkedContacts';
 import {
   FileText, Shield, Award, Heart, DollarSign, Scale, FolderOpen,
   Plus, Trash2, AlertTriangle, CheckCircle, Clock, Tag, Building2, Calendar,
@@ -15,12 +16,14 @@ interface DocumentsSectionProps {
   onDeleteDocument: (id: string) => void;
   bankAccounts: BankAccount[];
   assets: AssetInvestment[];
+  contacts?: { id: string; name: string; photoUrl?: string; category?: string }[];
+  onNavigateContact?: (contactId: string) => void;
 }
 
 const DOC_TYPES: Record<DocumentType, { label: string; icon: React.ReactNode; color: string; bg: string }> = {
   insurance: { label: 'بیمه‌نامه', icon: <Shield className="w-4 h-4" />, color: 'text-blue-600', bg: 'bg-blue-50 border-blue-200' },
   contract:  { label: 'قرارداد',   icon: <FileText className="w-4 h-4" />, color: 'text-[#9B6B61]', bg: 'bg-[#F4E9E4] border-[#EDDDD7]' },
-  certificate:{ label: 'گواهینامه', icon: <Award className="w-4 h-4" />, color: 'text-amber-600', bg: 'bg-amber-50 border-amber-200' },
+  certificate:{ label: 'گواهینامه', icon: <Award className="w-4 h-4" />, color: 'text-[#9B6B61]', bg: 'bg-[#F9F1D8] border-[#EBE3C8]' },
   medical:   { label: 'پرونده پزشکی', icon: <Heart className="w-4 h-4" />, color: 'text-rose-600', bg: 'bg-rose-50 border-rose-200' },
   financial: { label: 'مالی',      icon: <DollarSign className="w-4 h-4" />, color: 'text-[#7C8363]', bg: 'bg-[#E8ECE0] border-[#DDE2D5]' },
   legal:     { label: 'حقوقی',     icon: <Scale className="w-4 h-4" />, color: 'text-purple-600', bg: 'bg-purple-50 border-purple-200' },
@@ -35,7 +38,7 @@ function getDaysUntilExpiry(expiryDate?: string): number | null {
   return Math.ceil(diff);
 }
 
-export default function DocumentsSection({ documents, onAddDocument, onDeleteDocument, bankAccounts = [], assets = [] }: DocumentsSectionProps) {
+export default function DocumentsSection({ documents, onAddDocument, onDeleteDocument, bankAccounts = [], assets = [], contacts = [], onNavigateContact }: DocumentsSectionProps) {
   const [showForm, setShowForm] = useState(false);
   const [filterType, setFilterType] = useState<DocumentType | 'all'>('all');
   const [title, setTitle] = useState('');
@@ -151,11 +154,11 @@ export default function DocumentsSection({ documents, onAddDocument, onDeleteDoc
         </div>
       )}
       {expiringSoon.length > 0 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start gap-3">
-          <Clock className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+        <div className="bg-[#F9F1D8] border border-[#EBE3C8] rounded-2xl p-4 flex items-start gap-3">
+          <Clock className="w-4 h-4 text-[#9B6B61] mt-0.5 shrink-0" />
           <div>
-            <p className="text-xs font-black text-amber-700">🕐 {expiringSoon.length} سند در ۳۰ روز آینده منقضی می‌شود</p>
-            <p className="text-[10px] text-amber-600 mt-0.5">{expiringSoon.map(d => `${d.title} (${getDaysUntilExpiry(d.expiryDate)} روز)`).join('، ')}</p>
+            <p className="text-xs font-black text-[#5A5A40]">🕐 {expiringSoon.length} سند در ۳۰ روز آینده منقضی می‌شود</p>
+            <p className="text-[10px] text-[#9B6B61] mt-0.5">{expiringSoon.map(d => `${d.title} (${getDaysUntilExpiry(d.expiryDate)} روز)`).join('، ')}</p>
           </div>
         </div>
       )}
@@ -229,7 +232,7 @@ export default function DocumentsSection({ documents, onAddDocument, onDeleteDoc
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold text-[#8D7F72] dark:text-[#9D978B]">تاریخ یادآوری در تقویم (اختیاری)</label>
                   <PersianDatePicker value={reminderDate} onChange={setReminderDate} />
-                  <p className="text-[8px] text-gray-500 dark:text-gray-400">یک یادآوری هوشمند در تاریخ انتخاب‌شده در تقویم شما فعال می‌شود.</p>
+                  <p className="text-[8px] text-[#8D7F72] dark:text-[#9D978B]">یک یادآوری هوشمند در تاریخ انتخاب‌شده در تقویم شما فعال می‌شود.</p>
                 </div>
 
                 {/* Image Drag & Drop Uploader */}
@@ -272,7 +275,7 @@ export default function DocumentsSection({ documents, onAddDocument, onDeleteDoc
                     ) : (
                       <>
                         <div className="text-[9px] font-bold text-[#8D7F72] dark:text-[#9D978B]">رها کردن تصویر یا کلیک جهت بارگذاری</div>
-                        <p className="text-[8px] text-gray-400 dark:text-gray-500">فایل‌های مجاز: JPG, PNG, WEBP</p>
+                        <p className="text-[8px] text-[#8D7F72] dark:text-[#8D7F72]">فایل‌های مجاز: JPG, PNG, WEBP</p>
                       </>
                     )}
                   </div>
@@ -370,7 +373,7 @@ export default function DocumentsSection({ documents, onAddDocument, onDeleteDoc
                 exit={{ opacity: 0, scale: 0.95 }}
                 onClick={() => setSelectedDoc(doc)}
                 className={`bg-[#FDFBF7] dark:bg-[#1C1D17] border rounded-2xl p-4 space-y-3 transition-all hover:shadow-md hover:border-[#7C8363] dark:hover:border-[#7C8363] cursor-pointer group ${
-                  isExpired ? 'border-red-200 dark:border-red-900/40' : isExpiringSoon ? 'border-amber-200 dark:border-amber-900/40' : 'border-[#E6DFD3] dark:border-[#3D4133]/40'
+                  isExpired ? 'border-red-200 dark:border-red-900/40' : isExpiringSoon ? 'border-[#EBE3C8] dark:border-[#3D3929]' : 'border-[#E6DFD3] dark:border-[#3D4133]/40'
                 }`}
               >
                 <div className="flex justify-between items-start">
@@ -408,7 +411,7 @@ export default function DocumentsSection({ documents, onAddDocument, onDeleteDoc
                   )}
                   {doc.expiryDate && (
                     <div className={`flex items-center gap-1.5 text-[10px] font-bold ${
-                      isExpired ? 'text-red-600' : isExpiringSoon ? 'text-amber-600' : 'text-[#7C8363] dark:text-[#9ECE9A]'
+                      isExpired ? 'text-red-600' : isExpiringSoon ? 'text-[#9B6B61]' : 'text-[#7C8363] dark:text-[#9ECE9A]'
                     }`}>
                       {isExpired ? <AlertTriangle className="w-3 h-3 shrink-0" /> : isExpiringSoon ? <Clock className="w-3 h-3 shrink-0" /> : <CheckCircle className="w-3 h-3 shrink-0" />}
                       <span className="font-mono">
@@ -419,8 +422,8 @@ export default function DocumentsSection({ documents, onAddDocument, onDeleteDoc
                     </div>
                   )}
                   {doc.reminderDate && (
-                    <div className="flex items-center gap-1.5 text-[10px] text-amber-700 dark:text-amber-500 font-bold">
-                      <Clock className="w-3 h-3 shrink-0 text-amber-600 dark:text-amber-500 animate-pulse" />
+                    <div className="flex items-center gap-1.5 text-[10px] text-[#5A5A40] dark:text-[#9B6B61] font-bold">
+                      <Clock className="w-3 h-3 shrink-0 text-[#9B6B61] dark:text-[#C59B93] animate-pulse" />
                       <span className="font-mono">یادآور تقویم: {toJalaliFriendly(doc.reminderDate)}</span>
                     </div>
                   )}
@@ -531,7 +534,7 @@ export default function DocumentsSection({ documents, onAddDocument, onDeleteDoc
                       isExpired
                         ? 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-900/40 text-red-700 dark:text-red-400'
                         : isExpiringSoon
-                        ? 'bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900/40 text-amber-700 dark:text-amber-400'
+                        ? 'bg-[#F9F1D8] dark:bg-[#201D13] border-[#EBE3C8] dark:border-[#3D3929] text-[#5A5A40] dark:text-[#C59B93]'
                         : 'bg-[#E8ECE0] dark:bg-[#20241A] border-[#DDE2D5] dark:border-[#3D4133]/40 text-[#7C8363] dark:text-[#9ECE9A]'
                     } flex items-center gap-2 text-xs font-bold`}>
                       {isExpired ? <AlertTriangle className="w-4 h-4 animate-bounce" /> : <Clock className="w-4 h-4" />}
@@ -578,7 +581,7 @@ export default function DocumentsSection({ documents, onAddDocument, onDeleteDoc
                           </span>
                         </div>
                         {selectedDoc.reminderDate && (
-                          <div className="flex justify-between items-center text-amber-700 dark:text-amber-500 font-bold bg-amber-50 dark:bg-amber-950/20 px-2 py-1 rounded-lg">
+                          <div className="flex justify-between items-center text-[#5A5A40] dark:text-[#9B6B61] font-bold bg-[#F9F1D8] dark:bg-[#201D13] px-2 py-1 rounded-lg">
                             <span>یادآور هوشمند تقویم:</span>
                             <span className="font-mono">{toJalaliFriendly(selectedDoc.reminderDate)}</span>
                           </div>
@@ -623,9 +626,9 @@ export default function DocumentsSection({ documents, onAddDocument, onDeleteDoc
 
                   {/* Notes */}
                   {selectedDoc.notes && (
-                    <div className="bg-amber-50/50 dark:bg-[#20201A] border border-amber-200/50 dark:border-amber-900/40 p-4 rounded-2xl">
-                      <h4 className="text-[11px] font-black text-amber-900 dark:text-amber-400 mb-1">یادداشت‌های اختصاصی</h4>
-                      <p className="text-xs text-amber-800 dark:text-amber-300/80 leading-relaxed italic">« {selectedDoc.notes} »</p>
+                    <div className="bg-[#F9F1D8]/50 dark:bg-[#20201A] border border-[#EBE3C8]/50 dark:border-[#3D3929] p-4 rounded-2xl">
+                      <h4 className="text-[11px] font-black text-[#5A5A40] dark:text-[#C59B93] mb-1">یادداشت‌های اختصاصی</h4>
+                      <p className="text-xs text-[#5A5A40] dark:text-[#C59B93]/80 leading-relaxed italic">« {selectedDoc.notes} »</p>
                     </div>
                   )}
 
@@ -641,11 +644,18 @@ export default function DocumentsSection({ documents, onAddDocument, onDeleteDoc
                     </div>
                   )}
 
+                  {/* Linked Contacts */}
+                  {selectedDoc.id && (
+                    <div className="border-t border-[#E6DFD3]/60 dark:border-[#3D4133]/40 pt-3">
+                      <LinkedContacts entityType="document" entityId={selectedDoc.id} contacts={contacts} onNavigateContact={onNavigateContact} />
+                    </div>
+                  )}
+
                   {/* Attached Image Document */}
                   {selectedDoc.image && (
                     <div className="border-t border-[#E6DFD3]/60 dark:border-[#3D4133]/40 pt-4 space-y-2">
                       <h4 className="text-xs font-black text-[#2D3025] dark:text-[#E8ECE0]">تصویر پیوست مدرک</h4>
-                      <div className="border border-[#D6CFC3] dark:border-[#3D4133] rounded-2xl overflow-hidden bg-gray-50 dark:bg-black/20 p-2 flex justify-center">
+                      <div className="border border-[#D6CFC3] dark:border-[#3D4133] rounded-2xl overflow-hidden bg-[#F9F6EE] dark:bg-black/20 p-2 flex justify-center">
                         <img
                           src={selectedDoc.image}
                           alt={selectedDoc.title}

@@ -1,0 +1,114 @@
+{
+ "name": "Hambaft Badge",
+ "creation": "2026-01-01 00:00:00",
+ "modified": "2026-01-01 00:00:00",
+ "modified_by": "Administrator",
+ "owner": "Administrator",
+ "docstatus": 0,
+ "module": "Hambaft",
+ "autoname": "format:BDG-{#####}",
+ "fields": [
+  {
+   "fieldname": "badge_name",
+   "fieldtype": "Data",
+   "label": "نام نشان",
+   "reqd": 1,
+   "unique": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "badge_name_fa",
+   "fieldtype": "Data",
+   "label": "نام نشان (فارسی)",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "label": "توضیحات",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "description_fa",
+   "fieldtype": "Small Text",
+   "label": "توضیحات (فارسی)"
+  },
+  {
+   "fieldname": "icon",
+   "fieldtype": "Data",
+   "label": "آیکون (ایموجی)",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "criteria_section",
+   "fieldtype": "Section Break",
+   "label": "شرط کسب"
+  },
+  {
+   "fieldname": "criteria_type",
+   "fieldtype": "Select",
+   "label": "نوع شرط",
+   "options": "first_task\nfirst_proof\ntasks_completed\nproofs_uploaded\nstreak_days\npoints_total\npartner_count\ncomments_count\nchallenges_completed\ngoals_completed",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "criteria_value",
+   "fieldtype": "Int",
+   "label": "مقدار شرط",
+   "reqd": 1,
+   "default": 1,
+   "non_negative": 1
+  },
+  {
+   "fieldname": "points_section",
+   "fieldtype": "Section Break",
+   "label": "پاداش"
+  },
+  {
+   "fieldname": "points_awarded",
+   "fieldtype": "Int",
+   "label": "امتیاز پاداش",
+   "default": 0,
+   "non_negative": 1
+  },
+  {
+   "fieldname": "rarity",
+   "fieldtype": "Select",
+   "label": "کمیابی",
+   "options": "Common\nRare\nEpic\nLegendary",
+   "default": "Common",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "active",
+   "fieldtype": "Check",
+   "label": "فعال",
+   "default": 1,
+   "in_list_view": 1
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1
+  },
+  {
+   "role": "Hambaft User",
+   "read": 1,
+   "write": 0,
+   "create": 0,
+   "delete": 0
+  }
+ ],
+ "doctype": "DocType",
+ "custom": 0,
+ "istable": 0,
+ "issingle": 0
+}

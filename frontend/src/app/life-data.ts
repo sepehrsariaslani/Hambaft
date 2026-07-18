@@ -17,11 +17,20 @@ import {
 } from './hambaft-api'
 import type { ScheduleItem } from '../legacy/components/CalendarSection'
 import type {
+  Area,
   BankAccount,
   Contact,
   Document,
   CategoryDef,
   Goal,
+  GoalCategory,
+  GoalHabitLink,
+  GoalFinanceLink,
+  GoalLinkedProject,
+  GoalType,
+  ProgressMode,
+  ContributionType,
+  ContributionPeriod,
   Habit,
   JournalEntry,
   LifeData,
@@ -48,41 +57,212 @@ type BootstrapState = {
   settings: Record<string, any>
 }
 
+function parseNoteBlocks(raw: any): any[] | undefined {
+  if (!raw) return undefined
+  if (Array.isArray(raw)) return raw
+  try {
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed : undefined
+  } catch {
+    return undefined
+  }
+}
+
 function mapTasks(items: any[]): Task[] {
-  return items.map((item) => ({
+  return items.map((item) => {
+    try {
+    return {
     id: item.name,
     title: item.title || item.subject || item.name,
     completed: ['done', 'completed', 'انجام‌شده', 'انجام شده'].includes(String(item.status || '')),
+    status: item.status || undefined,
     createdAt: (item.creation || item.modified || new Date().toISOString()).slice(0, 10),
     description: item.description || '',
     dueDate: item.due_date ? String(item.due_date).slice(0, 10) : undefined,
+    scheduledDate: item.scheduled_date ? String(item.scheduled_date) : undefined,
+    scheduledTime: item.scheduled_time ? String(item.scheduled_time).slice(0, 5) : undefined,
     priority: mapBackendTaskPriority(item.priority),
     category: mapBackendTaskCategory(item.category),
-  }))
+    projectId: item.project || undefined,
+    blockedBy: (() => { try { return item.blocked_by_json ? JSON.parse(item.blocked_by_json) : [] } catch { return [] } })(),
+    blocking: (() => { try { return item.blocking_json ? JSON.parse(item.blocking_json) : [] } catch { return [] } })(),
+    isDailyHighlight: !!item.is_daily_highlight,
+    importance: item.importance === 'کلیدی' ? 'key' : item.importance === 'نقطه‌عطف' ? 'milestone' : item.importance === 'عادی' ? 'normal' : undefined,
+    actualMinutes: item.actual_minutes || undefined,
+    estimatedMinutes: item.estimated_minutes || undefined,
+    areaId: item.area || undefined,
+    effortType: item.effort_type === 'fixed' || item.effort_type === 'ثابت' ? 'fixed' : 'variable',
+    noteBlocks: parseNoteBlocks(item.note_blocks_json),
+    goalId: item.goal || undefined,
+    parentTaskId: item.parent_task || undefined,
+    // Impact awareness fields (enriched by backend when available)
+    impactGoalTitle: item.impact_goal_title || undefined,
+    impactGoalHealth: item.impact_goal_health || undefined,
+    impactGoalProgress: item.impact_goal_progress || undefined,
+    impactScore: item.impact_score || undefined,
+    impactProjectTitle: item.impact_project_title || undefined,
+    impactProjectContributionType: item.impact_project_contribution_type || undefined,
+    impactProjectProgress: item.impact_project_progress || undefined,
+    blockedByTitles: item.blocked_by_titles || undefined,
+    blockedByStatuses: item.blocked_by_statuses || undefined,
+  }
+    } catch (e) {
+      console.warn('[hambaft] mapTasks: skipping malformed task', item?.name, e)
+      return null as unknown as Task
+    }
+  }).filter(Boolean)
 }
 
 function mapGoals(items: any[]): Goal[] {
-  return items.map((item) => ({
-    id: item.name,
-    title: item.title || item.goal_name || item.name,
-    description: item.description || '',
-    category: mapBackendGoalCategory(item.category),
-    targetDate: item.target_date ? String(item.target_date).slice(0, 10) : '',
-    milestones: [],
-    createdAt: (item.creation || item.modified || new Date().toISOString()).slice(0, 10),
-    completed: ['done', 'completed', 'تکمیل‌شده', 'تکمیل شده'].includes(String(item.status || '')),
-    metric:
-      item.target_value || item.current_value || item.unit
-        ? {
-            name: item.title || item.goal_name || item.name,
-            targetValue: Number(item.target_value || 0),
-            startValue: 0,
-            currentValue: Number(item.current_value || 0),
-            unit: item.unit || '',
-            logs: [],
+  const goalTypeMap: Record<string, GoalType> = {
+    'نتیجه‌ای': 'outcome', 'سنجه‌ای': 'metric', 'مبتنی‌بر_عادت': 'habit_driven',
+    'تحویل_پروژه': 'project_delivery', 'پس‌انداز_مالی': 'savings', 'سرمایه‌گذاری': 'investment',
+    'پرداخت_بدهی': 'debt_payoff', 'سلامت': 'health', 'یادگیری': 'learning', 'ثبات': 'consistency',
+  }
+  const progressModeMap: Record<string, ProgressMode> = {
+    'دستی': 'manual', 'مقدار_سنجه': 'metric_value', 'تجمیع_عادت': 'habit_rollup',
+    'تجمیع_پروژه': 'project_rollup', 'موجودی_مالی': 'finance_balance', 'پس‌انداز_مالی': 'finance_savings',
+    'پرداخت_بدهی': 'debt_paydown', 'مرکب_وزنی': 'weighted_composite',
+  }
+  const priorityMap: Record<string, 'low' | 'medium' | 'high' | 'urgent'> = {
+    'پایین': 'low', 'متوسط': 'medium', 'بالا': 'high', 'فوری': 'urgent',
+  }
+  const goalLevelMap: Record<string, 'annual' | 'quarterly' | 'monthly' | 'custom'> = {
+    'سالانه': 'annual', 'فصلی': 'quarterly', 'ماهانه': 'monthly', 'سفارشی': 'custom',
+  }
+  const contribTypeMap: Record<string, ContributionType> = {
+    'تعداد_انجام': 'completion_count', 'نرخ_انجام': 'completion_rate', 'رکورد': 'streak',
+    'مجموع_مقدار': 'quantity_sum', 'میانگین_مقدار': 'average_value', 'بله_خیر': 'boolean_success',
+  }
+  const contribPeriodMap: Record<string, ContributionPeriod> = {
+    'روزانه': 'daily', 'هفتگی': 'weekly', 'ماهانه': 'monthly', 'کل': 'all',
+  }
+  const finTypeMap: Record<string, 'balance' | 'savings' | 'debt' | 'investment' | 'income_accumulated'> = {
+    'موجودی_حساب': 'balance', 'پس‌انداز': 'savings', 'بدهی': 'debt', 'سرمایه‌گذاری': 'investment', 'درآمد_انباشته': 'income_accumulated',
+  }
+
+  return items.map((item) => {
+    const linkedHabits: GoalHabitLink[] = (item.linked_habits || []).map((h: any) => ({
+      habit: h.habit,
+      habitTitle: h.habit_title,
+      contributionType: contribTypeMap[h.contribution_type] || 'completion_count',
+      weight: h.weight ?? 100,
+      period: contribPeriodMap[h.period] || 'monthly',
+      targetValue: h.target_value ?? undefined,
+      capValue: h.cap_value ?? undefined,
+      isNegative: !!h.is_negative,
+      notes: h.notes,
+    }))
+
+    const linkedFinanceAccounts: GoalFinanceLink[] = (item.linked_finance_accounts || []).map((f: any) => ({
+      financeAccount: f.finance_account,
+      accountName: f.account_name,
+      currentBalance: f.current_balance,
+      financeType: finTypeMap[f.finance_type] || 'balance',
+      initialAmount: f.initial_amount ?? undefined,
+      targetAmount: f.target_amount ?? undefined,
+      weight: f.weight ?? 100,
+      notes: f.notes,
+    }))
+
+    const contribTypeMap: Record<string, 'mandatory' | 'recommended' | 'supporting'> = {
+      'اجباری': 'mandatory', 'پیشنهادی': 'recommended', 'پشتیبان': 'supporting',
+    }
+    const healthStateMap: Record<string, 'on_track' | 'at_risk' | 'off_track' | 'needs_review'> = {
+      'در_مسیر': 'on_track', 'در_خطر': 'at_risk', 'خارج_از_مسیر': 'off_track', 'نیاز_به_بررسی': 'needs_review',
+    }
+    const completionPolicyMap: Record<string, 'threshold' | 'threshold_plus_mandatory' | 'metric_plus_mandatory' | 'all_projects' | 'threshold_plus_milestones'> = {
+      'آستانه_پیشرفت': 'threshold', 'آستانه_به_علاوه_پروژه‌های_اجباری': 'threshold_plus_mandatory',
+      'سنجه_به_علاوه_پروژه‌های_اجباری': 'metric_plus_mandatory', 'همه_پروژه‌ها_تکمیل': 'all_projects',
+      'آستانه_به_علاوه_نقاط_عطف': 'threshold_plus_milestones',
+    }
+
+    const linkedProjects: GoalLinkedProject[] = (item.linked_projects || []).map((p: any) => ({
+      project: p.project || p.name,
+      title: p.title,
+      status: p.status,
+      progress: p.progress,
+      effortType: p.effort_type,
+      estimatedHours: p.estimated_hours,
+      actualMinutes: p.actual_minutes,
+      totalTasks: p.total_tasks,
+      doneTasks: p.done_tasks,
+      milestoneTotal: p.milestone_total,
+      milestoneDone: p.milestone_done,
+      keyTotal: p.key_total,
+      keyDone: p.key_done,
+      weight: p.weight,
+      contributionType: contribTypeMap[p.contribution_type] || undefined,
+      isMandatory: !!p.is_mandatory,
+      sortOrder: p.sort_order,
+      notes: p.notes,
+    }))
+
+    const goal: Goal = {
+      id: item.name,
+      title: item.title || item.goal_name || item.name,
+      description: item.description || '',
+      category: mapBackendGoalCategory(item.category),
+      goalType: goalTypeMap[item.goal_type] || undefined,
+      progressMode: progressModeMap[item.progress_mode] || undefined,
+      areaId: item.area || undefined,
+      parentGoalId: item.parent_goal || undefined,
+      goalLevel: goalLevelMap[item.goal_level] || undefined,
+      targetDate: item.target_date ? String(item.target_date).slice(0, 10) : '',
+      startDate: item.start_date ? String(item.start_date).slice(0, 10) : undefined,
+      milestones: [],
+      createdAt: (item.creation || item.modified || new Date().toISOString()).slice(0, 10),
+      completed: ['done', 'completed', 'تکمیل‌شده', 'تکمیل شده'].includes(String(item.status || '')),
+      targetValue: item.target_value ?? undefined,
+      currentValue: item.current_value ?? undefined,
+      unit: item.unit || undefined,
+      progressPercent: item.progress_percent ?? undefined,
+      derivedProgressDetail: item.derived_progress_detail || undefined,
+      priority: priorityMap[item.priority] || undefined,
+      color: item.color || undefined,
+      icon: item.icon || undefined,
+      status: item.status || undefined,
+      privacy: item.privacy || undefined,
+      members: item.members || undefined,
+      metric:
+        item.target_value || item.current_value || item.unit
+          ? {
+              name: item.title || item.goal_name || item.name,
+              targetValue: Number(item.target_value || 0),
+              startValue: 0,
+              currentValue: Number(item.current_value || 0),
+              unit: item.unit || '',
+              logs: [],
+            }
+          : undefined,
+      linkedHabits,
+      linkedFinanceAccounts,
+      linkedProjects,
+      projectProgressWeight: item.project_progress_weight ?? undefined,
+      milestoneWeight: item.milestone_weight ?? undefined,
+      keyTaskWeight: item.key_task_weight ?? undefined,
+      trackedTimeWeight: item.tracked_time_weight ?? undefined,
+      metricWeight: item.metric_weight ?? undefined,
+      healthState: healthStateMap[item.health_state] || undefined,
+      healthDetail: item.health_detail ?? undefined,
+      completionPolicy: completionPolicyMap[item.completion_policy] || undefined,
+      completionThreshold: item.completion_threshold ?? undefined,
+      lastSnapshot: item.last_snapshot ? (() => {
+        try {
+          const s = typeof item.last_snapshot === 'string' ? JSON.parse(item.last_snapshot) : item.last_snapshot
+          return {
+            progressPct: s.progress_percent ?? s.progressPct ?? 0,
+            healthState: healthStateMap[s.health_state] || 'on_track',
+            detail: s.detail,
+            healthDetail: s.health_detail,
           }
-        : undefined,
-  }))
+        } catch { return undefined }
+      })() : undefined,
+      lastSnapshotAt: item.last_snapshot_at ? String(item.last_snapshot_at).slice(0, 19) : undefined,
+      noteBlocks: parseNoteBlocks(item.note_blocks_json),
+    }
+    return goal
+  })
 }
 
 function mapHabits(items: any[], logs: any[]): Habit[] {
@@ -186,20 +366,33 @@ function mapProjects(items: any[]): Project[] {
     description: item.description || '',
     notes: item.notes || '',
     completed: ['completed', 'تکمیل‌شده', 'تکمیل شده'].includes(String(item.status || '')),
+    // Tasks come from _project_to_frontend which now reads from the main Task doctype.
+    // These are the SAME tasks as in the global tasks list, just scoped to the project.
     tasks: (item.tasks || []).map((task: any) => ({
       id: task.id || task.name,
       title: task.title || task.name,
-      completed: Boolean(task.completed || task.status === 'انجام‌شده'),
+      completed: Boolean(task.completed || task.status === 'انجام‌شده' || task.status === 'done'),
+      status: task.status || undefined,
       createdAt: (task.creation || item.creation || new Date().toISOString()).slice(0, 10),
       description: task.description || '',
       dueDate: task.dueDate || task.due_date || undefined,
       priority: mapBackendTaskPriority(task.priority),
       category: mapBackendTaskCategory(task.category),
+      projectId: item.name,  // all project tasks belong to this project
+      importance: task.importance === 'کلیدی' ? 'key' : task.importance === 'نقطه‌عطف' ? 'milestone' : task.importance === 'عادی' ? 'normal' : undefined,
+      isDailyHighlight: !!task.isDailyHighlight,
+      estimatedMinutes: task.estimatedMinutes || undefined,
+      actualMinutes: task.actualMinutes || undefined,
+      effortType: task.effortType || undefined,
+      areaId: task.areaId || undefined,
+      goalId: task.goalId || undefined,
     })),
     createdAt: (item.creation || item.modified || new Date().toISOString()).slice(0, 10),
     linkedGoalId: item.goal || undefined,
+    areaId: item.area || undefined,
+    parentProjectId: item.parent_project || undefined,
     status:
-      item.status === 'برنامه‌ریزی'
+      (item.status === 'برنامه‌ریزی'
         ? 'waiting'
         : item.status === 'فعال'
           ? 'in_progress'
@@ -207,7 +400,8 @@ function mapProjects(items: any[]): Project[] {
             ? 'paused'
             : item.status === 'تکمیل‌شده'
               ? 'completed'
-              : 'in_progress',
+              : 'in_progress') as Project['status'],
+    noteBlocks: parseNoteBlocks(item.note_blocks_json),
   }))
 }
 
@@ -421,7 +615,7 @@ export function useBootstrapLifeData() {
     async function load() {
       try {
         const results = await Promise.allSettled([
-          callGet<{ data?: { tasks?: any[] } }>('hambaft.hambaft.api.get_tasks'),
+          callGet<{ data?: { tasks?: any[] } }>('hambaft.hambaft.api.get_tasks', { limit: 500 }),
           callGet<{ data?: { goals?: any[] } }>('hambaft.hambaft.api.get_goals'),
           callGet<{ data?: { habits?: any[] } }>('hambaft.hambaft.api.get_habits'),
           callGet<{ data?: { logs?: any[] } }>('hambaft.hambaft.api.get_habit_logs'),
@@ -443,6 +637,7 @@ export function useBootstrapLifeData() {
           callGet<{ data?: { workout_logs?: any[] } }>('hambaft.hambaft.api.get_workout_logs'),
           getList<any>('Hambaft Measurement', { fields: ['*'], limit: 500 }),
           callGet<{ data?: { consumed_ml?: number } }>('hambaft.hambaft.api.get_water_summary'),
+          callGet<{ data?: { areas?: any[] } }>('hambaft.hambaft.api.get_areas'),
         ])
 
         const [
@@ -468,6 +663,7 @@ export function useBootstrapLifeData() {
           workoutResult,
           measurementsResult,
           waterSummaryResult,
+          areasResult,
         ] = results
 
         const tasks = unwrap(tasksResult, { data: { tasks: [] } }, 'get_tasks').data?.tasks ?? []
@@ -489,6 +685,7 @@ export function useBootstrapLifeData() {
         const workoutLogs = unwrap(workoutResult, { data: { workout_logs: [] } }, 'get_workout_logs').data?.workout_logs ?? []
         const measurementsRows = unwrap(measurementsResult, [], 'get_measurements')
         const waterSummaryPayload = unwrap(waterSummaryResult, { data: { consumed_ml: 0 } }, 'get_water_summary')
+        const areasRows = unwrap(areasResult, { data: { areas: [] } }, 'get_areas').data?.areas ?? []
 
         const profile = unwrap(profileResult, null, 'get_profile')
         const accountRows = unwrap(accountResult, [], 'get_accounts')
@@ -509,32 +706,39 @@ export function useBootstrapLifeData() {
           return
         }
 
-        const measurements = mapMeasurements(measurementsRows)
-        const mappedGoals = mergeProjectsIntoGoals(mapGoals(goals), mapProjects(projects))
-        const mappedContacts = mapContacts(contacts)
-        const mappedOccasions = mergeContactBirthdayOccasions(mapOccasions(occasions), mappedContacts)
+        // ─── Data assembly (resilient: one domain failure must not blank the app) ───
         const emptyData = createEmptyLifeData()
 
-        // Restore state stored as JSON blobs on Profile Settings
-        const debtsBlob = parseJsonArray<any>(settings.debts_json)
-        const subscriptionsBlob = parseJsonArray<any>(settings.subscriptions_json)
-        const recurringBlob = parseJsonArray<any>(settings.recurring_transactions_json)
-        const assetsBlob = parseJsonArray<any>(settings.assets_json)
-        const installmentsBlob = parseJsonArray<any>(settings.installments_json)
-        const dietBlob = parseJsonArray<any>(settings.diet_setting_json)
-        const dietSetting = dietBlob.length ? dietBlob[0] : undefined
-        const budgetBlob = parseJsonArray<any>(settings.budget_settings_json)
-        const budgetSettingsOverride = budgetBlob.length ? budgetBlob[0] : null
-        const subcategoriesMap = parseSubcategoriesMap(settings.subcategories_json)
-        const taskTimeMap = parseTaskTime(settings.task_time_json)
-        const dailyHighlightsMap = parseDailyHighlights(settings.daily_highlights_json)
-        const goalHabitsMap = parseSubcategoriesMap(settings.goal_habits_json) as unknown as Record<string, any[]>
+        // Helper: run a mapping function safely; on error, return fallback
+        const safe = <T>(fn: () => T, fallback: T, label: string): T => {
+          try { return fn() } catch (e) { console.warn(`[hambaft] ${label} mapping failed:`, e); return fallback }
+        }
 
-        const mappedCategories = mapCategories(categoryRows).map((cat) => (
+        const measurements = safe(() => mapMeasurements(measurementsRows), { weightLogs: [], bodyMeasurementLogs: [] }, 'measurements')
+        const mappedGoals = safe(() => mergeProjectsIntoGoals(mapGoals(goals), mapProjects(projects)), [], 'goals+projects')
+        const mappedContacts = safe(() => mapContacts(contacts), [], 'contacts')
+        const mappedOccasions = safe(() => mergeContactBirthdayOccasions(mapOccasions(occasions), mappedContacts), [], 'occasions')
+
+        // Restore state stored as JSON blobs on Profile Settings
+        const debtsBlob = safe(() => parseJsonArray<any>(settings.debts_json), [], 'debts_json')
+        const subscriptionsBlob = safe(() => parseJsonArray<any>(settings.subscriptions_json), [], 'subscriptions_json')
+        const recurringBlob = safe(() => parseJsonArray<any>(settings.recurring_transactions_json), [], 'recurring_json')
+        const assetsBlob = safe(() => parseJsonArray<any>(settings.assets_json), [], 'assets_json')
+        const installmentsBlob = safe(() => parseJsonArray<any>(settings.installments_json), [], 'installments_json')
+        const dietBlob = safe(() => parseJsonArray<any>(settings.diet_setting_json), [], 'diet_json')
+        const dietSetting = dietBlob.length ? dietBlob[0] : undefined
+        const budgetBlob = safe(() => parseJsonArray<any>(settings.budget_settings_json), [], 'budget_json')
+        const budgetSettingsOverride = budgetBlob.length ? budgetBlob[0] : null
+        const subcategoriesMap = safe(() => parseSubcategoriesMap(settings.subcategories_json), {}, 'subcategories')
+        const taskTimeMap = safe(() => parseTaskTime(settings.task_time_json), {}, 'task_time')
+        const dailyHighlightsMap = safe(() => parseDailyHighlights(settings.daily_highlights_json), {}, 'highlights')
+        const goalHabitsMap = safe(() => parseSubcategoriesMap(settings.goal_habits_json), {}, 'goal_habits') as unknown as Record<string, any[]>
+
+        const mappedCategories = safe(() => mapCategories(categoryRows).map((cat) => (
           subcategoriesMap[cat.id]?.length
             ? { ...cat, subcategories: subcategoriesMap[cat.id] }
             : cat
-        ))
+        )), [], 'categories')
 
         const applyTaskEnhancements = (tasksList: any[]): any[] => tasksList.map((task) => ({
           ...task,
@@ -542,7 +746,7 @@ export function useBootstrapLifeData() {
           isDailyHighlight: dailyHighlightsMap[task.id] ?? task.isDailyHighlight ?? false,
         }))
 
-        const enhancedGoals = mappedGoals.map((goal) => ({
+        const enhancedGoals = mappedGoals.map((goal: any) => ({
           ...goal,
           habits: Array.isArray(goalHabitsMap[goal.id]) ? goalHabitsMap[goal.id] : goal.habits,
           projects: (goal.projects || []).map((p: any) => ({
@@ -553,25 +757,31 @@ export function useBootstrapLifeData() {
 
         const data: LifeData = {
           ...emptyData,
-          tasks: applyTaskEnhancements(mapTasks(tasks)),
+          tasks: safe(() => applyTaskEnhancements(mapTasks(tasks)), [], 'tasks'),
           goals: enhancedGoals,
-          habits: mapHabits(habits, habitLogs),
-          transactions: mapTransactions(financeEntries),
-          journalEntries: mapJournalEntries(notes, moodLogs as any[]),
+          habits: safe(() => mapHabits(habits, habitLogs), [], 'habits'),
+          transactions: safe(() => mapTransactions(financeEntries), [], 'transactions'),
+          journalEntries: safe(() => mapJournalEntries(notes, moodLogs as any[]), [], 'journal'),
           categories: mappedCategories,
-          bankAccounts: mapBankAccounts(accountRows),
-          profile: mapProfile(profile, settings),
-          sleepLogs: mapSleepLogs(sleepLogs),
+          bankAccounts: safe(() => mapBankAccounts(accountRows), [], 'bankAccounts'),
+          profile: safe(() => mapProfile(profile, settings), emptyData.profile, 'profile'),
+          gamification: safe(() => ({
+            totalPoints: profile?.gamification?.total_points || 0,
+            level: profile?.gamification?.level || 1,
+            currentStreakDays: profile?.gamification?.current_streak_days || 0,
+            bestStreakDays: profile?.gamification?.best_streak_days || 0,
+          }), { totalPoints: 0, level: 1, currentStreakDays: 0, bestStreakDays: 0 }, 'gamification'),
+          sleepLogs: safe(() => mapSleepLogs(sleepLogs), [], 'sleepLogs'),
           budgetSettings: budgetSettingsOverride && typeof budgetSettingsOverride === 'object'
             ? budgetSettingsOverride
             : { monthlyTotal: Number(settings.monthly_budget || 0), categoryBudgets: {} },
-          documents: mapDocuments(documents),
+          documents: safe(() => mapDocuments(documents), [], 'documents'),
           occasions: mappedOccasions,
-          mindfulnessSessions: mapMindfulnessSessions(mindfulnessSessions),
-          weightLogs: measurements.weightLogs,
-          mealLogs: mapMealLogs(nutritionLogs),
-          workoutLogs: mapWorkoutLogs(workoutLogs),
-          bodyMeasurementLogs: measurements.bodyMeasurementLogs,
+          mindfulnessSessions: safe(() => mapMindfulnessSessions(mindfulnessSessions), [], 'mindfulness'),
+          weightLogs: measurements?.weightLogs || [],
+          mealLogs: safe(() => mapMealLogs(nutritionLogs), [], 'mealLogs'),
+          workoutLogs: safe(() => mapWorkoutLogs(workoutLogs), [], 'workoutLogs'),
+          bodyMeasurementLogs: measurements?.bodyMeasurementLogs || [],
           contacts: mappedContacts,
           moodLogs: moodLogs as any[],
           debts: debtsBlob,
@@ -580,6 +790,21 @@ export function useBootstrapLifeData() {
           assets: assetsBlob,
           installments: installmentsBlob,
           dietSetting: dietSetting || emptyData.dietSetting,
+          areas: safe(() => areasRows.map((item: any) => ({
+            id: item.name,
+            title: item.title || item.name,
+            description: item.description || '',
+            color: item.color || undefined,
+            icon: item.icon || undefined,
+            status: item.status === 'فعال' ? 'active' : item.status === 'غیرفعال' ? 'inactive' : item.status === 'بایگانی' ? 'archived' : (item.status || undefined),
+            sortOrder: item.sort_order || undefined,
+            projectCount: item.project_count || undefined,
+            taskCount: item.task_count || undefined,
+            goalCount: item.goal_count || undefined,
+            completedTasks: item.completed_tasks || undefined,
+            completedProjects: item.completed_projects || undefined,
+            trackedMinutes: item.tracked_minutes || undefined,
+          })), [], 'areas'),
         }
 
         if (!cancelled) {
